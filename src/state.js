@@ -37,6 +37,11 @@ export const state = {
   hoveredId: null,
   lastClickedDivide: null,
   selectedFeature: null,
+  // Set by the map event handlers when the rendered set of reaches may have
+  // changed (camera moved or a tile streamed in). updateFeatureStates() reads
+  // this to decide whether it must re-run queryRenderedFeatures or can reuse
+  // its cached on-screen ids (e.g. on a bare timestep change during playback).
+  viewDirty: false,
 };
 
 // The MapLibre map instance. It's created asynchronously in map/init.js;

@@ -149,6 +149,9 @@ function finalizeData(dataset, bounds) {
   showDataPanels();
   updateLegend();
   applyResultsPaint();
+  // Force a full-viewport requery for the first paint: the run may already be
+  // in view, so we can't rely on zoomToLoadedData moving the camera.
+  state.viewDirty = true;
   scheduleFeatureStateUpdate();
   updateTimeDisplay();
   zoomToLoadedData();

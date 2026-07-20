@@ -6,6 +6,7 @@ import { updateIncomingStyle } from "./basemap-style.js";
 import {
   applyResultsPaint,
   scheduleFeatureStateUpdate,
+  scheduleTilePaint,
 } from "./paint.js";
 import {
   onDivideClick,
@@ -29,9 +30,11 @@ import {
 
 // maplibregl and pmtiles are globals provided by CDN <script>s in index.html.
 
-// Set when the camera moves so the "idle" handler knows to repaint the
-// newly visible reaches (and skips idles caused by setFeatureState itself).
-let viewDirty = false;
+// Persistent "a camera move is in progress" gate for the idle handler. Unlike
+// state.viewDirty (which updateFeatureStates consumes on its next query) this
+// stays set for the whole gesture, so idle reliably fires one settle-time
+// requery — and it lets idle skip the idles that setFeatureState itself emits.
+let cameraMoved = false;
 
 export function init() {
   // Warm the shared parquet-wasm binary in the background so it's compiled and
@@ -67,22 +70,26 @@ export function init() {
   map.on("mouseleave", "flowpaths-hover", onFlowpathLeave);
   map.on("click", "flowpaths-hover", onFlowpathClick);
 
-  // Repaint the reaches that just scrolled into view once the map settles.
+  // A camera move only marks cameraMoved; the full-viewport requery is
+  // deferred to idle (via state.viewDirty) so it happens once when the pan
+  // settles, not on every frame mid-pan.
   map.on("movestart", () => {
-    viewDirty = true;
+    cameraMoved = true;
   });
   map.on("idle", () => {
-    if (state.data && viewDirty) {
-      viewDirty = false;
+    if (state.data && cameraMoved) {
+      cameraMoved = false;
+      state.viewDirty = true;
       scheduleFeatureStateUpdate();
     }
   });
-  // Paint each flowpaths tile the moment it finishes loading, so reaches
-  // light up as they stream in mid-pan instead of only once the pan stops.
-  // rAF-coalesced, so a burst of tiles is at most one query per frame.
+  // Paint each flowpaths tile the moment it finishes loading, so reaches light
+  // up as they stream in mid-pan instead of only once the pan stops. Bounded
+  // to the loaded tile's footprint (not the whole screen) and rAF-coalesced,
+  // so a burst of tiles is at most one small query per frame.
   map.on("sourcedata", (e) => {
     if (state.data && e.sourceId === "flowpaths" && e.tile) {
-      scheduleFeatureStateUpdate();
+      scheduleTilePaint(e.tile.tileID);
     }
   });
 
