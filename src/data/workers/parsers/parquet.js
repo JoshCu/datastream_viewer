@@ -8,21 +8,14 @@
 // ====================================================================
 import { FILL_VALUE } from "../../../config.js";
 
-// apache-arrow TimeUnit: 0 SECOND, 1 MILLISECOND, 2 MICROSECOND, 3 NANOSECOND.
-// Timestamp vectors return their raw value in the column's unit, so scale to ms.
-function toMillis(v, unit) {
+// apache-arrow's Timestamp vector getter already normalizes every unit
+// (second / micro / nanosecond) to epoch milliseconds — get() returns a JS
+// number in ms (or a Date), NOT the column's raw unit. So we must not re-scale
+// by the declared unit; doing so collapsed every timestep onto ~the same
+// instant, freezing the time readout. A plain numeric column is assumed ms.
+function toMillis(v) {
   if (v instanceof Date) return v.getTime();
-  const n = typeof v === "bigint" ? Number(v) : Number(v);
-  switch (unit) {
-    case 0:
-      return n * 1000;
-    case 2:
-      return n / 1000;
-    case 3:
-      return n / 1e6;
-    default:
-      return n; // millisecond (or a plain numeric column)
-  }
+  return typeof v === "bigint" ? Number(v) : Number(v);
 }
 
 export async function parseParquet(url, parquetWasm) {

@@ -36,6 +36,11 @@ import {
 // requery — and it lets idle skip the idles that setFeatureState itself emits.
 let cameraMoved = false;
 
+// Set when a camera move interrupts active playback, so idle can resume it once
+// the gesture settles. Only movestart-while-playing sets it, so repeated
+// movestarts within one gesture don't clobber it.
+let resumePlaybackAfterMove = false;
+
 export function init() {
   // Warm the shared parquet-wasm binary in the background so it's compiled and
   // ready by the time a Parquet/CONUS load fires — the workers reuse it.
@@ -75,12 +80,22 @@ export function init() {
   // settles, not on every frame mid-pan.
   map.on("movestart", () => {
     cameraMoved = true;
+    // Pause playback while the camera is moving; idle resumes it. Guarded on
+    // isPlaying so a second movestart mid-gesture doesn't overwrite the flag.
+    if (state.isPlaying) {
+      resumePlaybackAfterMove = true;
+      stopPlayback();
+    }
   });
   map.on("idle", () => {
     if (state.data && cameraMoved) {
       cameraMoved = false;
       state.viewDirty = true;
       scheduleFeatureStateUpdate();
+      if (resumePlaybackAfterMove) {
+        resumePlaybackAfterMove = false;
+        startPlayback();
+      }
     }
   });
   // Paint each flowpaths tile the moment it finishes loading, so reaches light
