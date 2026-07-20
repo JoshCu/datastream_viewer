@@ -90,6 +90,23 @@
               </select>
             </div>
 
+            <!-- Load latest: jump straight to the most recent run's cycle for
+                 the selected model (most recent date → range → highest cycle). -->
+            <div class="latest-section" id="latestSection">
+              <span class="latest-label">Load latest</span>
+              <div class="latest-btns">
+                <button class="btn secondary latest-btn" id="latestShortBtn" disabled>
+                  Short
+                </button>
+                <button class="btn secondary latest-btn" id="latestMediumBtn" disabled>
+                  Medium
+                </button>
+                <button class="btn secondary latest-btn" id="latestAnalysisBtn" disabled>
+                  Analysis
+                </button>
+              </div>
+            </div>
+
             <!-- CONUS: recursively load every VPU under this cycle -->
             <button class="btn secondary conus-btn" id="conusBtn" disabled>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

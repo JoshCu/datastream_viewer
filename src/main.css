@@ -988,6 +988,33 @@ input[type="range"]::-webkit-slider-thumb {
     cursor: pointer;
 }
 
+/* Load-latest quick-jump buttons */
+.latest-section {
+    margin-top: var(--space-sm);
+}
+
+.latest-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.latest-btns {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.latest-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 4px;
+    font-size: 13px;
+}
+
 /* CONUS (all VPUs) button */
 .conus-btn {
     margin-top: var(--space-sm);
