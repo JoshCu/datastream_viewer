@@ -1,5 +1,7 @@
 # datastream_viewer
 
+live demo [here](https://joshcu.github.io/datastream_viewer/)
+
 A browser-based map viewer for [ngen-datastream](https://github.com/CIROH-UA/ngen-datastream)
 t-route outputs. It browses the CIROH community S3 buckets, loads a run's
 NetCDF or Parquet results directly in the browser, and paints per-reach flow /
