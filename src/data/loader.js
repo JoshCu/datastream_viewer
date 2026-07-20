@@ -27,6 +27,28 @@ const queue = [];
 const pending = new Map(); // id -> { resolve, reject }
 let nextId = 1;
 
+// The parquet-wasm binary is 6.5MB. Rather than have every pooled worker fetch
+// and compile it independently, compile it once here and hand the resulting
+// WebAssembly.Module to each worker (structured-cloned across threads, with the
+// compiled code shared — no re-download, no re-compile per worker). Kicked off
+// eagerly at page load via preloadParquetWasm() so it overlaps with browsing.
+const PARQUET_WASM_URL =
+  "https://cdn.jsdelivr.net/npm/parquet-wasm@0.7.2/esm/parquet_wasm_bg.wasm";
+let wasmModulePromise = null;
+
+export function preloadParquetWasm() {
+  if (!wasmModulePromise) {
+    wasmModulePromise = WebAssembly.compileStreaming(
+      fetch(PARQUET_WASM_URL),
+    ).catch((err) => {
+      // Non-fatal: workers fall back to fetching the binary themselves.
+      console.warn("parquet-wasm preload failed; workers will self-load:", err);
+      return null;
+    });
+  }
+  return wasmModulePromise;
+}
+
 function ensurePool() {
   if (workers.length) return;
   for (let i = 0; i < POOL_SIZE; i++) {
@@ -38,6 +60,12 @@ function ensurePool() {
     w._current = null;
     workers.push(w);
     idle.push(w);
+    // Deliver the shared compiled module once ready. Message order per worker
+    // is FIFO, and loadParquetWasm() awaits it, so a parse task dispatched
+    // before this resolves still waits for the module rather than downloading.
+    preloadParquetWasm().then((module) =>
+      w.postMessage({ type: "initWasm", module }),
+    );
   }
 }
 

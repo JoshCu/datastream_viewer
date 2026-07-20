@@ -17,7 +17,17 @@ import { parseParquet } from "./parsers/parquet.js";
 import { mergeDatasets, computeAllBounds } from "./merge.js";
 
 let hdf5Promise = null;
-let hyparquetPromise = null;
+let parquetWasmPromise = null;
+
+// The main thread compiles the 6.5MB parquet-wasm binary once and ships the
+// resulting WebAssembly.Module to every worker (structured-clone shares the
+// compiled code across threads — no per-worker download). This promise resolves
+// with that shared module, or null if preloading failed (fall back to a
+// per-worker fetch via __wbg_init).
+let resolveWasmModule;
+const wasmModulePromise = new Promise((r) => {
+  resolveWasmModule = r;
+});
 
 function loadHdf5() {
   if (!hdf5Promise) {
@@ -28,23 +38,30 @@ function loadHdf5() {
   return hdf5Promise;
 }
 
-function loadHyparquet() {
-  if (!hyparquetPromise) {
-    hyparquetPromise = Promise.all([
-      import("https://cdn.jsdelivr.net/npm/hyparquet@1.6.3/src/hyparquet.js"),
-      import("https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.1/+esm"),
-    ]).then(([hp, comp]) => ({
-      parquetReadObjects: hp.parquetReadObjects,
-      asyncBufferFromUrl: hp.asyncBufferFromUrl,
-      compressors: comp.compressors,
-    }));
+// parquet-wasm reads Parquet into an Arrow table in WASM memory; apache-arrow
+// parses the transferred IPC stream on the JS side. The ESM build must have its
+// WebAssembly module initialized before any API is called — here from the
+// shared, precompiled module rather than a fresh download.
+function loadParquetWasm() {
+  if (!parquetWasmPromise) {
+    parquetWasmPromise = Promise.all([
+      import(
+        "https://cdn.jsdelivr.net/npm/parquet-wasm@0.7.2/esm/parquet_wasm.js"
+      ),
+      import("https://cdn.jsdelivr.net/npm/apache-arrow@18.1.0/+esm"),
+    ]).then(async ([pq, arrow]) => {
+      const module = await wasmModulePromise;
+      if (module) pq.initSync({ module });
+      else await pq.default(); // preload failed: download per worker.
+      return { readParquet: pq.readParquet, tableFromIPC: arrow.tableFromIPC };
+    });
   }
-  return hyparquetPromise;
+  return parquetWasmPromise;
 }
 
 async function parse(url) {
   if (url.endsWith(".parquet")) {
-    return parseParquet(url, await loadHyparquet());
+    return parseParquet(url, await loadParquetWasm());
   }
   return parseNetCDF(url, await loadHdf5());
 }
@@ -58,6 +75,11 @@ function transferListOf(dataset) {
 
 self.onmessage = async (e) => {
   const { id, type } = e.data;
+  // One-shot handoff of the shared compiled wasm module; no reply expected.
+  if (type === "initWasm") {
+    resolveWasmModule(e.data.module ?? null);
+    return;
+  }
   try {
     let dataset;
     if (type === "parse") {

@@ -1,23 +1,59 @@
 // ====================================================================
 // Parquet parser (worker-side, pure).
 //
-// `hyparquet` is { parquetReadObjects, asyncBufferFromUrl, compressors },
-// injected by the worker.
+// `parquetWasm` is { readParquet, tableFromIPC }, injected by the worker.
+// parquet-wasm decodes the file into an Arrow table living in WASM memory;
+// `intoIPCStream()` hands it to apache-arrow's `tableFromIPC` as a JS-side
+// columnar table we read column-at-a-time below.
 // ====================================================================
 import { FILL_VALUE } from "../../../config.js";
 
-export async function parseParquet(url, hyparquet) {
-  const { parquetReadObjects, asyncBufferFromUrl, compressors } = hyparquet;
-  const asyncBuffer = await asyncBufferFromUrl({ url });
-  const rows = await parquetReadObjects({ file: asyncBuffer, compressors });
+// apache-arrow TimeUnit: 0 SECOND, 1 MILLISECOND, 2 MICROSECOND, 3 NANOSECOND.
+// Timestamp vectors return their raw value in the column's unit, so scale to ms.
+function toMillis(v, unit) {
+  if (v instanceof Date) return v.getTime();
+  const n = typeof v === "bigint" ? Number(v) : Number(v);
+  switch (unit) {
+    case 0:
+      return n * 1000;
+    case 2:
+      return n / 1000;
+    case 3:
+      return n / 1e6;
+    default:
+      return n; // millisecond (or a plain numeric column)
+  }
+}
 
+export async function parseParquet(url, parquetWasm) {
+  const { readParquet, tableFromIPC } = parquetWasm;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const table = tableFromIPC(readParquet(bytes).intoIPCStream());
+
+  const timeVec = table.getChild("time");
+  const featureVec = table.getChild("feature_id");
+  const flowVec = table.getChild("flow");
+  const velocityVec = table.getChild("velocity");
+  const depthVec = table.getChild("depth");
+
+  const timeUnit = timeVec?.type?.unit;
+  const numRows = table.numRows;
+
+  // Column values reused across both passes.
+  const times = new Array(numRows);
+  const features = new Array(numRows);
   const timeSet = new Set();
   const featureSet = new Set();
-  rows.forEach((r) => {
-    const t = r.time instanceof Date ? r.time.getTime() : Number(r.time);
+  for (let i = 0; i < numRows; i++) {
+    const t = toMillis(timeVec.get(i), timeUnit);
+    const f = Number(featureVec.get(i));
+    times[i] = t;
+    features[i] = f;
     timeSet.add(t);
-    featureSet.add(Number(r.feature_id));
-  });
+    featureSet.add(f);
+  }
 
   const sortedTimes = Array.from(timeSet).sort((a, b) => a - b);
   const sortedFeatureIds = Array.from(featureSet).sort((a, b) => a - b);
@@ -36,16 +72,18 @@ export async function parseParquet(url, hyparquet) {
   const velocity = alloc();
   const depth = alloc();
 
-  rows.forEach((r) => {
-    const fi = featureIndexMap.get(Number(r.feature_id));
-    const t = r.time instanceof Date ? r.time.getTime() : Number(r.time);
-    const ti = timeIndexMap.get(t);
-    if (fi === undefined || ti === undefined) return;
+  for (let i = 0; i < numRows; i++) {
+    const fi = featureIndexMap.get(features[i]);
+    const ti = timeIndexMap.get(times[i]);
+    if (fi === undefined || ti === undefined) continue;
     const offset = fi * numTimes + ti;
-    if (r.flow != null) flow[offset] = r.flow;
-    if (r.velocity != null) velocity[offset] = r.velocity;
-    if (r.depth != null) depth[offset] = r.depth;
-  });
+    const fv = flowVec?.get(i);
+    const vv = velocityVec?.get(i);
+    const dv = depthVec?.get(i);
+    if (fv != null) flow[offset] = fv;
+    if (vv != null) velocity[offset] = vv;
+    if (dv != null) depth[offset] = dv;
+  }
 
   return {
     isParquet: true,

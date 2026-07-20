@@ -15,7 +15,7 @@ import {
   refreshTooltip,
 } from "./interactions.js";
 import { setupS3Browser } from "../s3/browser.js";
-import { loadConus } from "../data/loader.js";
+import { loadConus, preloadParquetWasm } from "../data/loader.js";
 import { updateLegend } from "../ui/panels.js";
 import { updateTimeDisplay } from "../ui/time.js";
 import { seekFromOverview } from "../ui/overview.js";
@@ -34,6 +34,10 @@ import {
 let viewDirty = false;
 
 export function init() {
+  // Warm the shared parquet-wasm binary in the background so it's compiled and
+  // ready by the time a Parquet/CONUS load fires — the workers reuse it.
+  preloadParquetWasm();
+
   const protocol = new pmtiles.Protocol({ metadata: true });
   maplibregl.addProtocol("pmtiles", protocol.tile);
   maplibregl.setWorkerCount(4);
