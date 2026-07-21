@@ -77,6 +77,18 @@ body {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
+#sidebar-toggle {
+    margin-left:auto;
+}
+
+@media (max-width: 768px) {
+.sidebar{width: 100vw;}
+}
+.sidebar.hide {
+    position: absolute;
+    .sidebar-content{display:none;}
+}
+
 .sidebar-header {
     padding: 20px;
     border-bottom: 1px solid var(--border-color);

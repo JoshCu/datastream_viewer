@@ -23,6 +23,12 @@
          inside the parse worker (src/data/workers/parse.worker.js). -->
 
     <link rel="stylesheet" href="./src/main.css" />
+    <script>
+    // toggle function to add the 'hide' class to the sidebar
+    function toggleSidebar() {
+        document.querySelector('.sidebar').classList.toggle('hide');
+    }
+    </script>
   </head>
   <body>
     <div class="app-container">
@@ -36,6 +42,9 @@
               <path d="M2 12l10 5 10-5" />
             </svg>
             <span>Datastream Viewer</span>
+            <svg id="sidebar-toggle" onclick="toggleSidebar()" style="width:20px;height:20px" viewBox="0 0 20 20">
+                <path fill="currentColor" d="M1,4 H18 V6 H1 V4 M1,9 H18 V11 H1 V7 M3,14 H18 V16 H1 V14" />
+            </svg>
           </div>
         </div>
 
