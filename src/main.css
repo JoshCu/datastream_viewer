@@ -345,6 +345,14 @@ input[type="range"]::-webkit-slider-thumb {
     height: 100%;
 }
 
+.maplibregl-ctrl-hillshade.active span svg path {
+  stroke: #00d4ff !important;
+}
+
+.maplibregl-ctrl-hillshade span svg path {
+  stroke: #000 !important;
+}
+
 /* Tooltip */
 .tooltip {
     position: absolute;

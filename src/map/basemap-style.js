@@ -9,9 +9,8 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
   const cssColor = (name, fallback) =>
     computedStyle.getPropertyValue(name).trim() || fallback;
 
-  const upstream_index_url =
-    "https://communityhydrofabric.s3.us-east-1.amazonaws.com/map/only_geometry/upstream_index/";
   const s3_url = "https://communityhydrofabric.s3.us-east-1.amazonaws.com/map/";
+  const upstream_index_url = s3_url + "only_geometry/upstream_index/";
 
   const hydrofabric_map_data = {
     sources: {
@@ -41,6 +40,14 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
       aorc_zarr_chunks: {
         type: "vector",
         url: "pmtiles://" + s3_url + "forcing_chunks/aorc_zarr_chunks.pmtiles",
+      },
+      terrainSource: {
+        type: "raster-dem",
+        url: "pmtiles://" + s3_url + "terrain.pmtiles",
+      },
+      hillshadeSource: {
+        type: "raster-dem",
+        url: "pmtiles://" + s3_url + "terrain.pmtiles",
       },
     },
     layers: [
@@ -121,6 +128,18 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         filter: HIDDEN_FILTER,
       },
       {
+        id: "hills",
+        type: "hillshade",
+        source: "hillshadeSource",
+        layout: { visibility: "none" },
+
+        paint: {
+          // "hillshade-shadow-color": "#473B24",
+          "hillshade-highlight-color": "#555555",
+          "hillshade-method": "standard",
+        },
+      },
+      {
         id: "camels",
         type: "line",
         source: "camels_basins",
@@ -173,6 +192,10 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         },
       },
     ],
+    terrain: {
+      source: "terrainSource",
+      exaggeration: 1,
+    },
   };
 
   const boostTextHalo = (layer) => ({

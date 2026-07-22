@@ -14,6 +14,7 @@ import {
   onFlowpathLeave,
   onFlowpathClick,
   refreshTooltip,
+  HillshadeControl,
 } from "./interactions.js";
 import { setupS3Browser } from "../s3/browser.js";
 import { loadConus, preloadParquetWasm } from "../data/loader.js";
@@ -60,6 +61,25 @@ export function init() {
   map.setStyle("https://communityhydrofabric.com/map/styles/dark-base.json", {
     transformStyle: updateIncomingStyle,
   });
+
+  map.addControl(
+      new maplibregl.NavigationControl({
+          visualizePitch: true,
+          showZoom: true,
+          showCompass: true
+      })
+  );
+
+  map.addControl(
+      new maplibregl.TerrainControl({
+          source: 'terrainSource',
+          exaggeration: 1
+      })
+  );
+  // add a control to enable and disable the hill shade
+  map.addControl(
+      new HillshadeControl()
+  );
 
   // Upstream highlight on divide click.
   map.on("click", "divides", onDivideClick);
