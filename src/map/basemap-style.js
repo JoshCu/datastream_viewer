@@ -43,11 +43,11 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
       },
       terrainSource: {
         type: "raster-dem",
-        url: "pmtiles://" + s3_url + "terrain.pmtiles",
+        url: "https://tiles.mapterhorn.com/tilejson.json",
       },
       hillshadeSource: {
         type: "raster-dem",
-        url: "pmtiles://" + s3_url + "terrain.pmtiles",
+        url: "https://tiles.mapterhorn.com/tilejson.json",
       },
     },
     layers: [
@@ -137,6 +137,12 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
           // "hillshade-shadow-color": "#473B24",
           "hillshade-highlight-color": "#555555",
           "hillshade-method": "standard",
+          "hillshade-illumination-direction": 315,
+          "hillshade-shadow-color": "#000000",
+          // 'hillshade-highlight-color': '#FFFFFF',
+          "hillshade-accent-color": "#000000",
+          "hillshade-exaggeration": 0.5,
+          resampling: "nearest",
         },
       },
       {
