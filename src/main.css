@@ -1122,52 +1122,97 @@ input[type="range"]::-webkit-slider-thumb {
     cursor: pointer;
 }
 
-.file-info {
+/* Uploaded-file queue: one row per file, loaded/removed independently */
+.upload-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.upload-file-empty {
+    padding: 14px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 12px;
+    background: var(--bg-primary);
+    border-radius: var(--radius-md);
+}
+
+.upload-file-item {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 10px 12px;
     background: var(--bg-primary);
     border-radius: var(--radius-md);
-    margin-bottom: 12px;
+    border-left: 3px solid transparent;
+}
+
+.upload-file-item.active {
+    border-left-color: var(--accent-primary);
+    background: rgba(0, 212, 255, 0.08);
+}
+
+.upload-file-meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.upload-file-name {
     font-family: "IBM Plex Mono", monospace;
     font-size: 12px;
-}
-
-.file-info svg {
-    width: 16px;
-    height: 16px;
-    color: #4ade80;
-    flex-shrink: 0;
-}
-
-.file-info-name {
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 1;
 }
 
-.file-info-size {
+.upload-file-sub {
+    font-size: 11px;
     color: var(--text-muted);
-    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.file-info-remove {
-    width: 20px;
-    height: 20px;
+.upload-file-load,
+.upload-file-remove {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
     background: none;
-    border: none;
-    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
     cursor: pointer;
-    font-size: 16px;
-    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     padding: 0;
-    flex-shrink: 0;
-    transition: color 0.15s;
+    transition: all 0.15s;
 }
 
-.file-info-remove:hover {
+.upload-file-load svg,
+.upload-file-remove svg {
+    width: 14px;
+    height: 14px;
+}
+
+.upload-file-load:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.upload-file-load:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.upload-file-remove:hover {
+    border-color: var(--accent-danger);
     color: var(--accent-danger);
 }

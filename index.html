@@ -171,52 +171,33 @@
             </h3>
 
             <div class="panel-body">
-              <!-- Drop Zone -->
+              <!-- Drop Zone: accepts one file or many, dropped or picked at once -->
               <div class="upload-zone" id="uploadZone">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
-                <div class="upload-zone-title">Drop a file here</div>
+                <div class="upload-zone-title">Drop files here</div>
                 <div class="upload-zone-subtitle">or <span>browse files</span></div>
               </div>
               <input
                 type="file"
                 id="fileInput"
                 accept=".nc,.nc4,.hdf5,.h5,.parquet"
+                multiple
                 style="display: none"
               />
 
-              <!-- File info (shown after selecting a file) -->
-              <div class="file-info" id="fileInfo" style="display: none">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                </svg>
-                <span class="file-info-name" id="fileName">-</span>
-                <span class="file-info-size" id="fileSize">-</span>
-                <button class="file-info-remove" id="fileRemove" title="Remove file">
-                  &times;
-                </button>
+              <!-- Queued/loaded files: each loads or removes independently, so
+                   several runs can be kept around for comparison. -->
+              <div class="upload-file-list" id="uploadFileList">
+                <div class="upload-file-empty">No files added yet</div>
               </div>
 
-              <!-- Load Button -->
-              <button class="btn" id="uploadLoadBtn" style="margin-top: 0" disabled>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
-                </svg>
-                Load File
-              </button>
-
-              <div class="status" id="uploadStatus" style="margin-top: 12px">
-                <span class="status-dot" id="uploadStatusDot"></span>
-                <span id="uploadStatusText">Upload a NetCDF or Parquet file to begin</span>
-              </div>
               <p class="info-text">
-                Load a local T-Route output file (.nc, .nc4, .h5, .parquet) straight from your
-                computer, then pan/zoom the map to visualize.
+                Add one or more local T-Route output files (.nc, .nc4, .h5, .parquet). Click the
+                play icon on a file to load it onto the map, or the × to remove it from the list.
               </p>
             </div>
           </div>

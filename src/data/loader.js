@@ -186,33 +186,16 @@ export async function loadFile(url) {
 
 // Load a single local file (drag-drop or file-picker upload). The file is
 // read into an ArrayBuffer on the main thread, then transferred into the
-// worker pool for parsing — same finalizeData() path as an S3 load.
+// worker pool for parsing — same finalizeData() path as an S3 load. DOM-free
+// (unlike loadFile()/loadConus()) so the upload panel can manage status for
+// several queued files at once; callers own reporting progress and errors.
 export async function loadLocalFile(file) {
-  const btn = document.getElementById("uploadLoadBtn");
-  const statusDot = document.getElementById("uploadStatusDot");
-  const statusText = document.getElementById("uploadStatusText");
-
-  btn.disabled = true;
-  statusDot.className = "status-dot loading";
-  statusText.textContent =
-    "Reading " + (file.name.endsWith(".parquet") ? "Parquet" : "NetCDF") + "...";
-
-  try {
-    const buffer = await file.arrayBuffer();
-    const { dataset, bounds } = await runTask(
-      { type: "parseLocal", buffer, filename: file.name },
-      [buffer],
-    );
-    finalizeData(dataset, bounds);
-    statusDot.className = "status-dot success";
-    statusText.textContent = `Loaded ${state.data.featureIds.length} features × ${state.data.nTimes} steps`;
-  } catch (error) {
-    statusDot.className = "status-dot error";
-    statusText.textContent = `Error: ${error.message}`;
-    console.error("Load error:", error);
-  } finally {
-    btn.disabled = false;
-  }
+  const buffer = await file.arrayBuffer();
+  const { dataset, bounds } = await runTask(
+    { type: "parseLocal", buffer, filename: file.name },
+    [buffer],
+  );
+  finalizeData(dataset, bounds);
 }
 
 // Recursively load every VPU under the current cycle folder and merge.
