@@ -4,6 +4,16 @@
 import { state } from "../state.js";
 import { VARIABLES, SCALE_LABELS } from "../config.js";
 
+// Wires every `.panel-collapse-toggle` button to collapse/expand its
+// ancestor `.panel` (data-source panels like S3 browse and file upload).
+export function initCollapsiblePanels() {
+  document.querySelectorAll(".panel-collapse-toggle").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      btn.closest(".panel").classList.toggle("collapsed");
+    });
+  });
+}
+
 export function showDataPanels() {
   document.getElementById("dataPanel").style.display = "block";
   document.getElementById("varPanel").style.display = "block";

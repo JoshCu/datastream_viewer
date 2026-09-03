@@ -19,10 +19,16 @@ function toMillis(v) {
 }
 
 export async function parseParquet(url, parquetWasm) {
-  const { readParquet, tableFromIPC } = parquetWasm;
   const response = await fetch(url);
   if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
+  return parseParquetBuffer(bytes, parquetWasm);
+}
+
+// Same as parseParquet(), but for bytes already in hand (e.g. a local file
+// upload) rather than ones that need to be fetched.
+export function parseParquetBuffer(bytes, parquetWasm) {
+  const { readParquet, tableFromIPC } = parquetWasm;
   const table = tableFromIPC(readParquet(bytes).intoIPCStream());
 
   const timeVec = table.getChild("time");

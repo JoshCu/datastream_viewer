@@ -141,6 +141,36 @@ body {
     height: var(--space-md);
 }
 
+/* Collapsible panels (S3 browser, upload) */
+.panel-collapse-toggle {
+    margin-left: auto;
+    background: none;
+    border: none;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color var(--transition-fast), transform var(--transition-base);
+}
+
+.panel-collapse-toggle:hover {
+    color: var(--accent-primary);
+}
+
+.panel-collapse-toggle svg {
+    width: var(--space-md);
+    height: var(--space-md);
+}
+
+.panel.collapsed .panel-collapse-toggle {
+    transform: rotate(-90deg);
+}
+
+.panel.collapsed .panel-body {
+    display: none;
+}
+
 /* Status indicator */
 .status {
     display: flex;
@@ -1038,4 +1068,106 @@ input[type="range"]::-webkit-slider-thumb {
 /* CONUS (all VPUs) button */
 .conus-btn {
     margin-top: var(--space-sm);
+}
+
+/* Upload panel: drop zone + selected-file summary */
+.upload-zone {
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg) var(--space-md);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    margin-bottom: 12px;
+}
+
+.upload-zone:hover,
+.upload-zone.dragover {
+    border-color: var(--accent-primary);
+    background: rgba(0, 212, 255, 0.06);
+}
+
+.upload-zone.dragover {
+    box-shadow: inset 0 0 20px rgba(0, 212, 255, 0.1);
+}
+
+.upload-zone svg {
+    width: 36px;
+    height: 36px;
+    color: var(--text-muted);
+    margin-bottom: var(--space-sm);
+    transition: color 0.2s;
+}
+
+.upload-zone:hover svg,
+.upload-zone.dragover svg {
+    color: var(--accent-primary);
+}
+
+.upload-zone-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.upload-zone-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.upload-zone-subtitle span {
+    color: var(--accent-primary);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-primary);
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+}
+
+.file-info svg {
+    width: 16px;
+    height: 16px;
+    color: #4ade80;
+    flex-shrink: 0;
+}
+
+.file-info-name {
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.file-info-size {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.file-info-remove {
+    width: 20px;
+    height: 20px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0;
+    flex-shrink: 0;
+    transition: color 0.15s;
+}
+
+.file-info-remove:hover {
+    color: var(--accent-danger);
 }

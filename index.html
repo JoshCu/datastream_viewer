@@ -58,93 +58,167 @@
                 <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
               </svg>
               S3 Data Source
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
             </h3>
 
-            <!-- Bucket Selector -->
-            <div class="bucket-selector">
-              <select id="bucketSelect">
-                <option value="">Select a bucket...</option>
-                <option value="ciroh-community-ngen-datastream" selected>
-                  ciroh-community-ngen-datastream
-                </option>
-                <option value="ciroh-community-ngen-datastream-temp">
-                  ciroh-community-ngen-datastream-temp
-                </option>
-                <!--<option
-                                    value="ciroh-community-ngen-datastream-test"
-                                >
-                                    ciroh-community-ngen-datastream-test
-                                </option>-->
-              </select>
-            </div>
-
-            <!-- Breadcrumb Navigation -->
-            <div class="breadcrumb" id="breadcrumb">
-              <span class="breadcrumb-item active">Select a bucket</span>
-            </div>
-
-            <!-- Folder Browser -->
-            <div class="folder-list" id="folderList">
-              <div class="folder-empty">Select a bucket to browse</div>
-            </div>
-
-            <!-- File Selection (shown when VPU is selected) -->
-            <div class="file-list-section" id="fileSection" style="display: none">
-              <div class="file-list-header">
-                <span class="file-list-title">T-Route Output Files</span>
-                <span class="file-count" id="fileCount">0 files</span>
+            <div class="panel-body">
+              <!-- Bucket Selector -->
+              <div class="bucket-selector">
+                <select id="bucketSelect">
+                  <option value="">Select a bucket...</option>
+                  <option value="ciroh-community-ngen-datastream" selected>
+                    ciroh-community-ngen-datastream
+                  </option>
+                  <option value="ciroh-community-ngen-datastream-temp">
+                    ciroh-community-ngen-datastream-temp
+                  </option>
+                  <!--<option
+                                      value="ciroh-community-ngen-datastream-test"
+                                  >
+                                      ciroh-community-ngen-datastream-test
+                                  </option>-->
+                </select>
               </div>
-              <select class="file-select" id="fileSelect">
-                <option value="">Select a file...</option>
-              </select>
-            </div>
 
-            <!-- Load latest: jump straight to the most recent run's cycle for
-                 the selected model (most recent date → range → highest cycle). -->
-            <div class="latest-section" id="latestSection">
-              <span class="latest-label">Load latest</span>
-              <div class="latest-btns">
-                <button class="btn secondary latest-btn" id="latestShortBtn" disabled>
-                  Short
-                </button>
-                <button class="btn secondary latest-btn" id="latestMediumBtn" disabled>
-                  Medium
-                </button>
-                <button class="btn secondary latest-btn" id="latestAnalysisBtn" disabled>
-                  Analysis
+              <!-- Breadcrumb Navigation -->
+              <div class="breadcrumb" id="breadcrumb">
+                <span class="breadcrumb-item active">Select a bucket</span>
+              </div>
+
+              <!-- Folder Browser -->
+              <div class="folder-list" id="folderList">
+                <div class="folder-empty">Select a bucket to browse</div>
+              </div>
+
+              <!-- File Selection (shown when VPU is selected) -->
+              <div class="file-list-section" id="fileSection" style="display: none">
+                <div class="file-list-header">
+                  <span class="file-list-title">T-Route Output Files</span>
+                  <span class="file-count" id="fileCount">0 files</span>
+                </div>
+                <select class="file-select" id="fileSelect">
+                  <option value="">Select a file...</option>
+                </select>
+              </div>
+
+              <!-- Load latest: jump straight to the most recent run's cycle for
+                   the selected model (most recent date → range → highest cycle). -->
+              <div class="latest-section" id="latestSection">
+                <span class="latest-label">Load latest</span>
+                <div class="latest-btns">
+                  <button class="btn secondary latest-btn" id="latestShortBtn" disabled>
+                    Short
+                  </button>
+                  <button class="btn secondary latest-btn" id="latestMediumBtn" disabled>
+                    Medium
+                  </button>
+                  <button class="btn secondary latest-btn" id="latestAnalysisBtn" disabled>
+                    Analysis
+                  </button>
+                </div>
+              </div>
+
+              <!-- CONUS: recursively load every VPU under this cycle -->
+              <button class="btn secondary conus-btn" id="conusBtn" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <path
+                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+                  />
+                </svg>
+                Load Full CONUS (all VPUs)
+              </button>
+
+              <!-- Load Button -->
+              <button class="btn" id="loadBtn" style="margin-top: 12px" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
+                </svg>
+                Load Selected File
+              </button>
+
+              <div class="status" id="status" style="margin-top: 12px">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Ready to browse</span>
+              </div>
+              <p class="info-text">
+                Browse the S3 bucket to select a T-Route output file, then pan/zoom the map to
+                visualize.
+              </p>
+            </div>
+          </div>
+
+          <!-- Upload Panel -->
+          <div class="panel">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              Upload File
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <!-- Drop Zone -->
+              <div class="upload-zone" id="uploadZone">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <div class="upload-zone-title">Drop a file here</div>
+                <div class="upload-zone-subtitle">or <span>browse files</span></div>
+              </div>
+              <input
+                type="file"
+                id="fileInput"
+                accept=".nc,.nc4,.hdf5,.h5,.parquet"
+                style="display: none"
+              />
+
+              <!-- File info (shown after selecting a file) -->
+              <div class="file-info" id="fileInfo" style="display: none">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span class="file-info-name" id="fileName">-</span>
+                <span class="file-info-size" id="fileSize">-</span>
+                <button class="file-info-remove" id="fileRemove" title="Remove file">
+                  &times;
                 </button>
               </div>
+
+              <!-- Load Button -->
+              <button class="btn" id="uploadLoadBtn" style="margin-top: 0" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
+                </svg>
+                Load File
+              </button>
+
+              <div class="status" id="uploadStatus" style="margin-top: 12px">
+                <span class="status-dot" id="uploadStatusDot"></span>
+                <span id="uploadStatusText">Upload a NetCDF or Parquet file to begin</span>
+              </div>
+              <p class="info-text">
+                Load a local T-Route output file (.nc, .nc4, .h5, .parquet) straight from your
+                computer, then pan/zoom the map to visualize.
+              </p>
             </div>
-
-            <!-- CONUS: recursively load every VPU under this cycle -->
-            <button class="btn secondary conus-btn" id="conusBtn" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <path
-                  d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-                />
-              </svg>
-              Load Full CONUS (all VPUs)
-            </button>
-
-            <!-- Load Button -->
-            <button class="btn" id="loadBtn" style="margin-top: 12px" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10" />
-                <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
-              </svg>
-              Load Selected File
-            </button>
-
-            <div class="status" id="status" style="margin-top: 12px">
-              <span class="status-dot" id="statusDot"></span>
-              <span id="statusText">Ready to browse</span>
-            </div>
-            <p class="info-text">
-              Browse the S3 bucket to select a T-Route output file, then pan/zoom the map to
-              visualize.
-            </p>
           </div>
 
           <!-- Data Info Panel -->

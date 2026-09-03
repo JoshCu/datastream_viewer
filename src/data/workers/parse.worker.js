@@ -7,13 +7,14 @@
 //
 // Protocol (each message carries a correlation `id`):
 //   in  { id, type: "parse", url }
+//   in  { id, type: "parseLocal", buffer, filename }
 //   in  { id, type: "merge", datasets }
 //   out { id, ok: true,  dataset, bounds }
 //   out { id, ok: false, error }
 // Matrix buffers (flow/velocity/depth) are transferred, not copied.
 // ====================================================================
-import { parseNetCDF } from "./parsers/netcdf.js";
-import { parseParquet } from "./parsers/parquet.js";
+import { parseNetCDF, parseNetCDFBuffer } from "./parsers/netcdf.js";
+import { parseParquet, parseParquetBuffer } from "./parsers/parquet.js";
 import { mergeDatasets, computeAllBounds } from "./merge.js";
 
 let hdf5Promise = null;
@@ -66,6 +67,15 @@ async function parse(url) {
   return parseNetCDF(url, await loadHdf5());
 }
 
+// Same as parse(), but for a buffer handed off by a local file upload rather
+// than one fetched from a URL.
+async function parseLocal(buffer, filename) {
+  if (filename.toLowerCase().endsWith(".parquet")) {
+    return parseParquetBuffer(new Uint8Array(buffer), await loadParquetWasm());
+  }
+  return parseNetCDFBuffer(buffer, await loadHdf5());
+}
+
 // Buffers to hand off when returning a dataset (avoids a structured-clone copy).
 function transferListOf(dataset) {
   return ["flow", "velocity", "depth"]
@@ -84,6 +94,8 @@ self.onmessage = async (e) => {
     let dataset;
     if (type === "parse") {
       dataset = await parse(e.data.url);
+    } else if (type === "parseLocal") {
+      dataset = await parseLocal(e.data.buffer, e.data.filename);
     } else if (type === "merge") {
       dataset = mergeDatasets(e.data.datasets);
     } else {

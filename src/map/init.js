@@ -17,8 +17,9 @@ import {
   HillshadeControl,
 } from "./interactions.js";
 import { setupS3Browser } from "../s3/browser.js";
+import { setupUploadPanel } from "../ui/upload.js";
 import { loadConus, preloadParquetWasm } from "../data/loader.js";
-import { updateLegend } from "../ui/panels.js";
+import { updateLegend, initCollapsiblePanels } from "../ui/panels.js";
 import { updateTimeDisplay } from "../ui/time.js";
 import { seekFromOverview } from "../ui/overview.js";
 import {
@@ -130,6 +131,8 @@ export function init() {
 
   setupEventListeners();
   setupS3Browser();
+  setupUploadPanel();
+  initCollapsiblePanels();
 }
 
 function setupEventListeners() {

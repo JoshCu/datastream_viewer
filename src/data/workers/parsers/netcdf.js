@@ -14,6 +14,12 @@ export async function parseNetCDF(url, hdf5) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
   const arrayBuffer = await response.arrayBuffer();
+  return parseNetCDFBuffer(arrayBuffer, hdf5);
+}
+
+// Same as parseNetCDF(), but for a buffer already in hand (e.g. a local file
+// upload) rather than one that needs to be fetched.
+export function parseNetCDFBuffer(arrayBuffer, hdf5) {
   const file = new hdf5.File(arrayBuffer);
 
   const time = Array.from(file.get("time")?.value || []);
