@@ -2,6 +2,7 @@
 // App bootstrap: create the map, bind map + DOM event listeners.
 // ====================================================================
 import { state, setMap } from "../state.js";
+import { GAGE_LAYER } from "../config.js";
 import { updateIncomingStyle } from "./basemap-style.js";
 import {
   applyResultsPaint,
@@ -13,6 +14,9 @@ import {
   onFlowpathHover,
   onFlowpathLeave,
   onFlowpathClick,
+  onGageClick,
+  onGageHover,
+  onGageLeave,
   refreshTooltip,
   HillshadeControl,
 } from "./interactions.js";
@@ -95,6 +99,11 @@ export function init() {
   map.on("mousemove", "flowpaths-hover", onFlowpathHover);
   map.on("mouseleave", "flowpaths-hover", onFlowpathLeave);
   map.on("click", "flowpaths-hover", onFlowpathClick);
+
+  // Gages (only shown for reaches in the loaded run, see map/gages.js).
+  map.on("click", GAGE_LAYER, onGageClick);
+  map.on("mousemove", GAGE_LAYER, onGageHover);
+  map.on("mouseleave", GAGE_LAYER, onGageLeave);
 
   // A camera move only marks cameraMoved; the full-viewport requery is
   // deferred to idle (via state.viewDirty) so it happens once when the pan

@@ -427,6 +427,12 @@ input[type="range"]::-webkit-slider-thumb {
     margin-bottom: 6px;
 }
 
+.tooltip-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    max-width: 260px;
+}
+
 .tooltip-row {
     display: flex;
     justify-content: space-between;
@@ -652,6 +658,39 @@ input[type="range"]::-webkit-slider-thumb {
     border-radius: var(--radius-md);
     position: relative;
     overflow: hidden;
+}
+
+/* Gage hydrograph: taller than the reach sparkline, with a series key */
+.mini-chart.hydrograph {
+    height: 120px;
+}
+
+.hydrograph-legend {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    display: flex;
+    gap: 10px;
+    font-size: 10px;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.hydrograph-key::before {
+    content: "";
+    display: inline-block;
+    width: 10px;
+    height: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+.hydrograph-key.obs::before {
+    background: rgba(0, 212, 255, 0.9);
+}
+
+.hydrograph-key.model::before {
+    background: rgba(255, 107, 53, 0.9);
 }
 
 .mini-chart canvas {

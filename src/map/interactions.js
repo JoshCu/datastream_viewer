@@ -3,9 +3,11 @@
 // divide click -> upstream highlight.
 // ====================================================================
 import { state, map } from "../state.js";
-import { HIDDEN_FILTER } from "../config.js";
+import { HIDDEN_FILTER, GAGE_LAYER, GAGE_FEATURE } from "../config.js";
 import { valueAt } from "../data/access.js";
+import { fetchGageName } from "../data/usgs.js";
 import { showFeatureInfo } from "../ui/infopanel.js";
+import { showGageInfo } from "../ui/gagepanel.js";
 // maplibregl is a global provided by the CDN <script> in index.html.
 
 
@@ -55,6 +57,11 @@ export class HillshadeControl {
 
 export function onFlowpathHover(e) {
   if (!state.data || !e.features?.length) return;
+  // A hovered gage owns the cursor: keep the reach tooltip out of its way.
+  if (hoveredGageId != null) {
+    onFlowpathLeave();
+    return;
+  }
   const id = e.features[0].id;
   state.hoveredId = id;
 
@@ -96,8 +103,70 @@ export function refreshTooltip() {
 // ---- Click info panel ----------------------------------------------
 
 export function onFlowpathClick(e) {
-  if (!state.data || !e.features?.length) return;
+  if (!state.data || !e.features?.length || clickHitsGage(e)) return;
   showFeatureInfo(e.features[0]);
+}
+
+// ---- Gages: hover glow + tooltip, click -> hydrograph panel ---------
+
+// MapLibre runs every layer's click handler for one click, so the gage
+// handler can't stop the flowpath/divide ones; those layers bail out when a
+// gage dot is under the cursor instead.
+function clickHitsGage(e) {
+  return map.queryRenderedFeatures(e.point, { layers: [GAGE_LAYER] }).length > 0;
+}
+
+let hoveredGageId = null;
+
+export function onGageHover(e) {
+  if (!e.features?.length) return;
+  const feature = e.features[0];
+  const id = feature.id;
+  if (id !== hoveredGageId) {
+    setGageHover(hoveredGageId, false);
+    setGageHover(id, true);
+    hoveredGageId = id;
+    showGageTooltip(feature);
+  }
+  const tooltip = document.getElementById("gageTooltip");
+  tooltip.style.left = `${e.point.x + 15}px`;
+  tooltip.style.top = `${e.point.y + 15}px`;
+}
+
+export function onGageLeave() {
+  setGageHover(hoveredGageId, false);
+  hoveredGageId = null;
+  document.getElementById("gageTooltip").classList.remove("visible");
+  map.getCanvas().style.cursor = "";
+}
+
+function setGageHover(id, hover) {
+  if (id == null) return;
+  map.setFeatureState({ ...GAGE_FEATURE, id }, { hover });
+}
+
+// Site number shows immediately; the official station name fills in once
+// the (cached) lookup resolves, provided this gage is still the hovered one.
+function showGageTooltip(feature) {
+  const site = String(feature.properties.hl_uri || "").replace(/^gages-/, "");
+  const tooltip = document.getElementById("gageTooltip");
+  document.getElementById("gageTooltipTitle").textContent = `USGS-${site}`;
+  const nameEl = document.getElementById("gageTooltipName");
+  nameEl.textContent = `wb-${feature.properties.id}`;
+  tooltip.classList.add("visible");
+  map.getCanvas().style.cursor = "pointer";
+
+  const id = feature.id;
+  fetchGageName(site)
+    .then((name) => {
+      if (name && hoveredGageId === id) nameEl.textContent = name;
+    })
+    .catch(() => {});
+}
+
+export function onGageClick(e) {
+  if (!state.data || !e.features?.length) return;
+  showGageInfo(e.features[0]);
 }
 
 // ---- Upstream highlight (divide click) -----------------------------
@@ -109,7 +178,7 @@ export function clearUpstreamHighlight() {
 }
 
 export function onDivideClick(e) {
-  if (!e.features?.length) return;
+  if (!e.features?.length || clickHitsGage(e)) return;
   const divide = e.features[0];
   const upstreamId = divide.properties.upstream_id;
   const numUpstreams = divide.properties.num_upstreams;

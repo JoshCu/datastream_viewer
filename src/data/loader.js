@@ -14,6 +14,7 @@ import {
   scheduleFeatureStateUpdate,
   zoomToLoadedData,
 } from "../map/paint.js";
+import { updateGageFilter } from "../map/gages.js";
 import {
   showDataPanels,
   hideDataPanels,
@@ -154,6 +155,7 @@ function promote(data, { fitView = true } = {}) {
   showDataPanels();
   updateLegend();
   applyResultsPaint();
+  updateGageFilter();
   // Force a full-viewport requery for the first paint: the run may already be
   // in view, so we can't rely on zoomToLoadedData moving the camera.
   state.viewDirty = true;
@@ -204,6 +206,7 @@ export function clearData() {
   document.getElementById("scaleSelect").disabled = false;
   hideDataPanels();
   clearResultsPaint();
+  updateGageFilter();
 }
 
 // ---- Public entry points ------------------------------------------

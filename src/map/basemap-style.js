@@ -5,10 +5,6 @@
 import { HIDDEN_FILTER } from "../config.js";
 
 export function updateIncomingStyle(previousStyle, nextStyle) {
-  const computedStyle = getComputedStyle(document.documentElement);
-  const cssColor = (name, fallback) =>
-    computedStyle.getPropertyValue(name).trim() || fallback;
-
   const s3_url = "https://communityhydrofabric.s3.us-east-1.amazonaws.com/map/";
   const upstream_index_url = s3_url + "only_geometry/upstream_index/";
 
@@ -33,6 +29,9 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
       gages: {
         type: "vector",
         url: "pmtiles://" + s3_url + "pmtiles/gages.pmtiles",
+        // Gage points carry no feature id in the tiles; promote hl_uri
+        // ("gages-<site>") so hover feature-state can target one gage.
+        promoteId: "hl_uri",
       },
 
     },
@@ -132,7 +131,8 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         },
       },
       {
-        id: "conus_gages",
+        // Soft halo drawn beneath the hovered gage dot; invisible otherwise.
+        id: "conus_gages_glow",
         type: "circle",
         source: "gages",
         "source-layer": "gages",
@@ -140,17 +140,44 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         paint: {
           "circle-radius": {
             stops: [
-              [3, 2],
-              [11, 5],
+              [3, 9],
+              [11, 16],
             ],
           },
-          "circle-color": cssColor("--color-base-content", "#c8c8c8"),
-          "circle-opacity": {
+          "circle-color": "#00d4ff",
+          "circle-blur": 0.8,
+          "circle-opacity": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            0.9,
+            0,
+          ],
+        },
+      },
+      {
+        id: "conus_gages",
+        type: "circle",
+        source: "gages",
+        "source-layer": "gages",
+        // Hidden until a run loads; map/gages.js then filters to the gages
+        // on that run's reaches, so the layer is sparse enough to draw at
+        // every zoom rather than fading in only when zoomed close.
+        filter: HIDDEN_FILTER,
+        paint: {
+          "circle-radius": {
             stops: [
-              [3, 0],
-              [9, 1],
+              [3, 3],
+              [11, 6],
             ],
           },
+          "circle-color": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            "#00d4ff",
+            "#ffffff",
+          ],
+          "circle-stroke-color": "#1a1a2e",
+          "circle-stroke-width": 1.5,
         },
       },
     ],
