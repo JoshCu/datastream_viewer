@@ -10,11 +10,18 @@ import { state, s3State } from "../state.js";
 import { listTrouteFileUrls } from "../s3/client.js";
 import {
   applyResultsPaint,
+  clearResultsPaint,
   scheduleFeatureStateUpdate,
   zoomToLoadedData,
 } from "../map/paint.js";
-import { showDataPanels, updateDataInfo, updateLegend } from "../ui/panels.js";
+import {
+  showDataPanels,
+  hideDataPanels,
+  updateDataInfo,
+  updateLegend,
+} from "../ui/panels.js";
 import { updateTimeDisplay } from "../ui/time.js";
+import { stopPlayback } from "../ui/playback.js";
 
 // ---- Worker pool ---------------------------------------------------
 
@@ -116,33 +123,31 @@ function runTask(message, transfer = []) {
 
 // ---- Model promotion ----------------------------------------------
 
-// Promote a parsed dataset + precomputed bounds to the live in-memory model
-// and paint it.
-function finalizeData(dataset, bounds) {
-  const nTimes = dataset.nTimes;
-  const featureIds = Float64Array.from(dataset.featureIds);
-  const index = new Map();
-  for (let i = 0; i < featureIds.length; i++) index.set(featureIds[i], i);
-
-  state.data = {
-    isParquet: dataset.isParquet,
-    time: dataset.time,
-    nTimes,
-    featureIds,
-    index,
-    matrices: {
-      flow: dataset.flow,
-      velocity: dataset.velocity,
-      depth: dataset.depth,
-    },
-    bounds,
-    refTime: dataset.refTime,
-    totals: {},
-  };
+// Promote an already-normalized dataset (same shape as state.data: index,
+// featureIds, matrices, bounds, ...) to the live in-memory model and paint
+// it. Shared by freshly parsed files and by a computed diff between two
+// already-loaded sources (data/diff.js), since both produce this shape.
+// `fitView` controls whether the camera moves to frame the data; callers
+// that swap datasets in place (the upload panel after its first load) pass
+// false so the user's current view is left alone.
+function promote(data, { fitView = true } = {}) {
+  state.data = data;
   state.timeIndex = 0;
 
+  // A diff's signed, symmetric-around-zero values don't suit the
+  // magnitude-oriented transform scales (log, sqrt, ...), so force linear
+  // and lock the picker while a diff is active; restore it for normal loads.
+  const scaleSelect = document.getElementById("scaleSelect");
+  if (data.isDiff) {
+    state.scale = "linear";
+    scaleSelect.value = "linear";
+    scaleSelect.disabled = true;
+  } else {
+    scaleSelect.disabled = false;
+  }
+
   const slider = document.getElementById("timeSlider");
-  slider.max = Math.max(0, nTimes - 1);
+  slider.max = Math.max(0, data.nTimes - 1);
   slider.value = 0;
 
   updateDataInfo();
@@ -154,7 +159,51 @@ function finalizeData(dataset, bounds) {
   state.viewDirty = true;
   scheduleFeatureStateUpdate();
   updateTimeDisplay();
-  zoomToLoadedData();
+  if (fitView) zoomToLoadedData();
+  return data;
+}
+
+// Normalize a freshly parsed worker dataset + precomputed bounds into the
+// live-model shape and promote it.
+function finalizeData(dataset, bounds, options) {
+  const featureIds = Float64Array.from(dataset.featureIds);
+  const index = new Map();
+  for (let i = 0; i < featureIds.length; i++) index.set(featureIds[i], i);
+
+  return promote({
+    isDiff: false,
+    isParquet: dataset.isParquet,
+    time: dataset.time,
+    nTimes: dataset.nTimes,
+    featureIds,
+    index,
+    matrices: {
+      flow: dataset.flow,
+      velocity: dataset.velocity,
+      depth: dataset.depth,
+    },
+    bounds,
+    refTime: dataset.refTime,
+    totals: {},
+  }, options);
+}
+
+// Promote a dataset already computed by data/diff.js.
+export function showDiff(diffData, options) {
+  return promote(diffData, options);
+}
+
+// Drop the active dataset and restore the map to its pre-data appearance.
+// Called when the file backing the currently displayed data is removed from
+// the upload list.
+export function clearData() {
+  if (!state.data) return;
+  stopPlayback();
+  state.data = null;
+  state.timeIndex = 0;
+  document.getElementById("scaleSelect").disabled = false;
+  hideDataPanels();
+  clearResultsPaint();
 }
 
 // ---- Public entry points ------------------------------------------
@@ -189,13 +238,13 @@ export async function loadFile(url) {
 // worker pool for parsing — same finalizeData() path as an S3 load. DOM-free
 // (unlike loadFile()/loadConus()) so the upload panel can manage status for
 // several queued files at once; callers own reporting progress and errors.
-export async function loadLocalFile(file) {
+export async function loadLocalFile(file, options) {
   const buffer = await file.arrayBuffer();
   const { dataset, bounds } = await runTask(
     { type: "parseLocal", buffer, filename: file.name },
     [buffer],
   );
-  finalizeData(dataset, bounds);
+  return finalizeData(dataset, bounds, options);
 }
 
 // Recursively load every VPU under the current cycle folder and merge.

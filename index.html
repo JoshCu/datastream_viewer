@@ -50,7 +50,7 @@
 
         <div class="sidebar-content">
           <!-- S3 Browser Panel -->
-          <div class="panel">
+          <div class="panel collapsed">
             <h3 class="panel-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <ellipse cx="12" cy="5" rx="9" ry="3" />
@@ -155,7 +155,7 @@
           </div>
 
           <!-- Upload Panel -->
-          <div class="panel">
+          <div class="panel collapsed">
             <h3 class="panel-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -199,6 +199,35 @@
                 Add one or more local T-Route output files (.nc, .nc4, .h5, .parquet). Click the
                 play icon on a file to load it onto the map, or the × to remove it from the list.
               </p>
+
+              <!-- Diff: A minus B between two already-loaded files -->
+              <div class="diff-section" id="diffSection">
+                <div class="diff-header">Compare two loaded files</div>
+                <p class="diff-hint" id="diffHint">
+                  Load at least two files above, then pick A and B to diff them.
+                </p>
+                <div class="diff-controls" id="diffControls" style="display: none">
+                  <div class="diff-row">
+                    <select class="diff-select" id="diffASelect">
+                      <option value="">A: source</option>
+                    </select>
+                    <span class="diff-op">&minus;</span>
+                    <select class="diff-select" id="diffBSelect">
+                      <option value="">B: source</option>
+                    </select>
+                  </div>
+                  <div class="diff-actions">
+                    <button class="btn secondary" id="diffBtn" disabled>Show Diff (A − B)</button>
+                    <button class="btn secondary" id="diffClearBtn" style="display: none">
+                      Clear Diff
+                    </button>
+                  </div>
+                </div>
+                <div class="status" id="diffStatus" style="display: none">
+                  <span class="status-dot" id="diffStatusDot"></span>
+                  <span id="diffStatusText"></span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -262,7 +291,7 @@
 
             <div class="legend">
               <div class="legend-title" id="legendTitle">Flow (m³/s)</div>
-              <div class="legend-gradient"></div>
+              <div class="legend-gradient" id="legendGradient"></div>
               <div class="legend-labels">
                 <span id="legendMin">0</span>
                 <span id="legendMax">100</span>

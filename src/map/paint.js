@@ -75,6 +75,21 @@ export function applyResultsPaint() {
   map.setPaintProperty("flowpaths", "line-width", resultWidthExpression(bounds));
 }
 
+// Restore the flowpaths layer to its pre-data appearance and drop every
+// painting cache, so a later load starts from a clean slate instead of
+// skipping ids this run already thinks it painted.
+export function clearResultsPaint() {
+  if (state.originalPaint && map.getLayer("flowpaths")) {
+    map.setPaintProperty("flowpaths", "line-color", state.originalPaint["line-color"]);
+    map.setPaintProperty("flowpaths", "line-width", state.originalPaint["line-width"]);
+  }
+  paintedKey = null;
+  paintedIds = new Set();
+  renderedIds = new Set();
+  pendingTileBBoxes = new Map();
+  zoomQueued = false;
+}
+
 // Only set feature-state for the reaches actually on screen. Feature-state
 // persists once set, so panning to a new area (or a tile streaming in) just
 // paints the reaches not yet done for this timestep. paintedIds resets

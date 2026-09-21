@@ -21,6 +21,19 @@ export const PALETTE = [
   "#d00000",
 ];
 
+// Diverging ramp for diff views (A − B): symmetric around the middle (odd
+// length) so zero difference lands on the pale center stop, not off to one
+// side. Blue = A below B, red = A above B.
+export const DIFF_PALETTE = [
+  "#2166ac",
+  "#67a9cf",
+  "#d1e5f0",
+  "#f7f7f7",
+  "#fddbc7",
+  "#ef8a62",
+  "#b2182b",
+];
+
 // Short legend suffix per color scale.
 export const SCALE_LABELS = {
   linear: "linear",
