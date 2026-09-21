@@ -4,12 +4,15 @@
 import { state } from "../state.js";
 import { VARIABLES, SCALE_LABELS, PALETTE, DIFF_PALETTE } from "../config.js";
 
-// Wires every `.panel-collapse-toggle` button to collapse/expand its
-// ancestor `.panel` (data-source panels like S3 browse and file upload).
+// Makes the whole title bar of every panel that has a `.panel-collapse-toggle`
+// button collapse/expand its ancestor `.panel` (data-source panels like S3
+// browse and file upload). The button is inside the title, so one listener
+// on the title covers clicks on the arrow too.
 export function initCollapsiblePanels() {
   document.querySelectorAll(".panel-collapse-toggle").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      btn.closest(".panel").classList.toggle("collapsed");
+    const title = btn.closest(".panel-title");
+    title.addEventListener("click", () => {
+      title.closest(".panel").classList.toggle("collapsed");
     });
   });
 }

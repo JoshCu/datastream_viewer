@@ -10,6 +10,7 @@
 // another entry never needs to re-parse the file.
 // ====================================================================
 import { loadLocalFile, showDiff, clearData } from "../data/loader.js";
+import { fitToData } from "../map/paint.js";
 import { diffDatasets } from "../data/diff.js";
 
 let files = []; // { id, file, status: "pending"|"loading"|"loaded"|"error", message, dataset }
@@ -19,11 +20,6 @@ let nextId = 1;
 // what's painted is instead a computed diff of two rows.
 let activeFileId = null;
 let diffActive = false;
-
-// Only the first successful load from this panel moves the camera to frame
-// the data; later loads and diffs swap the dataset in place so the user's
-// current view is preserved.
-let hasFitView = false;
 
 export function setupUploadPanel() {
   const zone = document.getElementById("uploadZone");
@@ -54,6 +50,7 @@ export function setupUploadPanel() {
     if (!row) return;
     const id = Number(row.dataset.id);
     if (e.target.closest(".upload-file-load")) loadEntry(id);
+    else if (e.target.closest(".upload-file-fit")) fitEntry(id);
     else if (e.target.closest(".upload-file-remove")) removeFile(id);
   });
 
@@ -97,8 +94,8 @@ async function loadEntry(id) {
   renderList();
 
   try {
-    entry.dataset = await loadLocalFile(entry.file, { fitView: !hasFitView });
-    hasFitView = true;
+    // Loads never move the camera; the per-row fit button does that on demand.
+    entry.dataset = await loadLocalFile(entry.file, { fitView: false });
     entry.status = "loaded";
     entry.message = "Loaded";
     activeFileId = id;
@@ -110,6 +107,13 @@ async function loadEntry(id) {
   }
   renderList();
   renderDiffControls();
+}
+
+// Frame the map on the reaches this entry covers (its dataset must be
+// loaded, but it needn't be the one currently painted).
+function fitEntry(id) {
+  const entry = files.find((f) => f.id === id);
+  if (entry?.dataset) fitToData(entry.dataset);
 }
 
 function runDiff() {
@@ -129,8 +133,7 @@ function runDiff() {
   try {
     const diff = diffDatasets(aEntry.dataset, bEntry.dataset);
     diff.diffLabel = `${aEntry.file.name} − ${bEntry.file.name}`;
-    showDiff(diff, { fitView: !hasFitView });
-    hasFitView = true;
+    showDiff(diff, { fitView: false });
     activeFileId = null;
     diffActive = true;
     statusDot.className = "status-dot success";
@@ -187,12 +190,17 @@ function renderList() {
         <div class="upload-file-item${isActive ? " active" : ""}" data-id="${entry.id}">
           <span class="status-dot${dotClass ? " " + dotClass : ""}"></span>
           <div class="upload-file-meta">
-            <span class="upload-file-name">${escapeHtml(entry.file.name)}</span>
+            <span class="upload-file-name" title="${escapeHtml(entry.file.name)}">${escapeHtml(entry.file.name)}</span>
             <span class="upload-file-sub">${formatFileSize(entry.file.size)} · ${escapeHtml(entry.message)}${isActive ? " · Active on map" : ""}</span>
           </div>
           <button class="upload-file-load" title="Load onto map" ${anyLoading ? "disabled" : ""}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none" />
+            </svg>
+          </button>
+          <button class="upload-file-fit" title="Fit map to data" ${entry.dataset ? "" : "disabled"}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
             </svg>
           </button>
           <button class="upload-file-remove" title="Remove">&times;</button>

@@ -59,7 +59,7 @@ export function init() {
     validateStyle: false,
   });
   setMap(map);
-  map.setStyle("https://communityhydrofabric.com/map/styles/dark-base.json", {
+  map.setStyle("https://tiles.openfreemap.org/styles/liberty", {
     transformStyle: updateIncomingStyle,
   });
 

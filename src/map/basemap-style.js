@@ -22,25 +22,6 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         type: "vector",
         url: "pmtiles://" + upstream_index_url + "divides.pmtiles",
       },
-      hydrofabric: {
-        type: "vector",
-        url: "pmtiles://" + s3_url + "merged.pmtiles",
-      },
-      camels_basins: {
-        type: "vector",
-        url: "pmtiles://" + s3_url + "camels.pmtiles",
-      },
-      nwm_zarr_chunks: {
-        type: "vector",
-        url:
-          "pmtiles://" +
-          s3_url +
-          "forcing_chunks/nwm_retro_v3_zarr_chunks.pmtiles",
-      },
-      aorc_zarr_chunks: {
-        type: "vector",
-        url: "pmtiles://" + s3_url + "forcing_chunks/aorc_zarr_chunks.pmtiles",
-      },
       terrainSource: {
         type: "raster-dem",
         url: "https://tiles.mapterhorn.com/tilejson.json",
@@ -49,6 +30,11 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         type: "raster-dem",
         url: "https://tiles.mapterhorn.com/tilejson.json",
       },
+      gages: {
+        type: "vector",
+        url: "pmtiles://" + s3_url + "pmtiles/gages.pmtiles",
+      },
+
     },
     layers: [
       {
@@ -146,40 +132,10 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         },
       },
       {
-        id: "camels",
-        type: "line",
-        source: "camels_basins",
-        "source-layer": "camels_basins",
-        filter: HIDDEN_FILTER,
-        paint: { "line-width": 1.5, "line-color": "rgba(134, 30, 232, 1)" },
-      },
-      {
-        id: "nwm_zarr_chunks",
-        type: "line",
-        source: "nwm_zarr_chunks",
-        "source-layer": "nwm_zarr_chunks",
-        filter: HIDDEN_FILTER,
-        paint: {
-          "line-width": 1,
-          "line-color": cssColor("--color-base-content", "#888888"),
-        },
-      },
-      {
-        id: "aorc_zarr_chunks",
-        type: "line",
-        source: "aorc_zarr_chunks",
-        "source-layer": "aorc_zarr_chunks",
-        filter: HIDDEN_FILTER,
-        paint: {
-          "line-width": 1,
-          "line-color": cssColor("--accent-warning", "#ffaa00"),
-        },
-      },
-      {
         id: "conus_gages",
         type: "circle",
-        source: "hydrofabric",
-        "source-layer": "conus_gages",
+        source: "gages",
+        "source-layer": "gages",
         filter: HIDDEN_FILTER,
         paint: {
           "circle-radius": {

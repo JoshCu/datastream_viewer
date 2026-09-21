@@ -165,37 +165,58 @@ export function zoomToLoadedData() {
   zoomQueued = true;
   map.once("idle", () => {
     zoomQueued = false;
-    if (!state.data) return;
-    const features = map.querySourceFeatures("flowpaths", {
-      sourceLayer: "flowpaths",
-    });
-    let minX = Infinity,
-      minY = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity;
-    let found = false;
-    for (const feature of features) {
-      if (!state.data.index.has(feature.id)) continue;
-      const coords = feature.geometry.coordinates;
-      const lines =
-        feature.geometry.type === "MultiLineString" ? coords : [coords];
-      for (const line of lines) {
-        for (const [x, y] of line) {
-          found = true;
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
-        }
+    if (state.data) fitToData(state.data);
+  });
+}
+
+// Zoom level to back out to before fitting: wide enough that the flowpath
+// tiles in view cover any run's extent (the initial map view is zoom 4).
+const FIT_OVERVIEW_ZOOM = 4;
+
+// Move the camera to frame every flowpath that `data` covers. Only tiles
+// already fetched can be inspected, so when zoomed in past the overview
+// level we first jump out to it, wait for those tiles to land, and then
+// measure — otherwise a close-up view would only ever fit to the handful of
+// reaches it happens to have loaded.
+export function fitToData(data) {
+  if (map.getZoom() > FIT_OVERVIEW_ZOOM) {
+    map.jumpTo({ zoom: FIT_OVERVIEW_ZOOM });
+    map.once("idle", () => fitToLoadedTiles(data));
+  } else {
+    fitToLoadedTiles(data);
+  }
+}
+
+function fitToLoadedTiles(data) {
+  const features = map.querySourceFeatures("flowpaths", {
+    sourceLayer: "flowpaths",
+  });
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  let found = false;
+  for (const feature of features) {
+    if (!data.index.has(feature.id)) continue;
+    const coords = feature.geometry.coordinates;
+    const lines =
+      feature.geometry.type === "MultiLineString" ? coords : [coords];
+    for (const line of lines) {
+      for (const [x, y] of line) {
+        found = true;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
       }
     }
-    if (found)
-      map.fitBounds(
-        [
-          [minX, minY],
-          [maxX, maxY],
-        ],
-        { padding: 60, maxZoom: 10 },
-      );
-  });
+  }
+  if (found)
+    map.fitBounds(
+      [
+        [minX, minY],
+        [maxX, maxY],
+      ],
+      { padding: 60, maxZoom: 10, offset:[(359/2)-60,0] },
+    );
 }

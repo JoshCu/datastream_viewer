@@ -68,12 +68,14 @@ body {
 /* Sidebar */
 .sidebar {
     width: 360px;
-    background: var(--bg-secondary);
+    background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
     border-right: 1px solid var(--border-color);
     display: flex;
+    position:absolute;
+    height: 100%;
     flex-direction: column;
     z-index: 100;
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(15px);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
@@ -86,11 +88,13 @@ body {
 }
 .sidebar.hide {
     position: absolute;
+    height:auto;
     .sidebar-content{display:none;}
 }
 
 .sidebar-header {
     padding: 20px;
+    background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -115,7 +119,7 @@ body {
 }
 
 .panel {
-    background: var(--bg-tertiary);
+    background: color-mix(in srgb, var(--bg-tertiary) 99%, transparent);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: var(--space-md);
@@ -138,6 +142,17 @@ body {
 
 .panel.collapsed .panel-title {
     margin-bottom: 0;
+}
+
+/* Collapsible panels: the whole title bar is the click target, and hovering
+   anywhere on it lights up the arrow, not just the arrow itself. */
+.panel-title:has(.panel-collapse-toggle) {
+    cursor: pointer;
+    user-select: none;
+}
+
+.panel-title:has(.panel-collapse-toggle):hover .panel-collapse-toggle {
+    color: var(--accent-primary);
 }
 
 .panel-title svg {
@@ -1184,6 +1199,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .upload-file-load,
+.upload-file-fit,
 .upload-file-remove {
     width: 26px;
     height: 26px;
@@ -1201,17 +1217,20 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .upload-file-load svg,
+.upload-file-fit svg,
 .upload-file-remove svg {
     width: 14px;
     height: 14px;
 }
 
-.upload-file-load:hover {
+.upload-file-load:hover,
+.upload-file-fit:hover {
     border-color: var(--accent-primary);
     color: var(--accent-primary);
 }
 
-.upload-file-load:disabled {
+.upload-file-load:disabled,
+.upload-file-fit:disabled {
     cursor: not-allowed;
     opacity: 0.5;
 }
