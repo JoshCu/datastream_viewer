@@ -449,6 +449,52 @@ input[type="range"]::-webkit-slider-thumb {
     color: var(--text-primary);
 }
 
+/* Gage tooltip: station metadata fetched from the USGS API on hover */
+.tooltip-meta {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-color);
+    max-width: 280px;
+}
+
+.tooltip-meta .tooltip-row + .tooltip-row {
+    margin-top: 3px;
+}
+
+.tooltip-meta .tooltip-value {
+    text-align: right;
+}
+
+.tooltip-meta .tooltip-value.ok {
+    color: var(--accent-primary);
+}
+
+.tooltip-meta .tooltip-value.warn {
+    color: var(--accent-warning);
+}
+
+.tooltip-meta .tooltip-value.bad {
+    color: var(--accent-danger);
+}
+
+.tooltip-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.tooltip-loading .spinner {
+    flex: none;
+    width: 11px;
+    height: 11px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
 /* Variable selector */
 .variable-selector {
     display: flex;

@@ -1,7 +1,7 @@
 // ====================================================================
-// USGS Water Data OGC API client: continuous discharge for one gage over
-// a time window, with a two-level cache so re-clicking a gage (or reloading
-// the page) doesn't hit the API again.
+// USGS Water Data OGC API client: station metadata and continuous discharge
+// for one gage, with a two-level cache so re-hovering or re-clicking a gage
+// (or reloading the page) doesn't hit the API again.
 //
 //   - in-flight/parsed series are memoised per URL for the session
 //   - raw JSON pages are stored in the Cache API (persists across reloads,
@@ -15,28 +15,121 @@ const CACHED_AT_HEADER = "x-cached-at";
 const MAX_PAGES = 20; // 50k rows/page; 15-min data is ~35k rows/year
 
 const seriesMemo = new Map(); // url -> Promise<series>
-const nameMemo = new Map(); // site -> Promise<string|null>
+const metaMemo = new Map(); // site -> Promise<meta>
 
-// Official station name for a USGS site number (null when unknown). Memoised
-// and Cache-API backed like the observations, so hovering never re-queries.
-export function fetchGageName(site) {
-  if (!nameMemo.has(site)) {
-    const params = new URLSearchParams({
-      id: `USGS-${site}`,
-      properties: "monitoring_location_name",
-      skipGeometry: "true",
-      f: "json",
+// Station properties worth showing next to a modelled hydrograph: what the
+// gage is, how big a basin it drains, and where its datum sits.
+const SITE_PROPS = [
+  "monitoring_location_name",
+  "site_type",
+  "drainage_area",
+  "altitude",
+  "vertical_datum",
+].join(",");
+const SERIES_PROPS = [
+  "parameter_code",
+  "parameter_name",
+  "unit_of_measure",
+  "begin",
+  "end",
+].join(",");
+
+// Metadata for a USGS site number: station name/type/basin plus the period of
+// record of every continuous ("Points") time series it publishes. Two requests,
+// memoised per site and Cache-API backed, so a gage is only ever looked up once.
+// Resolves to { site, name, siteType, drainageArea (mi2), altitude (ft),
+// verticalDatum, series: [{ code, name, units, beginMs, endMs }], flow }.
+export function fetchGageMeta(site) {
+  if (!metaMemo.has(site)) {
+    const p = loadMeta(site).catch((err) => {
+      metaMemo.delete(site); // don't memoise failures
+      throw err;
     });
-    const url = `${USGS_API}/collections/monitoring-locations/items?${params}`;
-    const p = fetchJsonCached(url)
-      .then(({ json }) => json.features?.[0]?.properties?.monitoring_location_name ?? null)
-      .catch((err) => {
-        nameMemo.delete(site);
-        throw err;
-      });
-    nameMemo.set(site, p);
+    metaMemo.set(site, p);
   }
-  return nameMemo.get(site);
+  return metaMemo.get(site);
+}
+
+// The memoised metadata promise for a site, or undefined if it was never
+// requested. Lets the hover tooltip skip its debounce for an already-known gage.
+export function peekGageMeta(site) {
+  return metaMemo.get(site);
+}
+
+async function loadMeta(site) {
+  const locUrl = `${USGS_API}/collections/monitoring-locations/items?${new URLSearchParams(
+    { id: `USGS-${site}`, properties: SITE_PROPS, skipGeometry: "true", f: "json" },
+  )}`;
+  // Only continuous series: those are what the hydrograph compares against, and
+  // dropping the daily/statistical variants keeps the response a few KB.
+  const seriesUrl = `${USGS_API}/collections/time-series-metadata/items?${new URLSearchParams(
+    {
+      monitoring_location_id: `USGS-${site}`,
+      computation_period_identifier: "Points",
+      properties: SERIES_PROPS,
+      skipGeometry: "true",
+      limit: "200",
+      f: "json",
+    },
+  )}`;
+
+  // Either half is worth showing on its own; only a total failure is an error.
+  const [loc, features] = await Promise.all([
+    fetchJsonCached(locUrl)
+      .then(({ json }) => json.features?.[0]?.properties ?? null)
+      .catch(() => null),
+    fetchJsonCached(seriesUrl)
+      .then(({ json }) => json.features ?? [])
+      .catch(() => null),
+  ]);
+  if (!loc && !features) throw new Error("USGS metadata unavailable");
+
+  const series = summarizeSeries(features || []);
+  return {
+    site,
+    name: loc?.monitoring_location_name ?? null,
+    siteType: loc?.site_type ?? null,
+    drainageArea: numberOrNull(loc?.drainage_area),
+    altitude: numberOrNull(loc?.altitude),
+    verticalDatum: loc?.vertical_datum ?? null,
+    series,
+    flow: series.find((s) => s.code === USGS_FLOW_PARAM) ?? null,
+  };
+}
+
+// One entry per parameter, most recently active first. A parameter often has
+// several series at a site (sensor swaps, sondes); their records are merged into
+// a single span so the tooltip can answer "does this gage cover my run?".
+function summarizeSeries(features) {
+  const byCode = new Map();
+  for (const f of features) {
+    const p = f.properties || {};
+    if (!p.parameter_code) continue;
+    const beginMs = Date.parse(p.begin);
+    const endMs = Date.parse(p.end);
+    const prev = byCode.get(p.parameter_code);
+    if (prev) {
+      if (beginMs < prev.beginMs) prev.beginMs = beginMs;
+      if (endMs > prev.endMs) prev.endMs = endMs;
+    } else {
+      byCode.set(p.parameter_code, {
+        code: p.parameter_code,
+        name: p.parameter_name || p.parameter_code,
+        units: p.unit_of_measure || "",
+        beginMs,
+        endMs,
+      });
+    }
+  }
+  for (const s of byCode.values()) {
+    if (!Number.isFinite(s.beginMs)) s.beginMs = null;
+    if (!Number.isFinite(s.endMs)) s.endMs = null;
+  }
+  return [...byCode.values()].sort((a, b) => (b.endMs ?? 0) - (a.endMs ?? 0));
+}
+
+function numberOrNull(v) {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
 // Fetch discharge observations for a USGS site number over [startMs, endMs].
