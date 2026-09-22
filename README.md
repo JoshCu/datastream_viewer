@@ -15,8 +15,15 @@ velocity / depth on the hydrofabric flowpaths over time.
   recolor via MapLibre feature-state as reaches stream into view.
 - **Color scales** — linear, log, sqrt, cbrt, symlog, plus quantile / quantile-class
   / Jenks natural-breaks classifications.
-- **Inspection** — hover tooltip, per-reach click panel with a mini time-series
-  chart, a basin-total sparkline, and click-to-highlight upstream catchments.
+- **Inspection** — hover tooltip, per-reach click panel, a basin-total
+  sparkline, and click-to-highlight upstream catchments.
+- **Hydrograph** — clicking a reach or USGS gage opens a D3 hydrograph of that
+  reach from every loaded run (each uploaded file plus the latest S3 load),
+  with the gage's observed discharge when there is one. Toggle/isolate lines
+  from the legend, scroll to zoom, drag to zoom to a range, shift-drag to pan,
+  and hover for a readout of every line. KGE / NSE / r / PBIAS / RMSE are
+  scored for each run against the observations and for any chosen pair of
+  lines (with an optional A − B diff strip), over the visible time window.
 
 ## Running
 
@@ -32,7 +39,7 @@ bun serve.js            # or: PORT=3000 bun serve.js
 `serve.js` is a small Bun static server for this folder. If you don't have Bun,
 `python3 -m http.server 8000` works too.
 
-Third-party libraries (MapLibre GL, PMTiles) load from CDNs via `<script>` tags
+Third-party libraries (MapLibre GL, PMTiles, D3) load from CDNs via `<script>` tags
 in `index.html`; the data-parsing libraries (jsfive for NetCDF/HDF5, hyparquet
 for Parquet) are imported on demand inside the parse worker.
 
@@ -63,6 +70,10 @@ src/
     browser.js                folder/breadcrumb/file-picker UI
   data/
     access.js                 valueAt() accessor over the loaded matrices
+    sources.js                registry of every loaded run, for the hydrograph
+    metrics.js                series alignment + KGE / NSE / PBIAS / … (pure)
+    usgs.js                   USGS gage metadata + observed discharge client
+    diff.js                   A − B diff of two loaded runs
     loader.js                 load orchestration + the parse/merge worker pool
     workers/
       parse.worker.js         module worker hosting the parsers + merge
@@ -75,7 +86,9 @@ src/
     panels.js                 data-info summary + legend
     time.js                   current-timestep readout
     overview.js               basin-total sparkline + click-to-seek
-    infopanel.js              click info panel + mini time-series chart
+    infopanel.js              reach click info panel
+    gagepanel.js              gage click info panel (USGS station details)
+    hydrograph.js             D3 hydrograph dock: runs vs obs, zoom, metrics
 ```
 
 ### How data flows

@@ -696,54 +696,6 @@ input[type="range"]::-webkit-slider-thumb {
     color: var(--text-primary);
 }
 
-/* Mini Chart */
-.mini-chart {
-    margin-top: 12px;
-    height: 80px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: var(--radius-md);
-    position: relative;
-    overflow: hidden;
-}
-
-/* Gage hydrograph: taller than the reach sparkline, with a series key */
-.mini-chart.hydrograph {
-    height: 120px;
-}
-
-.hydrograph-legend {
-    position: absolute;
-    top: 4px;
-    right: 8px;
-    display: flex;
-    gap: 10px;
-    font-size: 10px;
-    color: var(--text-muted);
-    pointer-events: none;
-}
-
-.hydrograph-key::before {
-    content: "";
-    display: inline-block;
-    width: 10px;
-    height: 2px;
-    margin-right: 4px;
-    vertical-align: middle;
-}
-
-.hydrograph-key.obs::before {
-    background: rgba(0, 212, 255, 0.9);
-}
-
-.hydrograph-key.model::before {
-    background: rgba(255, 107, 53, 0.9);
-}
-
-.mini-chart canvas {
-    width: 100%;
-    height: 100%;
-}
-
 /* Info text */
 .info-text {
     font-size: 12px;
@@ -1245,8 +1197,8 @@ input[type="range"]::-webkit-slider-thumb {
 
 .upload-file-item {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: 6px;
     padding: 10px 12px;
     background: var(--bg-primary);
     border-radius: var(--radius-md);
@@ -1258,15 +1210,36 @@ input[type="range"]::-webkit-slider-thumb {
     background: rgba(0, 212, 255, 0.08);
 }
 
-.upload-file-meta {
+/* Name on its own line so it gets the row's full width; size/status and
+   the action buttons share the line below it. */
+.upload-file-head,
+.upload-file-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.upload-file-row {
+    gap: 6px;
+}
+
+.upload-file-name-input {
     flex: 1;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    padding: 2px 6px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-focus);
+    border-radius: var(--radius-sm);
+    outline: none;
 }
 
 .upload-file-name {
+    flex: 1;
+    min-width: 0;
     font-family: "IBM Plex Mono", monospace;
     font-size: 12px;
     color: var(--text-primary);
@@ -1276,6 +1249,8 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .upload-file-sub {
+    flex: 1;
+    min-width: 0;
     font-size: 11px;
     color: var(--text-muted);
     overflow: hidden;
@@ -1285,6 +1260,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 .upload-file-load,
 .upload-file-fit,
+.upload-file-rename,
 .upload-file-remove {
     width: 26px;
     height: 26px;
@@ -1303,13 +1279,15 @@ input[type="range"]::-webkit-slider-thumb {
 
 .upload-file-load svg,
 .upload-file-fit svg,
+.upload-file-rename svg,
 .upload-file-remove svg {
     width: 14px;
     height: 14px;
 }
 
 .upload-file-load:hover,
-.upload-file-fit:hover {
+.upload-file-fit:hover,
+.upload-file-rename:hover {
     border-color: var(--accent-primary);
     color: var(--accent-primary);
 }
@@ -1396,4 +1374,575 @@ input[type="range"]::-webkit-slider-thumb {
 .diff-actions .btn {
     width: auto;
     flex: 1;
+}
+
+/* ====================================================================
+   Hydrograph dock (src/ui/hydrograph.js)
+   ==================================================================== */
+:root {
+    --hydro-h: 40vh;
+    --hydro-grid: #1f2b38;
+    --hydro-axis: #2c3b4b;
+}
+
+.hydro-dock {
+    position: absolute;
+    left: calc(360px + var(--space-md));
+    right: var(--space-md);
+    bottom: var(--space-md);
+    height: var(--hydro-h);
+    min-height: 220px;
+    display: none;
+    flex-direction: column;
+    background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(20px);
+    z-index: 90;
+    overflow: hidden;
+}
+
+.hydro-dock.visible {
+    display: flex;
+}
+
+.sidebar.hide ~ .main-content .hydro-dock {
+    left: var(--space-md);
+}
+
+@media (max-width: 768px) {
+    .hydro-dock {
+        left: var(--space-sm);
+        right: var(--space-sm);
+    }
+}
+
+/* Keep the reach/gage info card clear of the dock. */
+body.hydro-open #info-panel {
+    bottom: calc(var(--hydro-h) + 2 * var(--space-md));
+    max-height: calc(100vh - var(--hydro-h) - 4 * var(--space-md));
+    overflow-y: auto;
+}
+
+.hydro-dock.fullscreen {
+    position: fixed;
+    inset: var(--space-md);
+    height: auto;
+    z-index: 300;
+    background: var(--bg-secondary);
+}
+
+.hydro-dock.fullscreen .hydro-resize {
+    display: none;
+}
+
+.hydro-icon-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.hydro-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.hydro-icon-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.hydro-icon-btn .icon-collapse,
+.hydro-dock.fullscreen .hydro-icon-btn .icon-expand {
+    display: none;
+}
+
+.hydro-dock.fullscreen .hydro-icon-btn .icon-collapse {
+    display: block;
+}
+
+.hydro-resize {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    cursor: ns-resize;
+    z-index: 2;
+}
+
+.hydro-resize:hover {
+    background: color-mix(in srgb, var(--accent-primary) 25%, transparent);
+}
+
+.hydro-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+
+.hydro-titles {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    margin-right: auto;
+}
+
+.hydro-title {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent-primary);
+    white-space: nowrap;
+}
+
+.hydro-subtitle {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hydro-var {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: var(--bg-primary);
+    border-radius: var(--radius-md);
+}
+
+.hydro-var .hydro-chip {
+    border: none;
+}
+
+.hydro-chip {
+    font: inherit;
+    font-size: 11px;
+    padding: 4px 10px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.hydro-chip:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+}
+
+.hydro-chip.active {
+    background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+    color: var(--accent-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 40%, transparent);
+}
+
+.hydro-chip:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.hydro-status {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.hydro-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+
+.hydro-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    padding: 6px 4px 4px 4px;
+}
+
+.hydro-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 4px;
+    padding: 0 8px 4px;
+}
+
+.hydro-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 320px;
+    padding: 2px 6px;
+    font: inherit;
+    font-size: 11px;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.hydro-legend-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.hydro-legend-item.off {
+    color: var(--text-muted);
+}
+
+.hydro-legend-item.off .hydro-key {
+    opacity: 0.3;
+}
+
+.hydro-legend-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Line key: a short stroke of the series color (dashed past slot 8). */
+.hydro-key {
+    flex: none;
+    width: 14px;
+    height: 0;
+    border-top: 2px solid var(--key-color, var(--text-secondary));
+    border-radius: 1px;
+}
+
+.hydro-key.dashed {
+    border-top-style: dashed;
+}
+
+.hydro-key.diff {
+    border-top-color: #c3cad3;
+}
+
+.hydro-chart {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    user-select: none;
+}
+
+.hydro-svg {
+    position: absolute;
+    inset: 0;
+    display: block;
+    font-family: "IBM Plex Mono", monospace;
+}
+
+.hydro-axis text {
+    fill: var(--text-muted);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.hydro-axis-y .tick line {
+    stroke: var(--hydro-grid);
+}
+
+.hydro-axis-x .domain,
+.hydro-axis-x .tick line {
+    stroke: var(--hydro-axis);
+}
+
+.hydro-axis-title {
+    fill: var(--text-secondary);
+    font-size: 10px;
+    text-anchor: middle;
+}
+
+.hydro-line {
+    fill: none;
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.hydro-diff-line {
+    fill: none;
+    stroke: #c3cad3;
+    stroke-width: 1.5;
+}
+
+.hydro-zero {
+    stroke: var(--text-muted);
+    stroke-width: 1;
+}
+
+.hydro-now {
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+    pointer-events: none;
+}
+
+.hydro-crosshair {
+    stroke: var(--text-secondary);
+    stroke-width: 1;
+    pointer-events: none;
+}
+
+.hydro-dot {
+    stroke: var(--bg-secondary);
+    stroke-width: 2;
+    pointer-events: none;
+}
+
+.hydro-brush {
+    fill: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+    stroke: color-mix(in srgb, var(--accent-primary) 60%, transparent);
+    stroke-width: 1;
+    pointer-events: none;
+}
+
+.hydro-hit {
+    fill: transparent;
+    cursor: crosshair;
+}
+
+.hydro-empty {
+    position: absolute;
+    inset: 40px 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.hydro-hint {
+    padding: 2px 8px 0;
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hydro-tooltip {
+    position: absolute;
+    display: none;
+    min-width: 180px;
+    max-width: 340px;
+    padding: 8px 10px;
+    background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    z-index: 5;
+}
+
+.hydro-tooltip.visible {
+    display: block;
+}
+
+.hydro-tt-time {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.hydro-tt-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    font-size: 11px;
+}
+
+.hydro-tt-value {
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 58px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.hydro-tt-label {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hydro-tt-units {
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+.hydro-side {
+    width: 400px;
+    flex: none;
+    border-left: 1px solid var(--border-color);
+    padding: 10px 12px;
+    overflow-y: auto;
+    font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+    .hydro-side {
+        width: 300px;
+    }
+}
+
+.hydro-window-note {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.hydro-window-note span {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--text-secondary);
+}
+
+.hydro-section + .hydro-section {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.hydro-section.disabled .hydro-compare-row,
+.hydro-section.disabled .hydro-toggle,
+.hydro-section.disabled .hydro-ref-note,
+.hydro-section.disabled .hydro-kv {
+    display: none;
+}
+
+.hydro-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.hydro-metrics {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    table-layout: fixed;
+}
+
+.hydro-metrics th {
+    font-weight: 500;
+    color: var(--text-muted);
+    text-align: right;
+    padding: 3px 4px;
+    cursor: help;
+}
+
+.hydro-metrics th:first-child {
+    text-align: left;
+    width: 34%;
+}
+
+.hydro-metrics td {
+    text-align: right;
+    padding: 3px 4px;
+    color: var(--text-primary);
+    border-top: 1px solid var(--hydro-grid);
+}
+
+.hydro-metrics tr.off td {
+    color: var(--text-muted);
+}
+
+.hydro-metric-name {
+    text-align: left !important;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.hydro-metric-name span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hydro-kv {
+    margin-top: 6px;
+}
+
+.hydro-kv th {
+    text-align: left;
+    width: auto;
+}
+
+.hydro-compare-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.hydro-compare-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.hydro-ab {
+    width: 14px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.hydro-select {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    font: inherit;
+    font-size: 11px;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+.hydro-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0 2px;
+    font-size: 11px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.hydro-ref-note {
+    font-size: 10px;
+    color: var(--text-muted);
 }

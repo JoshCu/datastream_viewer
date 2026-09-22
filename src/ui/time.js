@@ -3,6 +3,7 @@
 // ====================================================================
 import { state } from "../state.js";
 import { drawResultsOverview } from "./overview.js";
+import { updateHydrographCursor } from "./hydrograph.js";
 
 function formatTime(t) {
   if (state.data.isParquet) {
@@ -22,4 +23,5 @@ export function updateTimeDisplay() {
     document.getElementById("currentTime").textContent = formatTime(t);
   }
   drawResultsOverview();
+  updateHydrographCursor();
 }

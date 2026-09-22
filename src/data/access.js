@@ -14,27 +14,28 @@ export function valueAt(variable, row, timeIndex) {
 // Absolute UTC epoch milliseconds for a raw entry of state.data.time. Parquet
 // runs already carry epoch ms; NetCDF runs carry seconds since the file's
 // reference time. Returns undefined when the reference time is unparseable.
-export function timeToMillis(t) {
-  if (state.data.isParquet) return t;
-  const ref = refTimeMillis();
+// `data` defaults to the run on the map; pass another loaded run to convert
+// its clock instead.
+export function timeToMillis(t, data = state.data) {
+  if (data.isParquet) return t;
+  const ref = refTimeMillis(data.refTime);
   return ref === undefined ? undefined : ref + t * 1000;
 }
 
 // Time range [start, end] of the loaded run in epoch ms, or null when it
 // can't be resolved to absolute time.
-export function dataTimeRangeMs() {
-  const { time } = state.data;
+export function dataTimeRangeMs(data = state.data) {
+  const { time } = data;
   if (!time.length) return null;
-  const start = timeToMillis(time[0]);
-  const end = timeToMillis(time[time.length - 1]);
+  const start = timeToMillis(time[0], data);
+  const end = timeToMillis(time[time.length - 1], data);
   if (start === undefined || end === undefined) return null;
   return { start, end };
 }
 
 // t-route writes file_reference_time as "YYYY-MM-DD HH:MM:SS" (sometimes with
 // "_" or "T" as the separator) and no timezone; it is UTC.
-function refTimeMillis() {
-  const raw = state.data.refTime;
+function refTimeMillis(raw) {
   if (typeof raw !== "string") return undefined;
   let s = raw.trim().replace(/^(\d{4}-\d{2}-\d{2})[ _]/, "$1T");
   if (!/(Z|[+-]\d{2}:?\d{2})$/.test(s)) s += "Z";

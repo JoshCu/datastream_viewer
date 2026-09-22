@@ -26,6 +26,7 @@ import { loadConus, preloadParquetWasm } from "../data/loader.js";
 import { updateLegend, initCollapsiblePanels } from "../ui/panels.js";
 import { updateTimeDisplay } from "../ui/time.js";
 import { seekFromOverview } from "../ui/overview.js";
+import { setupHydrograph, closeHydrograph } from "../ui/hydrograph.js";
 import {
   startPlayback,
   stopPlayback,
@@ -141,6 +142,7 @@ export function init() {
   setupEventListeners();
   setupS3Browser();
   setupUploadPanel();
+  setupHydrograph();
   initCollapsiblePanels();
 }
 
@@ -178,6 +180,7 @@ function setupEventListeners() {
   document.getElementById("close-info").addEventListener("click", () => {
     document.getElementById("info-panel").classList.remove("visible");
     state.selectedFeature = null;
+    closeHydrograph();
   });
 
   document.getElementById("speed-slider").addEventListener("input", (e) => {

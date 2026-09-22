@@ -65,3 +65,22 @@ export const GAGE_FEATURE = { source: "gages", sourceLayer: "gages" };
 export const USGS_API = "https://api.waterdata.usgs.gov/ogcapi/v1";
 export const USGS_FLOW_PARAM = "00060"; // discharge, ft³/s
 export const CFS_TO_CMS = 0.028316846592;
+
+// Hydrograph line colors: a fixed categorical order (never cycled), checked
+// for color-blind separation between neighbours on the dark panel surface.
+// Each loaded run holds one slot for as long as it's loaded; runs past the
+// eighth fall back to a dashed neutral line. Observations are drawn in the
+// primary text ink so the reference stands apart from every model run.
+export const SERIES_COLORS = [
+  "#3987e5",
+  "#d95926",
+  "#199e70",
+  "#c98500",
+  "#d55181",
+  "#008300",
+  "#9085e9",
+  "#e66767",
+];
+export const SERIES_OVERFLOW_COLOR = "#8899aa";
+export const OBS_COLOR = "#e6edf5";
+export const CURRENT_TIME_COLOR = "#ffba08";

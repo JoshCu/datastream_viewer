@@ -19,6 +19,9 @@
     <!-- PMTiles -->
     <script src="https://unpkg.com/pmtiles@latest/dist/pmtiles.js"></script>
 
+    <!-- D3 (hydrograph dock, src/ui/hydrograph.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+
     <!-- NetCDF (jsfive) and Parquet (hyparquet) are imported on demand
          inside the parse worker (src/data/workers/parse.worker.js). -->
 
@@ -396,6 +399,91 @@
           <div class="tooltip-sub" id="gageTooltipName"></div>
           <div class="tooltip-meta" id="gageTooltipMeta"></div>
         </div>
+
+        <!-- Hydrograph dock: every loaded run (+ USGS obs) for the clicked
+             reach or gage. Filled in by src/ui/hydrograph.js. -->
+        <section class="hydro-dock" id="hydro-dock" aria-label="Hydrograph">
+          <div class="hydro-resize" id="hydro-resize" title="Drag to resize"></div>
+          <header class="hydro-header">
+            <div class="hydro-titles">
+              <span class="hydro-title" id="hydro-title">--</span>
+              <span class="hydro-subtitle" id="hydro-subtitle"></span>
+            </div>
+            <div class="hydro-var" role="group" aria-label="Variable">
+              <button class="hydro-chip hydro-var-btn" data-var="flow">Flow</button>
+              <button class="hydro-chip hydro-var-btn" data-var="velocity">Velocity</button>
+              <button class="hydro-chip hydro-var-btn" data-var="depth">Depth</button>
+            </div>
+            <button class="hydro-chip" id="hydro-log" title="Logarithmic y axis">Log y</button>
+            <button class="hydro-chip" id="hydro-reset" title="Reset zoom (double-click the chart)">
+              Reset zoom
+            </button>
+            <span class="hydro-status" id="hydro-status"></span>
+            <button
+              class="hydro-icon-btn"
+              id="hydro-fullscreen"
+              title="Fullscreen (Esc to exit)"
+              aria-label="Toggle fullscreen"
+              aria-pressed="false"
+            >
+              <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 3 21 3 21 9" />
+                <polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" />
+                <line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+              <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="4 14 10 14 10 20" />
+                <polyline points="20 10 14 10 14 4" />
+                <line x1="14" y1="10" x2="21" y2="3" />
+                <line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            </button>
+            <button class="close-btn" id="hydro-close" aria-label="Close hydrograph">×</button>
+          </header>
+          <div class="hydro-body">
+            <div class="hydro-main">
+              <div class="hydro-legend" id="hydro-legend"></div>
+              <div class="hydro-chart" id="hydro-chart"></div>
+              <div class="hydro-empty" id="hydro-empty"></div>
+              <div class="hydro-tooltip" id="hydro-tooltip"></div>
+              <div class="hydro-hint">
+                Scroll to zoom · drag to select · shift-drag to pan · double-click to reset ·
+                click to seek the map
+              </div>
+            </div>
+            <aside class="hydro-side">
+              <div class="hydro-window-note">
+                Scores over the visible window <span id="hydro-window"></span>
+              </div>
+              <div class="hydro-section" id="hydro-obs-section">
+                <div class="hydro-section-title">vs USGS observed</div>
+                <table class="hydro-metrics" id="hydro-obs-table"></table>
+              </div>
+              <div class="hydro-section" id="hydro-compare-section">
+                <div class="hydro-section-title">Compare two lines</div>
+                <p class="hydro-compare-hint" id="hydro-compare-hint">
+                  Load another run, or click a gage, to compare lines.
+                </p>
+                <div class="hydro-compare-row">
+                  <span class="hydro-ab">A</span>
+                  <select class="hydro-select" id="hydro-compare-a"></select>
+                </div>
+                <div class="hydro-compare-row">
+                  <span class="hydro-ab">B</span>
+                  <select class="hydro-select" id="hydro-compare-b"></select>
+                  <button class="hydro-chip" id="hydro-swap" title="Swap A and B">⇅</button>
+                </div>
+                <label class="hydro-toggle">
+                  <input type="checkbox" id="hydro-diff-toggle" />
+                  Show difference (A − B)
+                </label>
+                <div class="hydro-ref-note">Scores treat B as the reference.</div>
+                <table class="hydro-metrics hydro-kv" id="hydro-compare-table"></table>
+              </div>
+            </aside>
+          </div>
+        </section>
       </main>
 
       <div id="info-panel" class="panel">

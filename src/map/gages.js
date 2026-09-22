@@ -2,7 +2,12 @@
 // Gage layer visibility: only gages sitting on a reach in the loaded run
 // ====================================================================
 import { state, map } from "../state.js";
-import { HIDDEN_FILTER, GAGE_LAYER, GAGE_GLOW_LAYER } from "../config.js";
+import {
+  HIDDEN_FILTER,
+  GAGE_LAYER,
+  GAGE_GLOW_LAYER,
+  GAGE_FEATURE,
+} from "../config.js";
 
 const LAYERS = [GAGE_LAYER, GAGE_GLOW_LAYER];
 
@@ -17,4 +22,17 @@ export function updateGageFilter() {
     ? ["match", ["get", "id"], Array.from(state.data.index.keys()), true, false]
     : HIDDEN_FILTER;
   for (const layer of LAYERS) map.setFilter(layer, filter);
+}
+
+// USGS site number of a gage sitting on `reachId`, or null. Only gage tiles
+// already loaded can be searched, which is fine for a reach just clicked on
+// screen: its gage (if any) is drawn in the same view.
+export function gageSiteForReach(reachId) {
+  if (!map.getSource(GAGE_FEATURE.source)) return null;
+  const hits = map.querySourceFeatures(GAGE_FEATURE.source, {
+    sourceLayer: GAGE_FEATURE.sourceLayer,
+    filter: ["==", ["get", "id"], reachId],
+  });
+  const uri = hits[0]?.properties.hl_uri;
+  return uri ? String(uri).replace(/^gages-/, "") : null;
 }

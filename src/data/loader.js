@@ -23,6 +23,7 @@ import {
 } from "../ui/panels.js";
 import { updateTimeDisplay } from "../ui/time.js";
 import { stopPlayback } from "../ui/playback.js";
+import { registerSource } from "./sources.js";
 
 // ---- Worker pool ---------------------------------------------------
 
@@ -211,6 +212,19 @@ export function clearData() {
 
 // ---- Public entry points ------------------------------------------
 
+// S3 loads share one hydrograph source slot: each replaces the last, just as
+// it replaces the run on the map (uploaded files are kept individually).
+const S3_SOURCE = "s3";
+
+// Short hydrograph label for an S3 key or prefix: the run's
+// "ngen.<date>/<range>/<cycle>/<VPU>" folders when present, else the last
+// path segment.
+function s3Label(path) {
+  const segs = decodeURIComponent(path).split("/").filter(Boolean);
+  const i = segs.findIndex((s) => /^ngen\.\d{8}$/.test(s));
+  return i >= 0 ? segs.slice(i, i + 4).join("/") : segs.at(-1) || path;
+}
+
 // Load a single selected file.
 export async function loadFile(url) {
   const btn = document.getElementById("loadBtn");
@@ -224,7 +238,7 @@ export async function loadFile(url) {
 
   try {
     const { dataset, bounds } = await runTask({ type: "parse", url });
-    finalizeData(dataset, bounds);
+    registerSource(S3_SOURCE, s3Label(new URL(url).pathname), finalizeData(dataset, bounds));
     statusDot.className = "status-dot success";
     statusText.textContent = `Loaded ${state.data.featureIds.length} features × ${state.data.nTimes} steps`;
   } catch (error) {
@@ -302,7 +316,11 @@ export async function loadConus() {
       { type: "merge", datasets },
       transfer,
     );
-    finalizeData(dataset, bounds);
+    registerSource(
+      S3_SOURCE,
+      `CONUS · ${s3Label(s3State.currentPath)}`,
+      finalizeData(dataset, bounds),
+    );
 
     statusDot.className = "status-dot success";
     statusText.textContent = `Loaded CONUS: ${state.data.featureIds.length} features × ${state.data.nTimes} steps (${datasets.length} VPUs)`;

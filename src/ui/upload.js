@@ -12,9 +12,18 @@
 import { loadLocalFile, showDiff, clearData } from "../data/loader.js";
 import { fitToData } from "../map/paint.js";
 import { diffDatasets } from "../data/diff.js";
+import { registerSource, unregisterSource, renameSource } from "../data/sources.js";
 
-let files = []; // { id, file, status: "pending"|"loading"|"loaded"|"error", message, dataset }
+let files = []; // { id, file, nickname, status: "pending"|"loading"|"loaded"|"error", message, dataset }
 let nextId = 1;
+
+// Row whose name is being edited inline (rename button / double-click), if any.
+let editingId = null;
+let rerendering = false;
+
+// The nickname if one was given, else the file name. The same label names the
+// run in the diff pickers and the hydrograph.
+const displayName = (entry) => entry.nickname || entry.file.name;
 
 // Which row (if any) is the one currently painted on the map, and whether
 // what's painted is instead a computed diff of two rows.
@@ -45,13 +54,33 @@ export function setupUploadPanel() {
 
   // Event delegation: rows are re-rendered wholesale on every change, so
   // listeners are bound once on the container rather than per-row.
-  document.getElementById("uploadFileList").addEventListener("click", (e) => {
+  const list = document.getElementById("uploadFileList");
+  list.addEventListener("click", (e) => {
     const row = e.target.closest(".upload-file-item");
     if (!row) return;
     const id = Number(row.dataset.id);
     if (e.target.closest(".upload-file-load")) loadEntry(id);
     else if (e.target.closest(".upload-file-fit")) fitEntry(id);
+    else if (e.target.closest(".upload-file-rename")) startRename(id);
     else if (e.target.closest(".upload-file-remove")) removeFile(id);
+  });
+  list.addEventListener("dblclick", (e) => {
+    const row = e.target.closest(".upload-file-item");
+    if (row && e.target.closest(".upload-file-name")) startRename(Number(row.dataset.id));
+  });
+  // Enter commits, Escape cancels; clicking away (blur) commits too.
+  list.addEventListener("keydown", (e) => {
+    if (!e.target.matches(".upload-file-name-input")) return;
+    if (e.key === "Enter") e.target.blur();
+    else if (e.key === "Escape") {
+      editingId = null;
+      renderList();
+    }
+  });
+  list.addEventListener("focusout", (e) => {
+    if (e.target.matches(".upload-file-name-input") && !rerendering) {
+      commitRename(e.target.value);
+    }
   });
 
   document.getElementById("diffASelect").addEventListener("change", updateDiffButton);
@@ -75,6 +104,7 @@ function addFiles(fileList) {
 
 function removeFile(id) {
   files = files.filter((f) => f.id !== id);
+  unregisterSource(`upload:${id}`);
   if (activeFileId === id) {
     activeFileId = null;
     diffActive = false;
@@ -98,6 +128,7 @@ async function loadEntry(id) {
     entry.dataset = await loadLocalFile(entry.file, { fitView: false });
     entry.status = "loaded";
     entry.message = "Loaded";
+    registerSource(`upload:${id}`, displayName(entry), entry.dataset);
     activeFileId = id;
     diffActive = false;
   } catch (error) {
@@ -132,7 +163,7 @@ function runDiff() {
 
   try {
     const diff = diffDatasets(aEntry.dataset, bEntry.dataset);
-    diff.diffLabel = `${aEntry.file.name} − ${bEntry.file.name}`;
+    diff.diffLabel = `${displayName(aEntry)} − ${displayName(bEntry)}`;
     showDiff(diff, { fitView: false });
     activeFileId = null;
     diffActive = true;
@@ -142,6 +173,25 @@ function runDiff() {
     statusDot.className = "status-dot error";
     statusText.textContent = `Error: ${error.message}`;
     console.error("Diff error:", error);
+  }
+  renderList();
+  renderDiffControls();
+}
+
+function startRename(id) {
+  editingId = id;
+  renderList();
+  document.querySelector(".upload-file-name-input")?.select();
+}
+
+// An empty name clears the nickname, falling back to the file name.
+function commitRename(value) {
+  if (editingId === null) return;
+  const entry = files.find((f) => f.id === editingId);
+  editingId = null;
+  if (entry) {
+    entry.nickname = value.trim() || null;
+    renameSource(`upload:${entry.id}`, displayName(entry));
   }
   renderList();
   renderDiffControls();
@@ -182,32 +232,62 @@ function renderList() {
     return;
   }
 
+  // Replacing the rows removes a focused rename input, which can fire
+  // focusout; `rerendering` keeps that from committing a half-typed name.
+  const draft = list.querySelector(".upload-file-name-input")?.value ?? null;
+  rerendering = true;
   list.innerHTML = files
     .map((entry) => {
       const isActive = !diffActive && entry.id === activeFileId;
       const dotClass = STATUS_DOT_CLASS[entry.status];
+      const name = escapeHtml(displayName(entry));
+      const title = entry.nickname
+        ? `${escapeHtml(entry.nickname)} (${escapeHtml(entry.file.name)})`
+        : name;
+      const nameEl =
+        entry.id === editingId
+          ? `<input class="upload-file-name-input" type="text" value="${name}"
+                    placeholder="${escapeHtml(entry.file.name)}" aria-label="Nickname" />`
+          : `<span class="upload-file-name" title="${title} · double-click to rename">${name}</span>`;
       return `
         <div class="upload-file-item${isActive ? " active" : ""}" data-id="${entry.id}">
-          <span class="status-dot${dotClass ? " " + dotClass : ""}"></span>
-          <div class="upload-file-meta">
-            <span class="upload-file-name" title="${escapeHtml(entry.file.name)}">${escapeHtml(entry.file.name)}</span>
-            <span class="upload-file-sub">${formatFileSize(entry.file.size)} · ${escapeHtml(entry.message)}${isActive ? " · Active on map" : ""}</span>
+          <div class="upload-file-head">
+            <span class="status-dot${dotClass ? " " + dotClass : ""}"></span>
+            ${nameEl}
           </div>
-          <button class="upload-file-load" title="Load onto map" ${anyLoading ? "disabled" : ""}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none" />
-            </svg>
-          </button>
-          <button class="upload-file-fit" title="Fit map to data" ${entry.dataset ? "" : "disabled"}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
-            </svg>
-          </button>
-          <button class="upload-file-remove" title="Remove">&times;</button>
+          <div class="upload-file-row">
+            <span class="upload-file-sub">${formatFileSize(entry.file.size)} · ${escapeHtml(entry.message)}${isActive ? " · Active on map" : ""}</span>
+            <button class="upload-file-load" title="Load onto map" ${anyLoading ? "disabled" : ""}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
+            <button class="upload-file-fit" title="Fit map to data" ${entry.dataset ? "" : "disabled"}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+              </svg>
+            </button>
+            <button class="upload-file-rename" title="Rename (nickname shown in the hydrograph)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+              </svg>
+            </button>
+            <button class="upload-file-remove" title="Remove">&times;</button>
+          </div>
         </div>
       `;
     })
     .join("");
+
+  // A re-render mid-edit (another file finishing its load) rebuilt the input:
+  // carry over what was typed so far and keep the caret in it.
+  const input = list.querySelector(".upload-file-name-input");
+  if (input) {
+    if (draft !== null) input.value = draft;
+    input.focus();
+  }
+  rerendering = false;
 }
 
 function updateDiffButton() {
@@ -240,7 +320,7 @@ function renderDiffControls() {
   const prevB = bSelect.value;
 
   const options = loaded
-    .map((f) => `<option value="${f.id}">${escapeHtml(f.file.name)}</option>`)
+    .map((f) => `<option value="${f.id}">${escapeHtml(displayName(f))}</option>`)
     .join("");
   aSelect.innerHTML = '<option value="">A: source</option>' + options;
   bSelect.innerHTML = '<option value="">B: source</option>' + options;
