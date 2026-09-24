@@ -181,6 +181,34 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         },
       },
     ],
+    // Drawn above the basemap's own labels (see the return below) so place
+    // names don't win symbol collisions against gage ids.
+    overlayLayers: [
+      {
+        // USGS site number beside each gage dot. Off until toggled on from
+        // the gage control; filtered alongside the dots by map/gages.js.
+        id: "conus_gages_label",
+        type: "symbol",
+        source: "gages",
+        "source-layer": "gages",
+        filter: HIDDEN_FILTER,
+        layout: {
+          visibility: "none",
+          // hl_uri is "gages-<site>"; drop the 6-char prefix.
+          "text-field": ["slice", ["get", "hl_uri"], 6],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 11,
+          "text-variable-anchor": ["left", "right", "top", "bottom"],
+          "text-radial-offset": 0.8,
+          "text-justify": "auto",
+        },
+        paint: {
+          "text-color": "#1a1a2e",
+          "text-halo-color": "#ffffff",
+          "text-halo-width": 1.5,
+        },
+      },
+    ],
     terrain: {
       source: "terrainSource",
       exaggeration: 1,
@@ -210,6 +238,7 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
             layer.type === "symbol" && layer.paint?.["text-halo-width"],
         )
         .map(boostTextHalo),
+      ...hydrofabric_map_data.overlayLayers,
     ],
   };
 }

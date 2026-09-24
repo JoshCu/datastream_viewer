@@ -402,6 +402,22 @@ input[type="range"]::-webkit-slider-thumb {
   stroke: #000 !important;
 }
 
+.maplibregl-ctrl-gage span svg path {
+  fill: none;
+  stroke: #000;
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.maplibregl-ctrl-gage.active span svg path {
+  stroke: #00d4ff;
+}
+
+.maplibregl-ctrl-gage:disabled span svg path {
+  stroke: #aaa;
+}
+
 /* Tooltip */
 .tooltip {
     position: absolute;

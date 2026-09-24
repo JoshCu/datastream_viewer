@@ -59,6 +59,7 @@ export const RESULT_VALUE = ["coalesce", ["feature-state", "value"], FILL_VALUE]
 // number in `hl_uri` ("gages-<site>").
 export const GAGE_LAYER = "conus_gages";
 export const GAGE_GLOW_LAYER = "conus_gages_glow";
+export const GAGE_LABEL_LAYER = "conus_gages_label";
 export const GAGE_FEATURE = { source: "gages", sourceLayer: "gages" };
 
 // USGS Water Data OGC API (the post-2025 replacement for the NWIS IV service).

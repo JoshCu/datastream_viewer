@@ -20,6 +20,7 @@ import {
   refreshTooltip,
   HillshadeControl,
 } from "./interactions.js";
+import { GageControl } from "./gages.js";
 import { setupS3Browser } from "../s3/browser.js";
 import { setupUploadPanel } from "../ui/upload.js";
 import { loadConus, preloadParquetWasm } from "../data/loader.js";
@@ -86,6 +87,7 @@ export function init() {
   map.addControl(
       new HillshadeControl()
   );
+  map.addControl(new GageControl());
 
   // Upstream highlight on divide click.
   map.on("click", "divides", onDivideClick);
