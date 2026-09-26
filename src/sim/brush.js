@@ -28,13 +28,16 @@ let hitCache = null; // { x, y, ids } for the last picked point
 // The qlat slider is logarithmic: 0..300 -> 0.1..100 m³/s.
 const qlatFromSlider = (v) => 10 ** (v / 100 - 1);
 
-// The brush is a disk lying on the ground, so it tilts and turns with the
-// camera. Its radius is set where the pointer is: diameterPx wide along the
-// screen's horizontal there, which a pitched view doesn't foreshorten.
+// The brush is a disk on the ground, so it tilts and turns with the camera,
+// and with 3D terrain on it's projected straight down onto the terrain (it's
+// drawn as an ordinary map layer, which MapLibre drapes). Its radius is set
+// where the pointer is: diameterPx wide along the screen's horizontal there,
+// which a pitched view doesn't foreshorten.
 //
-// { center, radius, outline }: center in MercatorCoordinate units, radius in
-// the same units, outline the disk's rim projected to screen points. Null
-// when the pointer is off the ground (e.g. in the sky of a pitched view).
+// { center, radius, rim, outline }: center in MercatorCoordinate units,
+// radius in the same units, rim the disk's edge as [lng, lat] (closed ring),
+// outline the rim projected to screen points. Null when the pointer is off
+// the ground (e.g. in the sky of a pitched view).
 const OUTLINE_POINTS = 48;
 let footprintCache = null; // { x, y, fp } for the last computed point
 
@@ -49,16 +52,19 @@ function footprint(point) {
   const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
   let fp = null;
   if (Number.isFinite(radius) && radius > 0) {
+    const rim = [];
     const outline = [];
     for (let k = 0; k < OUTLINE_POINTS; k++) {
       const t = (2 * Math.PI * k) / OUTLINE_POINTS;
-      const rim = new maplibregl.MercatorCoordinate(
+      const lngLat = new maplibregl.MercatorCoordinate(
         center.x + radius * Math.cos(t),
         center.y + radius * Math.sin(t),
-      );
-      outline.push(map.project(rim.toLngLat()));
+      ).toLngLat();
+      rim.push([lngLat.lng, lngLat.lat]);
+      outline.push(map.project(lngLat));
     }
-    fp = { center, radius, outline };
+    rim.push(rim[0]);
+    fp = { center, radius, rim, outline };
   }
   footprintCache = { x: point.x, y: point.y, fp };
   return fp;
@@ -138,24 +144,47 @@ function stopPainting() {
   paintRaf = null;
 }
 
-// ---- Cursor overlay ---------------------------------------------------
+// ---- Brush layer -------------------------------------------------------
 
-function brushEl() {
-  return document.getElementById("simBrush");
+const BRUSH_SOURCE = "sim-brush";
+const BRUSH_COLOR = "#00d4ff";
+const EMPTY = { type: "FeatureCollection", features: [] };
+let shownPainting = null; // the painting look currently applied to the fill
+
+// A fill + outline over everything else, added on first use (the style is
+// loaded by the time the brush can be switched on).
+function brushSource() {
+  if (!map.getSource(BRUSH_SOURCE)) {
+    map.addSource(BRUSH_SOURCE, { type: "geojson", data: EMPTY });
+    map.addLayer({
+      id: "sim-brush-fill",
+      type: "fill",
+      source: BRUSH_SOURCE,
+      paint: { "fill-color": BRUSH_COLOR, "fill-opacity": 0.08 },
+    });
+    map.addLayer({
+      id: "sim-brush-line",
+      type: "line",
+      source: BRUSH_SOURCE,
+      paint: { "line-color": BRUSH_COLOR, "line-width": 2 },
+    });
+    shownPainting = false;
+  }
+  return map.getSource(BRUSH_SOURCE);
 }
 
 function positionBrush() {
-  const el = brushEl();
   const fp =
     cursor && state.brushActive && !(cursorIsTouch && !touches.size) ? footprint(cursor) : null;
   if (!fp) {
-    el.classList.remove("visible");
+    map.getSource(BRUSH_SOURCE)?.setData(EMPTY);
     return;
   }
-  const d = fp.outline.map((p, k) => `${k ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`);
-  el.querySelector("path").setAttribute("d", `${d.join("")}Z`);
-  el.classList.add("visible");
-  el.classList.toggle("painting", painting);
+  brushSource().setData({ type: "Polygon", coordinates: [fp.rim] });
+  if (shownPainting !== painting) {
+    map.setPaintProperty("sim-brush-fill", "fill-opacity", painting ? 0.25 : 0.08);
+    shownPainting = painting;
+  }
 }
 
 export function setBrushActive(on) {

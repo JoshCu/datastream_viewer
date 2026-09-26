@@ -1784,33 +1784,6 @@ body.hydro-open #info-panel {
     min-height: 2.8em;
 }
 
-/* Full-map overlay; the brush disk is its one path, projected from the
-   ground each frame so it tilts with the camera. */
-.sim-brush {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    display: none;
-    z-index: 5;
-}
-
-.sim-brush path {
-    stroke: var(--accent-primary);
-    stroke-width: 2px;
-    fill: rgba(0, 212, 255, 0.08);
-}
-
-.sim-brush.visible {
-    display: block;
-}
-
-.sim-brush.painting path {
-    fill: rgba(0, 212, 255, 0.25);
-}
-
 /* Beats the inline cursor the layer hover handlers set on the canvas. */
 #map.sim-brush-on canvas {
     cursor: crosshair !important;
