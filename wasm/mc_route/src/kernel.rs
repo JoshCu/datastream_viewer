@@ -5,8 +5,11 @@
 //   plus MuskingumCungeResult from src/kernel/muskingum/mod.rs @ 1ed548a
 //
 // Copied verbatim apart from inlining the result struct (and dropping its
-// `use` / `#[repr(C)]`). Re-copy by hand when upstream changes; the parity test
-// at the bottom of this file catches drift or copy mistakes.
+// `use` / `#[repr(C)]`) and replacing `x.powf(2.0 / 3.0)` with `pow23(x)`:
+// wasm has no pow instruction, so powf is a software libm call, and it sat in
+// the secant loop's hot path (~30% of a wet reach's cost). Re-copy by hand when
+// upstream changes (redoing that substitution); the parity test at the bottom
+// of this file catches drift or copy mistakes.
 #![allow(clippy::too_many_arguments, non_snake_case, unused)]
 
 /// Universal MC Result struct
@@ -110,7 +113,7 @@ pub fn muskingum_cunge(
             let (area_0, area_c_0, wp_0, wp_c_0, r_0) =
                 hydraulic_geometry(h_0, bfd, bw, tw_cc, z, sqrt_1_z2);
 
-            let r_0_2_3 = r_0.powf(2.0 / 3.0);
+            let r_0_2_3 = pow23(r_0);
             let r_0_5_3 = r_0 * r_0_2_3;
 
             let ck_0 = kinematic_celerity(
@@ -163,7 +166,7 @@ pub fn muskingum_cunge(
 
             let (area, area_c, wp, wp_c, r) = hydraulic_geometry(h, bfd, bw, tw_cc, z, sqrt_1_z2);
 
-            let r_2_3 = r.powf(2.0 / 3.0);
+            let r_2_3 = pow23(r);
             let r_5_3 = r * r_2_3;
 
             let ck = kinematic_celerity(
@@ -271,7 +274,7 @@ pub fn muskingum_cunge(
     // Calculate velocity
     let twl = bw + 2.0 * z * h;
     let r = (h * (bw + twl) * 0.5) / (bw + 2.0 * (((twl - bw) * 0.5).powi(2) + h.powi(2)).sqrt());
-    let velc = (1.0 / n) * r.powf(2.0 / 3.0) * sqrt_so;
+    let velc = (1.0 / n) * pow23(r) * sqrt_so;
     depthc = h;
 
     // Calculate Courant number
@@ -294,14 +297,14 @@ pub fn muskingum_cunge(
         };
         let r = (area + area_c) / (wp + wp_c);
 
-        let r_2_3 = r.powf(2.0 / 3.0);
+        let r_2_3 = pow23(r);
         let r_5_3 = r * r_2_3;
 
         let ck = ((sqrt_so_n
             * ((5.0 / 3.0) * r_2_3
                 - (2.0 / 3.0) * r_5_3 * (two_sqrt_1_z2 / (bw + 2.0 * h_lt_bf * z)))
             * area
-            + sqrt_so_ncc * (5.0 / 3.0) * h_gt_bf.powf(2.0 / 3.0) * area_c)
+            + sqrt_so_ncc * (5.0 / 3.0) * pow23(h_gt_bf) * area_c)
             / (area + area_c))
             .max(0.0);
 
@@ -380,6 +383,21 @@ fn kinematic_celerity(
     } else {
         0.0
     }
+}
+
+/// `x^(2/3)` for `x >= 0` (0 for non-positive `x`) without libm: a bit-trick
+/// cube-root seed refined by three Newton steps, then squared. Accurate to f32
+/// rounding for the positive, normal radii and depths the kernel feeds it.
+#[inline(always)]
+fn pow23(x: f32) -> f32 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let mut y = f32::from_bits(x.to_bits() / 3 + 709_921_077);
+    for _ in 0..3 {
+        y = (2.0 * y + x / (y * y)) * (1.0 / 3.0);
+    }
+    y * y
 }
 
 #[cfg(test)]
