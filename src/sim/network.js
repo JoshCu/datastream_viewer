@@ -42,6 +42,11 @@ let rafId = null;
 let stepsPerFrame = 4;
 let simSeconds = 0;
 let lastStepMs = 0;
+// Steps counted over a rolling window for the steps/s readout; rate stays
+// null until the first window closes after play().
+let rateSteps = 0;
+let rateWindowStart = 0;
+let stepsPerSec = null;
 let lastStatsAt = 0;
 let originalPaint = null;
 let rebuildTimer = null;
@@ -54,6 +59,8 @@ const target = { ...FLOWPATH_FEATURE, id: 0 };
 const REBUILD_DEBOUNCE_MS = 250;
 // How often the panel's readouts refresh while running.
 const STATS_INTERVAL_MS = 250;
+// Window the steps/s readout averages over.
+const RATE_WINDOW_MS = 1000;
 
 function loadWasm() {
   wasmPromise ??= init().then((exports) => {
@@ -257,8 +264,15 @@ function frame(now) {
     steps++;
     if (performance.now() - t0 > SIM_FRAME_BUDGET_MS) break;
   }
-  lastStepMs = (performance.now() - t0) / steps;
+  const t1 = performance.now();
+  lastStepMs = (t1 - t0) / steps;
   simSeconds += steps * SIM_DT;
+  rateSteps += steps;
+  if (t1 - rateWindowStart >= RATE_WINDOW_MS) {
+    stepsPerSec = (rateSteps * 1000) / (t1 - rateWindowStart);
+    rateSteps = 0;
+    rateWindowStart = t1;
+  }
   paintDirty();
   if (now - lastStatsAt > STATS_INTERVAL_MS) updateStats();
 }
@@ -266,6 +280,9 @@ function frame(now) {
 function play() {
   if (running || !net) return;
   running = true;
+  rateSteps = 0;
+  rateWindowStart = performance.now();
+  stepsPerSec = null;
   rafId = requestAnimationFrame(frame);
   syncControls();
 }
@@ -406,7 +423,7 @@ function updateStats() {
   for (const fn of updateListeners) fn();
   const set = (id, text) => (document.getElementById(id).textContent = text);
   if (!net || !state.simActive) {
-    for (const id of ["simReaches", "simWet", "simMaxQ", "simStepMs", "simTime"]) set(id, "-");
+    for (const id of ["simReaches", "simWet", "simMaxQ", "simStepMs", "simStepsPerSec", "simTime"]) set(id, "-");
     return;
   }
   const { q } = liveViews();
@@ -419,6 +436,7 @@ function updateStats() {
   set("simReaches", net.len().toLocaleString());
   set("simWet", wet.toLocaleString());
   set("simStepMs", running ? lastStepMs.toFixed(2) : "-");
+  set("simStepsPerSec", running && stepsPerSec !== null ? Math.round(stepsPerSec).toLocaleString() : "-");
   set("simTime", `+${fmtDuration(simSeconds)}`);
   set("simMaxQ", outflowMax ? `${outflowMax.toFixed(2)} m³/s` : "-");
 }
