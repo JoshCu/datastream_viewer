@@ -59,7 +59,7 @@
 
         <div class="sidebar-content">
           <!-- S3 Browser Panel -->
-          <div class="panel collapsed">
+          <div class="panel collapsed" id="s3Panel" data-url-key="s3">
             <h3 class="panel-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <ellipse cx="12" cy="5" rx="9" ry="3" />
@@ -164,7 +164,7 @@
           </div>
 
           <!-- Upload Panel -->
-          <div class="panel collapsed">
+          <div class="panel collapsed" id="uploadPanel" data-url-key="upload">
             <h3 class="panel-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -242,7 +242,7 @@
 
           <!-- Live routing sim (src/sim/): Muskingum-Cunge in wasm over the
                reaches on screen, fed by a lateral-inflow brush. -->
-          <div class="panel collapsed" id="simPanel">
+          <div class="panel collapsed" id="simPanel" data-url-key="sim">
             <h3 class="panel-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2.7C12 2.7 5 10 5 15a7 7 0 0 0 14 0c0-5-7-12.3-7-12.3z" />

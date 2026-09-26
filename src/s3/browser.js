@@ -6,6 +6,7 @@ import { fetchS3Folders, listTrouteFileUrls } from "./client.js";
 import { loadFile } from "../data/loader.js";
 import { setStatus } from "../ui/panels.js";
 import { escapeHtml } from "../ui/dom.js";
+import { syncUrl } from "../ui/url.js";
 
 // Reset the file picker back to "nothing chosen". Four call sites used to
 // inline these three steps, and one of them had already drifted (it left the
@@ -30,6 +31,7 @@ export function setupS3Browser() {
   document
     .getElementById("bucketSelect")
     .addEventListener("change", function () {
+      s3State.used = true;
       s3State.currentBucket = this.value;
       s3State.pathSegments = ["outputs"];
       s3State.currentPath = "outputs/";
@@ -64,6 +66,7 @@ export function setupS3Browser() {
     .addEventListener("click", () => loadLatest("analysis", "analysis assim"));
 
   if (bucket && path) {
+    s3State.used = true;
     const cleanPath = path.replace(/\/$/, "");
     s3State.currentBucket = bucket;
     s3State.pathSegments = cleanPath.split("/");
@@ -169,9 +172,10 @@ function renderFolderList(folders) {
     .join("");
 
   folderList.querySelectorAll(".folder-item").forEach((item) => {
-    item.addEventListener("click", () =>
-      handleFolderClick(item.dataset.path, item.dataset.name),
-    );
+    item.addEventListener("click", () => {
+      s3State.used = true;
+      handleFolderClick(item.dataset.path, item.dataset.name);
+    });
   });
 }
 
@@ -202,6 +206,7 @@ function updateBreadcrumb() {
     breadcrumb.innerHTML =
       '<span class="breadcrumb-item active">Select a bucket</span>';
     setLatestEnabled(false);
+    syncUrl();
     return;
   }
 
@@ -214,10 +219,7 @@ function updateBreadcrumb() {
     html += `<span class="breadcrumb-item ${isLast ? "active" : ""}" data-index="${index}">${segment}</span>`;
   });
 
-  const url = new URL(window.location.href);
-  url.searchParams.set("bucket", s3State.currentBucket);
-  url.searchParams.set("path", s3State.currentPath);
-  window.history.pushState({}, "", url.toString());
+  syncUrl();
 
   breadcrumb.innerHTML = html;
 
@@ -225,6 +227,7 @@ function updateBreadcrumb() {
     .querySelectorAll(".breadcrumb-item:not(.active)")
     .forEach((item) => {
       item.addEventListener("click", () => {
+        s3State.used = true;
         const index = parseInt(item.dataset.index, 10);
         s3State.pathSegments = s3State.pathSegments.slice(0, index + 1);
         s3State.currentPath = s3State.pathSegments.join("/") + "/";
@@ -268,6 +271,7 @@ const dateKey = (name) => {
 async function loadLatest(rangeKey, label) {
   if (s3State.isLoading) return;
 
+  s3State.used = true;
   setLatestEnabled(false);
   setStatus("loading", `Finding latest ${label} run...`);
 

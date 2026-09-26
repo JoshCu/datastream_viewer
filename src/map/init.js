@@ -152,12 +152,13 @@ export function init() {
   map.once("idle", preloadParquetWasm);
 
   setupEventListeners();
+  // Before the S3 browser: a deep link's first URL sync must see its panel open.
+  initCollapsiblePanels();
   setupS3Browser();
   setupUploadPanel();
   setupHydrograph();
   setupSimPanel();
   setupBrush();
-  initCollapsiblePanels();
 }
 
 function setupEventListeners() {

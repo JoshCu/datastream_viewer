@@ -3,18 +3,45 @@
 // ====================================================================
 import { state } from "../state.js";
 import { VARIABLES, SCALE_LABELS, PALETTE, DIFF_PALETTE } from "../config.js";
+import { initialOpenPanels, syncUrl } from "./url.js";
 
 // Makes the whole title bar of every panel that has a `.panel-collapse-toggle`
 // button collapse/expand its ancestor `.panel` (data-source panels like S3
 // browse and file upload). The button is inside the title, so one listener
 // on the title covers clicks on the arrow too.
+//
+// Panels named in the URL's `open` list start expanded, with a brief aura so
+// whoever followed the link sees what they were sent to; toggling rewrites
+// the URL so the current layout is always shareable.
 export function initCollapsiblePanels() {
+  const toOpen = initialOpenPanels();
   document.querySelectorAll(".panel-collapse-toggle").forEach((btn) => {
     const title = btn.closest(".panel-title");
+    const panel = title.closest(".panel");
+    if (toOpen.has(panel.dataset.urlKey)) {
+      panel.classList.remove("collapsed");
+      highlightPanel(panel);
+    }
     title.addEventListener("click", () => {
-      title.closest(".panel").classList.toggle("collapsed");
+      panel.classList.toggle("collapsed");
+      panel.classList.remove("url-highlight");
+      syncUrl();
     });
   });
+  // No syncUrl() here: setupS3Browser still has to read bucket/path, and its
+  // first breadcrumb update normalizes the URL.
+}
+
+function highlightPanel(panel) {
+  panel.classList.add("url-highlight");
+  // animationend bubbles, and children (spinners, status dots) animate too.
+  const done = (e) => {
+    if (e.target !== panel) return;
+    panel.classList.remove("url-highlight");
+    panel.removeEventListener("animationend", done);
+  };
+  panel.addEventListener("animationend", done);
+  panel.scrollIntoView({ block: "nearest" });
 }
 
 // ---- Status lines ---------------------------------------------------

@@ -192,6 +192,33 @@ body {
     display: none;
 }
 
+/* Aura on panels opened by a shared link (?open=...). Removed on animationend
+   or when the panel is toggled. */
+.panel.url-highlight {
+    animation: panel-aura 1.4s ease-in-out 3;
+}
+
+@keyframes panel-aura {
+    0%,
+    100% {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 0 transparent;
+        border-color: var(--border-color);
+    }
+    50% {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+            0 0 0 2px var(--accent-primary),
+            0 0 24px 4px color-mix(in srgb, var(--accent-primary) 45%, transparent);
+        border-color: var(--accent-primary);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel.url-highlight {
+        animation-duration: 3s;
+        animation-iteration-count: 1;
+    }
+}
+
 /* Status indicator */
 .status {
     display: flex;

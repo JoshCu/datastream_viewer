@@ -15,6 +15,9 @@ export const s3State = {
   maxNavigationDepth: 6,
   // The VPU_* folders currently listed, if any (drives the CONUS button).
   vpuFolders: [],
+  // Set once the user navigates the browser (or arrives via a bucket/path
+  // link); until then the URL doesn't advertise the default bucket.
+  used: false,
 };
 
 // Application state. state.data holds the loaded run entirely in memory as
