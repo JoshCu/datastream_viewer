@@ -28,38 +28,85 @@ let hitCache = null; // { x, y, ids } for the last picked point
 // The qlat slider is logarithmic: 0..300 -> 0.1..100 m³/s.
 const qlatFromSlider = (v) => 10 ** (v / 100 - 1);
 
-// Reaches whose rendered line passes within the brush radius of `point`.
-// The bbox query is coarse (any feature whose rendered box overlaps), so each
-// candidate is checked against its projected segments.
+// The brush is a disk lying on the ground, so it tilts and turns with the
+// camera. Its radius is set where the pointer is: diameterPx wide along the
+// screen's horizontal there, which a pitched view doesn't foreshorten.
+//
+// { center, radius, outline }: center in MercatorCoordinate units, radius in
+// the same units, outline the disk's rim projected to screen points. Null
+// when the pointer is off the ground (e.g. in the sky of a pitched view).
+const OUTLINE_POINTS = 48;
+let footprintCache = null; // { x, y, fp } for the last computed point
+
+function footprint(point) {
+  if (footprintCache && footprintCache.x === point.x && footprintCache.y === point.y) {
+    return footprintCache.fp;
+  }
+  const center = maplibregl.MercatorCoordinate.fromLngLat(map.unproject(point));
+  const edge = maplibregl.MercatorCoordinate.fromLngLat(
+    map.unproject([point.x + diameterPx / 2, point.y]),
+  );
+  const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+  let fp = null;
+  if (Number.isFinite(radius) && radius > 0) {
+    const outline = [];
+    for (let k = 0; k < OUTLINE_POINTS; k++) {
+      const t = (2 * Math.PI * k) / OUTLINE_POINTS;
+      const rim = new maplibregl.MercatorCoordinate(
+        center.x + radius * Math.cos(t),
+        center.y + radius * Math.sin(t),
+      );
+      outline.push(map.project(rim.toLngLat()));
+    }
+    fp = { center, radius, outline };
+  }
+  footprintCache = { x: point.x, y: point.y, fp };
+  return fp;
+}
+
+// Reaches whose line passes within the brush disk. The bbox query is coarse
+// (any feature whose rendered box overlaps the disk's screen outline), so
+// each candidate is checked against its segments on the ground.
 function reachesUnderBrush(point) {
   if (hitCache && hitCache.x === point.x && hitCache.y === point.y) return hitCache.ids;
-  const r = diameterPx / 2;
-  const features = map.queryRenderedFeatures(
-    [
-      [point.x - r, point.y - r],
-      [point.x + r, point.y + r],
-    ],
-    { layers: ["flowpaths"] },
-  );
   const ids = new Set();
-  for (const f of features) {
-    if (ids.has(f.id)) continue;
-    if (lineWithin(f.geometry, point, r)) ids.add(f.id);
+  const fp = footprint(point);
+  if (fp) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of fp.outline) {
+      x0 = Math.min(x0, p.x);
+      y0 = Math.min(y0, p.y);
+      x1 = Math.max(x1, p.x);
+      y1 = Math.max(y1, p.y);
+    }
+    const features = map.queryRenderedFeatures(
+      [
+        [x0, y0],
+        [x1, y1],
+      ],
+      { layers: ["flowpaths"] },
+    );
+    for (const f of features) {
+      if (ids.has(f.id)) continue;
+      if (lineWithin(f.geometry, fp)) ids.add(f.id);
+    }
   }
   hitCache = { x: point.x, y: point.y, ids };
   return ids;
 }
 
-function lineWithin(geometry, p, r) {
+// Mercator is conformal, so a ground circle stays a circle in its units
+// over a brush-sized area.
+function lineWithin(geometry, { center, radius }) {
   const lines =
     geometry.type === "MultiLineString" ? geometry.coordinates : [geometry.coordinates];
-  const r2 = r * r;
+  const r2 = radius * radius;
   for (const line of lines) {
-    let a = map.project(line[0]);
-    if (dist2(p, a) <= r2) return true;
+    let a = maplibregl.MercatorCoordinate.fromLngLat(line[0]);
+    if (dist2(center, a) <= r2) return true;
     for (let k = 1; k < line.length; k++) {
-      const b = map.project(line[k]);
-      if (segmentDist2(p, a, b) <= r2) return true;
+      const b = maplibregl.MercatorCoordinate.fromLngLat(line[k]);
+      if (segmentDist2(center, a, b) <= r2) return true;
       a = b;
     }
   }
@@ -99,12 +146,14 @@ function brushEl() {
 
 function positionBrush() {
   const el = brushEl();
-  if (!cursor || !state.brushActive || (cursorIsTouch && !touches.size)) {
+  const fp =
+    cursor && state.brushActive && !(cursorIsTouch && !touches.size) ? footprint(cursor) : null;
+  if (!fp) {
     el.classList.remove("visible");
     return;
   }
-  el.style.width = el.style.height = `${diameterPx}px`;
-  el.style.transform = `translate(${cursor.x - diameterPx / 2}px, ${cursor.y - diameterPx / 2}px)`;
+  const d = fp.outline.map((p, k) => `${k ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+  el.querySelector("path").setAttribute("d", `${d.join("")}Z`);
   el.classList.add("visible");
   el.classList.toggle("painting", painting);
 }
@@ -158,7 +207,7 @@ export function setupBrush() {
   const applyDiameter = () => {
     diameterPx = parseInt(diameter.value, 10);
     diameterValue.textContent = `${diameterPx}px`;
-    hitCache = null;
+    hitCache = footprintCache = null;
     positionBrush();
   };
   diameter.addEventListener("input", applyDiameter);
@@ -235,8 +284,10 @@ export function setupBrush() {
     if (!state.simActive && state.brushActive) setBrushActive(false);
     updateReadout(cursor);
   });
-  // The camera moving under a still cursor changes what's beneath it.
+  // The camera moving under a still cursor changes what's beneath it, and
+  // tilts the disk.
   map.on("move", () => {
-    hitCache = null;
+    hitCache = footprintCache = null;
+    if (state.brushActive) positionBrush();
   });
 }
