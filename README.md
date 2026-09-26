@@ -24,6 +24,11 @@ velocity / depth on the hydrofabric flowpaths over time.
   and hover for a readout of every line. KGE / NSE / r / PBIAS / RMSE are
   scored for each run against the observations and for any chosen pair of
   lines (with an optional A − B diff strip), over the visible time window.
+- **Live routing (experimental)** — a Muskingum-Cunge "paintbrush": hold the
+  mouse over rivers to add lateral inflow and watch it route downstream live.
+  The kernel is [rs_route](https://github.com/CIROH-UA/rs_route)'s, compiled to
+  WebAssembly; the network is whatever flowpath tiles are loaded, with channel
+  parameters guessed from stream order. See `WASM_ROUTING.md`.
 
 ## Running
 
@@ -38,6 +43,14 @@ bun serve.js            # or: PORT=3000 bun serve.js
 
 `serve.js` is a small Bun static server for this folder. If you don't have Bun,
 `python3 -m http.server 8000` works too.
+
+The live-routing kernel is Rust (`wasm/mc_route`), but its wasm-pack output is
+committed in `src/vendor/mc_route/`, so you only need Rust if you change it:
+
+```sh
+cargo test --manifest-path wasm/mc_route/Cargo.toml   # incl. parity vs rs_route
+./build-wasm.sh                                       # rebuild src/vendor/mc_route/
+```
 
 Third-party libraries (MapLibre GL, PMTiles, D3) load from CDNs via `<script>` tags
 in `index.html`; the data-parsing libraries (jsfive for NetCDF/HDF5, hyparquet
@@ -90,6 +103,13 @@ src/
     infopanel.js              reach click info panel
     gagepanel.js              gage click info panel (USGS station details)
     hydrograph.js             D3 hydrograph dock: runs vs obs, zoom, metrics
+  sim/
+    network.js                live routing: wasm Network build/step loop + panel
+    brush.js                  lateral-inflow brush cursor, sliders, deposits
+  vendor/
+    mc_route/                 wasm-pack output of wasm/mc_route (committed)
+wasm/
+  mc_route/                   Rust crate: vendored rs_route MC kernel + Network
 ```
 
 ### How data flows

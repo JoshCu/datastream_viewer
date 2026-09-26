@@ -117,3 +117,44 @@ export function refTimeMillis(raw) {
   const ms = Date.parse(s);
   return Number.isNaN(ms) ? undefined : ms;
 }
+
+// ---- Live routing sim (src/sim/) ------------------------------------
+//
+// A Muskingum-Cunge network over the reaches loaded on screen, routed in wasm
+// (wasm/mc_route) and painted through the same feature-state "value" as a
+// loaded run. See WASM_ROUTING.md.
+export const SIM_DT = 300; // seconds per routing step
+// Per-step multiplier on lateral inflow, so a brush deposit tapers off
+// (0.97 per 5 min step ≈ a 1.9 h half-life) once the button is released.
+export const SIM_QLAT_DECAY = 0.97;
+// Below this flow (m³/s) a reach is drawn dry. SIM_DIRTY_EPS must stay under
+// it: a reach draining to zero may be left painted at up to eps, and that
+// must still read as dry.
+export const SIM_WET_Q = 0.01;
+export const SIM_DIRTY_EPS = 0.005;
+// Fixed log colour domain (m³/s). A live sim has no dataset bounds to derive
+// one from, and a domain that moved every frame would recolour the whole map.
+export const SIM_Q_DOMAIN = { min: SIM_WET_Q, max: 1000 };
+// Routing work allowed per animation frame. When the wet network is too big
+// to fit the requested steps in this budget, the sim runs slower instead of
+// dropping frames.
+export const SIM_FRAME_BUDGET_MS = 8;
+export const SIM_DRY_COLOR = "rgba(0, 119, 187, 0.45)";
+// The flowpath tiles are geometry-only, so channel parameters are guessed from
+// stream order until the real flowpath-attributes are wired in. Bottom width
+// bw and bankfull top width tw in metres, side slope cs (the kernel's
+// z = 1 / cs), Manning's n. The compound channel is 3× tw at 2× n, and the
+// bed slope is one constant.
+export const SIM_S0 = 0.001;
+export const SIM_CHANNEL_BY_ORDER = [
+  { bw: 1.6, tw: 4, cs: 0.5, n: 0.06 }, // order 1
+  { bw: 2.4, tw: 6, cs: 0.45, n: 0.06 },
+  { bw: 3.5, tw: 9, cs: 0.4, n: 0.055 },
+  { bw: 5.3, tw: 13, cs: 0.35, n: 0.055 },
+  { bw: 7.4, tw: 19, cs: 0.3, n: 0.05 },
+  { bw: 11, tw: 28, cs: 0.25, n: 0.05 },
+  { bw: 14, tw: 36, cs: 0.22, n: 0.045 },
+  { bw: 16, tw: 45, cs: 0.2, n: 0.045 },
+  { bw: 26, tw: 70, cs: 0.15, n: 0.04 },
+  { bw: 110, tw: 250, cs: 0.12, n: 0.04 }, // order 10+
+];

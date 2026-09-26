@@ -35,6 +35,11 @@ export const state = {
   // this to decide whether it must re-run queryRenderedFeatures or can reuse
   // its cached on-screen ids (e.g. on a bare timestep change during playback).
   viewDirty: false,
+  // Live routing sim (src/sim/). While simActive the sim owns the flowpaths
+  // paint and feature-state instead of a loaded run; while brushActive, left
+  // clicks on the map deposit water rather than select things.
+  simActive: false,
+  brushActive: false,
 };
 
 // The MapLibre map instance. It's created asynchronously in map/init.js;

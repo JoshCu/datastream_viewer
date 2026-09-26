@@ -234,6 +234,97 @@
             </div>
           </div>
 
+          <!-- Live routing sim (src/sim/): Muskingum-Cunge in wasm over the
+               reaches on screen, fed by a lateral-inflow brush. -->
+          <div class="panel collapsed" id="simPanel">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2.7C12 2.7 5 10 5 15a7 7 0 0 0 14 0c0-5-7-12.3-7-12.3z" />
+              </svg>
+              Live Routing (experimental)
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <button class="btn" id="simStartBtn">Start simulation</button>
+              <div class="status" id="simStatus" style="margin-top: 12px">
+                <span class="status-dot" id="simStatusDot"></span>
+                <span id="simStatusText">Idle</span>
+              </div>
+
+              <div id="simControls" style="display: none">
+                <div class="sim-actions">
+                  <button class="play-btn" id="simBrushBtn" title="Hold the left button on the map to add water">
+                    Brush
+                  </button>
+                  <button class="play-btn" id="simPauseBtn">Pause</button>
+                  <button class="play-btn" id="simResetBtn" title="Drain all water">Reset</button>
+                </div>
+
+                <div class="speed-control">
+                  <label for="simDiameter">Size</label>
+                  <input type="range" id="simDiameter" min="10" max="240" value="60" />
+                  <span class="speed-value" id="simDiameterValue">60px</span>
+                </div>
+                <div class="speed-control">
+                  <label for="simQlat">Qlat m³/s</label>
+                  <input type="range" id="simQlat" min="0" max="300" value="100" />
+                  <span class="speed-value" id="simQlatValue">1.0</span>
+                </div>
+                <div class="speed-control">
+                  <label for="simSpeed">Speed</label>
+                  <input type="range" id="simSpeed" min="1" max="24" value="4" />
+                  <span class="speed-value" id="simSpeedValue">4×</span>
+                </div>
+                <p class="info-text" id="simStepNote"></p>
+
+                <div class="data-grid sim-stats">
+                  <div class="data-item">
+                    <div class="data-label">Reaches</div>
+                    <div class="data-value" id="simReaches">-</div>
+                  </div>
+                  <div class="data-item">
+                    <div class="data-label">Wet</div>
+                    <div class="data-value" id="simWet">-</div>
+                  </div>
+                  <div class="data-item">
+                    <div class="data-label">Max flow</div>
+                    <div class="data-value" id="simMaxQ">-</div>
+                  </div>
+                  <div class="data-item">
+                    <div class="data-label">ms / step</div>
+                    <div class="data-value" id="simStepMs">-</div>
+                  </div>
+                  <div class="data-item">
+                    <div class="data-label">Sim time</div>
+                    <div class="data-value" id="simTime">-</div>
+                  </div>
+                </div>
+
+                <div class="legend">
+                  <div class="legend-title">Flow (m³/s) · log</div>
+                  <div class="legend-gradient" id="simLegendGradient"></div>
+                  <div class="legend-labels">
+                    <span id="simLegendMin">0</span>
+                    <span id="simLegendMax">1000</span>
+                  </div>
+                </div>
+                <p class="info-text sim-hover" id="simHover">Hover a reach to see its flow.</p>
+              </div>
+
+              <p class="info-text">
+                Routes water down the reaches loaded on screen. Turn on the brush and hold
+                the left mouse button over rivers to add lateral inflow; it fades once
+                released. Channel shapes are guessed from stream order, and flow leaving
+                the loaded area is lost.
+              </p>
+            </div>
+          </div>
+
           <!-- Data Info Panel -->
           <div class="panel" id="dataPanel" style="display: none">
             <h3 class="panel-title">
@@ -346,6 +437,8 @@
       <!-- Main Content -->
       <main class="main-content">
         <div id="map"></div>
+        <!-- Live-routing brush cursor, positioned by src/sim/brush.js -->
+        <div class="sim-brush" id="simBrush"></div>
         <div class="tooltip" id="tooltip">
           <div class="tooltip-title" id="tooltipTitle">-</div>
           <!-- One row per config.VARIABLES entry, built in map/interactions.js -->

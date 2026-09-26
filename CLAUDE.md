@@ -20,6 +20,10 @@ Third-party libraries load from CDNs (MapLibre GL + PMTiles via `<script>` in
   `python3 -m http.server 8000` also works.
 - **Syntax-check a module** (no tooling, so this is the fastest sanity check):
   `node --check --input-type=module - < src/<file>.js`
+- **Live-routing wasm** (only when touching `wasm/mc_route`):
+  `cargo test --manifest-path wasm/mc_route/Cargo.toml` (includes a parity test
+  against rs_route's kernel), then `./build-wasm.sh`. Its output in
+  `src/vendor/mc_route/` is committed — never hand-edit it.
 - **Deep link:** `?bucket=<name>&path=<prefix>` navigates the S3 browser on load.
 
 ## Architecture
@@ -107,6 +111,19 @@ There are a few benign runtime cycles around `ui/time.js` (with `ui/overview.js`
 `ui/hydrograph.js`, and `map/paint.js` ↔ `map/interactions.js`). Every one of
 them only calls across the cycle **inside functions**, never at module-eval time
 — safe, but don't add eval-time uses of those imports.
+
+### The live routing sim (`src/sim/`)
+
+A separate mode, not a dataset: `sim/network.js` builds a wasm `Network` from
+`querySourceFeatures` over the flowpath tiles, steps it every frame, and writes
+feature-state for only the reaches the wasm side reports dirty. While
+`state.simActive` it owns the flowpaths paint and feature-state; starting it
+calls `clearData()`, and it subscribes to the active-dataset event (registered
+*before* `syncPaintToDataset`) to stop when a run loads. It rebuilds on
+`moveend`/`sourcedata`, never `idle` — a running sim keeps the map from idling.
+The typed-array views onto wasm memory detach whenever memory grows, so go
+through `liveViews()` rather than caching them. `sim/brush.js` imports
+`network.js`, never the reverse (it listens through `onSimUpdate`).
 
 ### Changing the timestep, and the active dataset
 

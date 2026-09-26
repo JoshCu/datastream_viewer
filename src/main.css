@@ -1759,3 +1759,52 @@ body.hydro-open #info-panel {
     font-size: 10px;
     color: var(--text-muted);
 }
+
+/* ====================================================================
+   Live routing sim (src/sim/)
+   ==================================================================== */
+.sim-actions {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: 12px;
+    font-size: 12px;
+}
+
+.sim-stats {
+    margin-top: 12px;
+}
+
+.sim-stats .data-value {
+    font-size: 13px;
+}
+
+.sim-hover {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    min-height: 2.8em;
+}
+
+.sim-brush {
+    position: absolute;
+    top: 0;
+    left: 0;
+    border: 2px solid var(--accent-primary);
+    border-radius: 50%;
+    background: rgba(0, 212, 255, 0.08);
+    pointer-events: none;
+    display: none;
+    z-index: 5;
+}
+
+.sim-brush.visible {
+    display: block;
+}
+
+.sim-brush.painting {
+    background: rgba(0, 212, 255, 0.25);
+}
+
+/* Beats the inline cursor the layer hover handlers set on the canvas. */
+#map.sim-brush-on canvas {
+    cursor: crosshair !important;
+}

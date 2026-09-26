@@ -39,6 +39,8 @@ import {
 import { seekFromOverview, invalidateOverview } from "../ui/overview.js";
 import { setupHydrograph, closeHydrograph } from "../ui/hydrograph.js";
 import { togglePlay, stepForward, stepBackward } from "../ui/playback.js";
+import { setupSimPanel, scheduleSimRebuild, stopSimForDataset } from "../sim/network.js";
+import { setupBrush } from "../sim/brush.js";
 
 
 // maplibregl and pmtiles are globals provided by CDN <script>s in index.html.
@@ -52,7 +54,9 @@ let cameraMoved = false;
 export function init() {
   // Each module owns its own reaction to the active run changing; the loader
   // just announces it. Order matters only in that the overview's cached curve
-  // must be dropped before anything redraws it.
+  // must be dropped before anything redraws it, and a live sim must hand the
+  // flowpaths paint back before syncPaintToDataset saves it as the original.
+  onActiveDatasetChange(stopSimForDataset);
   onActiveDatasetChange(invalidateOverview);
   onActiveDatasetChange(syncPanelsToDataset);
   onActiveDatasetChange(syncTimeToDataset);
@@ -133,10 +137,14 @@ export function init() {
   map.on("resize", invalidateCanvasBox);
 
   map.on("sourcedata", (e) => {
-    if (state.data && e.sourceId === "flowpaths" && e.tile) {
-      scheduleTilePaint(e.tile.tileID);
-    }
+    if (e.sourceId !== "flowpaths" || !e.tile) return;
+    if (state.data) scheduleTilePaint(e.tile.tileID);
+    // The live sim routes over every loaded tile, so new tiles mean a rebuild.
+    else if (state.simActive) scheduleSimRebuild();
   });
+  // Rebuild the live sim's network for the new view. Not on idle: a running
+  // sim writes feature-state every frame, so the map may never go idle.
+  map.on("moveend", scheduleSimRebuild);
 
   // Warm the shared parquet-wasm binary once the map has settled, so its 6.5MB
   // fetch doesn't contend with the basemap style, glyphs and first tiles. It
@@ -147,6 +155,8 @@ export function init() {
   setupS3Browser();
   setupUploadPanel();
   setupHydrograph();
+  setupSimPanel();
+  setupBrush();
   initCollapsiblePanels();
 }
 

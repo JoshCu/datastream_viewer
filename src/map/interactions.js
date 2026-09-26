@@ -322,7 +322,8 @@ export function clearUpstreamHighlight() {
 }
 
 export function onDivideClick(e) {
-  if (!e.features?.length || clickHitsGage(e)) return;
+  // With the live-routing brush on, a click deposits water instead.
+  if (state.brushActive || !e.features?.length || clickHitsGage(e)) return;
   const divide = e.features[0];
   const upstreamId = divide.properties.upstream_id;
   const numUpstreams = divide.properties.num_upstreams;
