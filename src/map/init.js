@@ -20,6 +20,7 @@ import {
   onGageLeave,
   invalidateCanvasBox,
   HillshadeControl,
+  CatchmentControl,
 } from "./interactions.js";
 import { GageControl, updateGageFilter } from "./gages.js";
 import { setupS3Browser } from "../s3/browser.js";
@@ -96,6 +97,7 @@ export function init() {
   map.addControl(
       new HillshadeControl()
   );
+  map.addControl(new CatchmentControl());
   map.addControl(new GageControl());
 
   // Upstream highlight on divide click.

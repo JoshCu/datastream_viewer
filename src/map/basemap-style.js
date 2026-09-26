@@ -75,6 +75,7 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
       {
         id: "divides",
         type: "fill",
+        layout: { visibility: "none" },
         source: "divides",
         "source-layer": "divides",
         paint: {
@@ -93,6 +94,7 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
       {
         id: "selected-divides",
         type: "fill",
+        layout: { visibility: "none" },
         source: "divides",
         "source-layer": "divides",
         paint: {
@@ -104,6 +106,7 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
       {
         id: "upstream-divides",
         type: "fill",
+        layout: { visibility: "none" },
         source: "divides",
         "source-layer": "divides",
         paint: {

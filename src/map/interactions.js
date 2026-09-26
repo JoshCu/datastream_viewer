@@ -53,6 +53,45 @@ export class HillshadeControl {
   }
 }
 
+// Catchment toggle: the divide outlines plus the selected/upstream highlight
+// layers, hidden by default. Hidden layers don't take clicks, so the upstream
+// highlight is only selectable while catchments are shown.
+const CATCHMENT_LAYERS = ["divides", "selected-divides", "upstream-divides"];
+
+export class CatchmentControl {
+  onAdd(map) {
+    this._map = map;
+    this._visible = false;
+    this._container = document.createElement("div");
+    this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    // Irregular polygon: a catchment outline.
+    this._button = iconButton(
+      "maplibregl-ctrl-catchments",
+      "Show catchments",
+      "M4,8,10,4l8,3,2,8-7,5L5,17Z",
+    );
+    this._button.onclick = () => {
+      this._visible = !this._visible;
+      for (const layer of CATCHMENT_LAYERS) {
+        if (!this._map.getLayer(layer)) continue;
+        this._map.setLayoutProperty(
+          layer,
+          "visibility",
+          this._visible ? "visible" : "none",
+        );
+      }
+      this._button.classList.toggle("active", this._visible);
+      this._button.title = this._visible ? "Hide catchments" : "Show catchments";
+    };
+    this._container.appendChild(this._button);
+    return this._container;
+  }
+  onRemove() {
+    this._container.remove();
+    this._map = undefined;
+  }
+}
+
 // ---- Hover tooltip -------------------------------------------------
 
 export function onFlowpathHover(e) {
