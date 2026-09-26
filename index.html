@@ -438,17 +438,7 @@
       <main class="main-content">
         <div id="map"></div>
         <!-- Live-routing brush cursor, positioned by src/sim/brush.js -->
-        <svg class="sim-brush" id="simBrush">
-          <defs>
-            <radialGradient id="simBrushShade" cx="35%" cy="35%" r="70%">
-              <stop offset="0%" stop-color="#e6fbff" stop-opacity="0.55" />
-              <stop offset="45%" stop-color="#00d4ff" stop-opacity="0.25" />
-              <stop offset="100%" stop-color="#004f66" stop-opacity="0.45" />
-            </radialGradient>
-          </defs>
-          <path />
-          <circle />
-        </svg>
+        <svg class="sim-brush" id="simBrush"><path /></svg>
         <!-- Live-routing quick controls along the map's bottom, shown on mobile
              while the sim runs so they work with the sidebar hidden.
              Wired by src/sim/network.js (play/reset) and src/sim/brush.js. -->

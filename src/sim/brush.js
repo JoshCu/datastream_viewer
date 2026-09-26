@@ -14,6 +14,7 @@
 // ====================================================================
 import { state, map } from "../state.js";
 import { depositQlat, reachState, onSimUpdate } from "./network.js";
+import { setBrushSphere } from "./sphere.js";
 
 let diameterPx = 60;
 let qlat = 1;
@@ -32,15 +33,16 @@ const qlatFromSlider = (v) => 10 ** (v / 100 - 1);
 // camera. Its radius is set where the pointer is: diameterPx wide along the
 // screen's horizontal there, which a pitched view doesn't foreshorten.
 //
-// With 3D terrain on it becomes a sphere of the same radius centred on the
-// terrain surface, so it reaches reaches in a valley below or on a ridge
-// beside the pointer by true 3D distance rather than flat ground distance.
+// With 3D terrain on it becomes a sphere centred where the pointer meets the
+// terrain, drawn in 3D by sim/sphere.js so the ground swallows whatever part
+// of it is buried, and it takes reaches by true 3D distance. Its radius comes
+// from the zoom alone (diameterPx at the map's scale), so it's a fixed world
+// size that shrinks into the distance through the camera like anything else.
 //
-// { center, radius, outline, sphere }: center in MercatorCoordinate units,
-// radius in the same units, outline the disk's rim projected to screen points
-// (it still bounds the rendered-feature query), and sphere { z, mpu } when
-// terrain is on: the centre's elevation (m) and mercator units per metre.
-// Null when the pointer is off the ground (e.g. in the sky of a pitched view).
+// { center, radius, sphere }: center in MercatorCoordinate units, radius in
+// the same units, and sphere { z, mpu } when terrain is on: the centre's
+// elevation (m) and mercator units per metre. Null when the pointer is off
+// the ground (e.g. in the sky of a pitched view).
 const OUTLINE_POINTS = 48;
 let footprintCache = null; // { x, y, fp } for the last computed point
 
@@ -50,27 +52,42 @@ function footprint(point) {
   }
   const lngLat = map.unproject(point);
   const center = maplibregl.MercatorCoordinate.fromLngLat(lngLat);
-  const edge = maplibregl.MercatorCoordinate.fromLngLat(
-    map.unproject([point.x + diameterPx / 2, point.y]),
-  );
-  const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+  const z = map.getTerrain() ? map.queryTerrainElevation(lngLat) : null;
+  let radius;
+  if (z === null) {
+    const edge = maplibregl.MercatorCoordinate.fromLngLat(
+      map.unproject([point.x + diameterPx / 2, point.y]),
+    );
+    radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+  } else {
+    // MapLibre's world is 512 · 2^zoom px wide in mercator's unit square.
+    radius = diameterPx / 2 / (512 * 2 ** map.getZoom());
+  }
   let fp = null;
   if (Number.isFinite(radius) && radius > 0) {
-    const outline = [];
-    for (let k = 0; k < OUTLINE_POINTS; k++) {
-      const t = (2 * Math.PI * k) / OUTLINE_POINTS;
-      const rim = new maplibregl.MercatorCoordinate(
-        center.x + radius * Math.cos(t),
-        center.y + radius * Math.sin(t),
-      );
-      outline.push(map.project(rim.toLngLat()));
-    }
-    const z = map.getTerrain() ? map.queryTerrainElevation(lngLat) : null;
     const sphere = z === null ? null : { z, mpu: center.meterInMercatorCoordinateUnits() };
-    fp = { center, radius, outline, sphere };
+    fp = { center, radius, sphere };
   }
   footprintCache = { x: point.x, y: point.y, fp };
   return fp;
+}
+
+// The disk's rim projected to screen points: drawn for the disk, and it
+// bounds the rendered-feature query for both forms (a sphere's shadow on the
+// ground is its disk). Computed on first use and kept on the footprint.
+function outlineOf(fp) {
+  if (fp.outline) return fp.outline;
+  const { center, radius } = fp;
+  fp.outline = [];
+  for (let k = 0; k < OUTLINE_POINTS; k++) {
+    const t = (2 * Math.PI * k) / OUTLINE_POINTS;
+    const rim = new maplibregl.MercatorCoordinate(
+      center.x + radius * Math.cos(t),
+      center.y + radius * Math.sin(t),
+    );
+    fp.outline.push(map.project(rim.toLngLat()));
+  }
+  return fp.outline;
 }
 
 // Reaches whose line passes within the brush disk. The bbox query is coarse
@@ -82,7 +99,7 @@ function reachesUnderBrush(point) {
   const fp = footprint(point);
   if (fp) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const p of fp.outline) {
+    for (const p of outlineOf(fp)) {
       x0 = Math.min(x0, p.x);
       y0 = Math.min(y0, p.y);
       x1 = Math.max(x1, p.x);
@@ -198,22 +215,19 @@ function positionBrush() {
   const el = brushEl();
   const fp =
     cursor && state.brushActive && !(cursorIsTouch && !touches.size) ? footprint(cursor) : null;
-  if (!fp) {
+  const { center, radius, sphere } = fp ?? {};
+  setBrushSphere(
+    map,
+    sphere
+      ? { x: center.x, y: center.y, z: sphere.z * sphere.mpu, r: radius, painting }
+      : null,
+  );
+  if (!fp || sphere) {
     el.classList.remove("visible");
     return;
   }
-  // A sphere's silhouette is a circle whatever the camera angle; its screen
-  // radius at the pointer is the slider's, by construction of `radius`.
-  el.classList.toggle("sphere", !!fp.sphere);
-  if (fp.sphere) {
-    const circle = el.querySelector("circle");
-    circle.setAttribute("cx", cursor.x);
-    circle.setAttribute("cy", cursor.y);
-    circle.setAttribute("r", diameterPx / 2);
-  } else {
-    const d = fp.outline.map((p, k) => `${k ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`);
-    el.querySelector("path").setAttribute("d", `${d.join("")}Z`);
-  }
+  const d = outlineOf(fp).map((p, k) => `${k ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+  el.querySelector("path").setAttribute("d", `${d.join("")}Z`);
   el.classList.add("visible");
   el.classList.toggle("painting", painting);
 }

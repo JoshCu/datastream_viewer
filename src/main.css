@@ -1811,27 +1811,6 @@ body.hydro-open #info-panel {
     fill: rgba(0, 212, 255, 0.25);
 }
 
-/* With 3D terrain on, the brush is a shaded sphere instead of a disk. */
-.sim-brush circle {
-    display: none;
-    stroke: var(--accent-primary);
-    stroke-width: 1.5px;
-    fill: url(#simBrushShade);
-}
-
-.sim-brush.sphere path {
-    display: none;
-}
-
-.sim-brush.sphere circle {
-    display: inline;
-}
-
-.sim-brush.sphere.painting circle {
-    stroke-width: 3px;
-    filter: brightness(1.4);
-}
-
 /* Beats the inline cursor the layer hover handlers set on the canvas. */
 #map.sim-brush-on canvas {
     cursor: crosshair !important;
