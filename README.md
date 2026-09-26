@@ -104,7 +104,8 @@ src/
     gagepanel.js              gage click info panel (USGS station details)
     hydrograph.js             D3 hydrograph dock: runs vs obs, zoom, metrics
   sim/
-    network.js                live routing: wasm Network build/step loop + panel
+    network.js                live routing: reach collection, step loop, paint + panel
+    sim.worker.js             owns the wasm Network; steps it off the main thread
     brush.js                  lateral-inflow brush cursor, sliders, deposits
   vendor/
     mc_route/                 wasm-pack output of wasm/mc_route (committed)

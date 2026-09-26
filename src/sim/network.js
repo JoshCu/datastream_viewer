@@ -1,28 +1,28 @@
 // ====================================================================
 // Live Muskingum-Cunge routing over the reaches loaded on screen.
 //
-// Owns the wasm instance (src/vendor/mc_route, built from wasm/mc_route), the
-// Network built from the flowpath tiles, the per-frame step loop, and the
-// sidebar's Live Routing panel. See WASM_ROUTING.md for the design.
+// Collects the reaches from the flowpath tiles, drives the per-frame step
+// loop, paints the results, and owns the sidebar's Live Routing panel. The
+// wasm Network itself (src/vendor/mc_route, built from wasm/mc_route) lives in
+// sim.worker.js, so stepping runs off the main thread: each animation frame
+// asks the worker for one batch of steps, with at most one batch in flight.
+// See WASM_ROUTING.md for the design.
 //
 // Painting follows map/paint.js's rule: the line paint expression is set once
 // (here, a fixed log domain, since a live sim has no bounds to derive one
-// from), and each frame only writes feature-state, for just the reaches whose
-// flow changed (the wasm-side dirty list). The live sim is its own mode: it
-// clears any loaded run on start and stops when one is loaded.
+// from), and each batch only writes feature-state, for just the reaches whose
+// flow changed (the wasm-side dirty list, which the worker sends back). The
+// live sim is its own mode: it clears any loaded run on start and stops when
+// one is loaded.
 // ====================================================================
-import init, { Network } from "../vendor/mc_route/mc_route.js";
 import { state, map } from "../state.js";
 import {
   FLOWPATH_FEATURE,
   PALETTE,
   RESULT_VALUE,
   SIM_DT,
-  SIM_QLAT_DECAY,
   SIM_WET_Q,
-  SIM_DIRTY_EPS,
   SIM_Q_DOMAIN,
-  SIM_FRAME_BUDGET_MS,
   SIM_DRY_COLOR,
   SIM_S0,
   SIM_CHANNEL_BY_ORDER,
@@ -31,12 +31,22 @@ import { resultColorStops } from "../color/expressions.js";
 import { clearData } from "../data/loader.js";
 import { setStatus } from "../ui/panels.js";
 
-let wasm = null; // the instance's exports (for wasm.memory)
-let wasmPromise = null;
-let net = null;
-// Zero-copy views onto the network's columns, plus wb id -> local index.
-// Rebuilt after every Network.build(): growing wasm memory detaches them.
-let views = null;
+let worker = null;
+let workerPromise = null;
+// Bumped on every start and stop; the worker echoes it, so replies meant for a
+// sim that has since stopped are dropped.
+let epoch = 0;
+let inFlight = false; // a step batch is out at the worker
+// A step reply waiting for the next frame: its feature-state is written from
+// the animation-frame callback, alongside MapLibre's render, because writing
+// it from the message task costs the map ~30% of its frame rate.
+let pendingReply = null;
+let reachCount = 0;
+let latestStats = null; // { wet, maxQ } from the worker's last report
+// The hovered reach: its id, and { id, state } as last reported by the worker.
+let hoverId = null;
+let hover = null;
+let probing = null; // id of an outstanding probe, so pointermoves don't spam
 let running = false;
 let rafId = null;
 let stepsPerFrame = 4;
@@ -62,11 +72,84 @@ const STATS_INTERVAL_MS = 250;
 // Window the steps/s readout averages over.
 const RATE_WINDOW_MS = 1000;
 
-function loadWasm() {
-  wasmPromise ??= init().then((exports) => {
-    wasm = exports;
+function loadWorker() {
+  workerPromise ??= new Promise((resolve, reject) => {
+    const w = new Worker(new URL("./sim.worker.js", import.meta.url), { type: "module" });
+    w.onmessage = ({ data }) => {
+      if (data.type === "ready") {
+        w.onmessage = onWorkerMessage;
+        worker = w;
+        resolve(w);
+      } else if (data.type === "error") {
+        reject(new Error(data.error));
+      }
+    };
+    w.onerror = (e) => reject(new Error(e.message || "sim worker failed to start"));
   });
-  return wasmPromise;
+  return workerPromise;
+}
+
+function post(msg, transfer = []) {
+  worker.postMessage({ ...msg, epoch }, transfer);
+}
+
+function onWorkerMessage({ data }) {
+  if (data.epoch !== epoch || !state.simActive) return;
+  if (data.type === "probe") {
+    setHover(data.hover);
+    notifyUpdate();
+    return;
+  }
+  if (data.kind === "step") inFlight = false;
+  if (data.kind === "step" && running) {
+    pendingReply = data;
+    return;
+  }
+  // Keep replies in order, so a rebuild's orphan clears land after the step
+  // reply before it rather than being repainted by it.
+  flushReply();
+  applyReply(data);
+}
+
+function flushReply() {
+  if (!pendingReply) return;
+  const r = pendingReply;
+  pendingReply = null;
+  applyReply(r);
+}
+
+function applyReply(data) {
+  if (data.kind === "step") {
+    const now = performance.now();
+    lastStepMs = data.stepMs;
+    simSeconds += data.steps * SIM_DT;
+    rateSteps += data.steps;
+    if (now - rateWindowStart >= RATE_WINDOW_MS) {
+      stepsPerSec = (rateSteps * 1000) / (now - rateWindowStart);
+      rateSteps = 0;
+      rateWindowStart = now;
+    }
+  }
+  // Reaches the old network had painted wet but a rebuild dropped: clear them,
+  // so if they re-enter later (as fresh, dry reaches) they don't show stale water.
+  if (data.orphans) {
+    for (const id of data.orphans) {
+      target.id = id;
+      map.removeFeatureState(target);
+    }
+  }
+  paintDirty(data.ids, data.q);
+  reachCount = data.len;
+  setHover(data.hover);
+  if (data.stats) {
+    latestStats = data.stats;
+    updateStats();
+  }
+}
+
+function setHover(h) {
+  if (h?.id === probing) probing = null;
+  if (h) hover = h;
 }
 
 // ---- Building the network from the loaded tiles --------------------
@@ -155,42 +238,13 @@ function rebuild() {
     i++;
   }
 
-  // build() consumes the previous network (carrying its water over by id).
-  net = Network.build(
-    ids, toids, ups, c.dx, c.n, c.ncc, c.s0, c.bw, c.tw, c.twcc, c.cs, SIM_DT, net,
-  );
-  net.set_qlat_decay(SIM_QLAT_DECAY);
-  // Reaches the old network had painted wet but this one dropped: clear them,
-  // so if they re-enter later (as fresh, dry reaches) they don't show stale water.
-  for (const id of net.take_orphans()) {
-    target.id = id;
-    map.removeFeatureState(target);
-  }
-  refreshViews();
-  paintDirty();
-  updateStats();
-}
-
-function refreshViews() {
-  const len = net.len();
-  const buf = wasm.memory.buffer;
-  const ids = new Uint32Array(buf, net.ids_ptr(), len);
-  const index = new Map();
-  for (let i = 0; i < len; i++) index.set(ids[i], i);
-  views = {
-    ids,
-    index,
-    q: new Float32Array(buf, net.q_ptr(), len),
-    velocity: new Float32Array(buf, net.velocity_ptr(), len),
-    depth: new Float32Array(buf, net.depth_ptr(), len),
-    qlat: new Float32Array(buf, net.qlat_ptr(), len),
-  };
-}
-
-// Views onto wasm memory, recreated if memory grew since they were made.
-function liveViews() {
-  if (views && views.q.buffer !== wasm.memory.buffer) refreshViews();
-  return views;
+  // The worker's reply paints the result and clears orphaned feature-state.
+  post({ type: "build", ids, toids, ups, cols: c, hover: hoverId }, [
+    ids.buffer,
+    toids.buffer,
+    ups.buffer,
+    ...Object.values(c).map((a) => a.buffer),
+  ]);
 }
 
 export function scheduleSimRebuild() {
@@ -238,47 +292,36 @@ function restorePaint() {
   originalPaint = null;
 }
 
-// Write feature-state for just the reaches whose flow moved since last paint.
-function paintDirty() {
-  const count = net.collect_dirty(SIM_DIRTY_EPS);
-  if (!count) return;
-  const { ids, q } = liveViews();
-  const dirty = new Uint32Array(wasm.memory.buffer, net.dirty_ptr(), count);
-  for (let k = 0; k < count; k++) {
-    const i = dirty[k];
-    target.id = ids[i];
-    map.setFeatureState(target, { value: q[i] });
+// Write feature-state for just the reaches whose flow moved since last paint
+// (parallel wb-id / q arrays from the worker).
+function paintDirty(ids, q) {
+  for (let k = 0; k < ids.length; k++) {
+    target.id = ids[k];
+    map.setFeatureState(target, { value: q[k] });
   }
 }
 
 // ---- The step loop -------------------------------------------------
 
-function frame(now) {
+// Each frame paints the last batch's reply and sends the next batch, which the
+// worker steps while the map renders. Never more than one batch is out: if the
+// worker is still busy, the sim slows down but the map doesn't. The worker
+// caps a batch at SIM_FRAME_BUDGET_MS.
+function frame() {
   rafId = requestAnimationFrame(frame);
-  const t0 = performance.now();
-  let steps = 0;
-  // Stop early once the frame budget is spent: a big wet network slows the
-  // sim down instead of stalling the map.
-  while (steps < stepsPerFrame) {
-    net.step(1);
-    steps++;
-    if (performance.now() - t0 > SIM_FRAME_BUDGET_MS) break;
-  }
-  const t1 = performance.now();
-  lastStepMs = (t1 - t0) / steps;
-  simSeconds += steps * SIM_DT;
-  rateSteps += steps;
-  if (t1 - rateWindowStart >= RATE_WINDOW_MS) {
-    stepsPerSec = (rateSteps * 1000) / (t1 - rateWindowStart);
-    rateSteps = 0;
-    rateWindowStart = t1;
-  }
-  paintDirty();
-  if (now - lastStatsAt > STATS_INTERVAL_MS) updateStats();
+  flushReply();
+  if (inFlight) return;
+  inFlight = true;
+  post({
+    type: "step",
+    steps: stepsPerFrame,
+    stats: performance.now() - lastStatsAt > STATS_INTERVAL_MS,
+    hover: hoverId,
+  });
 }
 
 function play() {
-  if (running || !net) return;
+  if (running || !state.simActive) return;
   running = true;
   rateSteps = 0;
   rateWindowStart = performance.now();
@@ -289,6 +332,7 @@ function play() {
 
 function pause() {
   running = false;
+  flushReply();
   if (rafId !== null) cancelAnimationFrame(rafId);
   rafId = null;
   syncControls();
@@ -296,32 +340,39 @@ function pause() {
 
 // ---- Public API (used by sim/brush.js) -----------------------------
 
-// Called on start, stop, and every readout refresh (a few times a second while
-// running), so the brush can drop out when the sim stops and keep its
+// Called on start, stop, every readout refresh (a few times a second while
+// running), and when a hovered-reach probe answers, so the brush can drop out when the sim stops and keep its
 // hovered-reach readout current without importing back into this module.
 const updateListeners = new Set();
 export function onSimUpdate(fn) {
   updateListeners.add(fn);
 }
 
+function notifyUpdate() {
+  for (const fn of updateListeners) fn();
+}
+
 // Hold lateral inflow on the given reaches at (at least) `qlat` m³/s. Reaches
 // not in the network (tiles that arrived since the last rebuild) are skipped.
 export function depositQlat(reachIds, qlat) {
-  if (!net) return;
-  const v = liveViews();
-  for (const id of reachIds) {
-    const i = v.index.get(id);
-    if (i !== undefined && v.qlat[i] < qlat) v.qlat[i] = qlat;
-  }
+  if (!state.simActive) return;
+  const ids = Uint32Array.from(reachIds);
+  post({ type: "deposit", ids, qlat }, [ids.buffer]);
 }
 
 // { q, velocity, depth, qlat } for one reach, or null if it isn't routed.
+// The state lives in the worker, so a reach not hovered before returns
+// undefined while it's fetched; onSimUpdate fires once the answer is in.
+// While running, every step batch refreshes the hovered reach's state.
 export function reachState(id) {
-  if (!net) return null;
-  const v = liveViews();
-  const i = v.index.get(id);
-  if (i === undefined) return null;
-  return { q: v.q[i], velocity: v.velocity[i], depth: v.depth[i], qlat: v.qlat[i] };
+  if (!state.simActive) return null;
+  hoverId = id;
+  if (hover?.id === id) return hover.state;
+  if (probing !== id) {
+    probing = id;
+    post({ type: "probe", hover: id });
+  }
+  return undefined;
 }
 
 // ---- Mode switching -------------------------------------------------
@@ -332,7 +383,7 @@ export async function startSim() {
   btn.disabled = true;
   setStatus("loading", "Loading routing kernel…", "sim");
   try {
-    await loadWasm();
+    await loadWorker();
   } catch (err) {
     console.error("mc_route wasm failed to load:", err);
     setStatus("error", "Routing kernel failed to load", "sim");
@@ -351,6 +402,7 @@ export async function startSim() {
   applySimPaint();
   state.simActive = true;
   simSeconds = 0;
+  resetSession();
   rebuild();
   // Tiles may still be streaming in; pick them up once they land.
   scheduleSimRebuild();
@@ -363,14 +415,23 @@ export function stopSim() {
   pause();
   clearTimeout(rebuildTimer);
   state.simActive = false;
-  net?.free();
-  net = null;
-  views = null;
+  post({ type: "free" });
+  resetSession();
   map.removeFeatureState(FLOWPATH_FEATURE);
   restorePaint();
   setStatus("idle", "Stopped", "sim");
   updateStats();
   syncControls();
+}
+
+// Forget everything tied to the previous start, and orphan its in-flight replies.
+function resetSession() {
+  epoch++;
+  inFlight = false;
+  pendingReply = null;
+  reachCount = 0;
+  latestStats = null;
+  hoverId = hover = probing = null;
 }
 
 // Reaction to the active run changing: loading a run ends the live sim, since
@@ -382,11 +443,9 @@ export function stopSimForDataset({ data }) {
 }
 
 function resetWater() {
-  if (!net) return;
-  net.reset();
+  if (!state.simActive) return;
   simSeconds = 0;
-  paintDirty();
-  updateStats();
+  post({ type: "reset", hover: hoverId }); // the reply repaints and updates stats
 }
 
 // ---- Panel ----------------------------------------------------------
@@ -422,20 +481,14 @@ function fmtDuration(seconds) {
 
 function updateStats() {
   lastStatsAt = performance.now();
-  for (const fn of updateListeners) fn();
+  notifyUpdate();
   const set = (id, text) => (document.getElementById(id).textContent = text);
-  if (!net || !state.simActive) {
+  if (!latestStats || !state.simActive) {
     for (const id of ["simReaches", "simWet", "simMaxQ", "simStepMs", "simStepsPerSec", "simTime"]) set(id, "-");
     return;
   }
-  const { q } = liveViews();
-  let wet = 0;
-  let outflowMax = 0;
-  for (let i = 0; i < q.length; i++) {
-    if (q[i] >= SIM_WET_Q) wet++;
-    if (q[i] > outflowMax) outflowMax = q[i];
-  }
-  set("simReaches", net.len().toLocaleString());
+  const { wet, maxQ: outflowMax } = latestStats;
+  set("simReaches", reachCount.toLocaleString());
   set("simWet", wet.toLocaleString());
   set("simStepMs", running ? lastStepMs.toFixed(2) : "-");
   set("simStepsPerSec", running && stepsPerSec !== null ? Math.round(stepsPerSec).toLocaleString() : "-");

@@ -4,7 +4,8 @@
 // finger) is down.
 //
 // Owns the cursor overlay, the diameter / qlat sliders, the hovered-reach
-// readout and deposits; the water itself lives in sim/network.js. Holding
+// readout and deposits; the water itself lives in sim/network.js (and its
+// worker). Holding
 // the button keeps qlat at the slider value on the reaches under the brush;
 // releasing lets it decay (SIM_QLAT_DECAY per routing step).
 //
@@ -217,9 +218,15 @@ function updateReadout(point) {
     return;
   }
   const f = map.queryRenderedFeatures(point, { layers: ["flowpaths-hover"] })[0];
-  const s = f && reachState(f.id);
+  if (!f) {
+    el.textContent = "Hover a reach to see its flow.";
+    return;
+  }
+  const s = reachState(f.id);
+  // Still being fetched from the sim worker; onSimUpdate fires when it lands.
+  if (s === undefined) return;
   if (!s) {
-    el.textContent = f ? `wb-${f.id}: not routed yet` : "Hover a reach to see its flow.";
+    el.textContent = `wb-${f.id}: not routed yet`;
     return;
   }
   el.textContent =

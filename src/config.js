@@ -135,10 +135,11 @@ export const SIM_DIRTY_EPS = 0.005;
 // Fixed log colour domain (m³/s). A live sim has no dataset bounds to derive
 // one from, and a domain that moved every frame would recolour the whole map.
 export const SIM_Q_DOMAIN = { min: SIM_WET_Q, max: 1000 };
-// Routing work allowed per animation frame. When the wet network is too big
-// to fit the requested steps in this budget, the sim runs slower instead of
-// dropping frames.
-export const SIM_FRAME_BUDGET_MS = 8;
+// Routing work allowed per batch (the sim worker runs one batch per animation
+// frame). When the wet network is too big to fit the requested steps in this
+// budget, the sim runs slower instead of lagging behind the map. It runs off
+// the main thread, so it can take most of a 60 Hz frame.
+export const SIM_FRAME_BUDGET_MS = 12;
 export const SIM_DRY_COLOR = "rgba(0, 119, 187, 0.45)";
 // The flowpath tiles are geometry-only, so channel parameters are guessed from
 // stream order until the real flowpath-attributes are wired in. Bottom width

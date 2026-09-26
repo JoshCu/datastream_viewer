@@ -114,15 +114,21 @@ them only calls across the cycle **inside functions**, never at module-eval time
 
 ### The live routing sim (`src/sim/`)
 
-A separate mode, not a dataset: `sim/network.js` builds a wasm `Network` from
-`querySourceFeatures` over the flowpath tiles, steps it every frame, and writes
-feature-state for only the reaches the wasm side reports dirty. While
+A separate mode, not a dataset: `sim/network.js` collects reaches from
+`querySourceFeatures` over the flowpath tiles and ships their columns to
+`sim/sim.worker.js`, which owns the wasm `Network`. Each animation frame posts
+one step batch (never more than one in flight); the reply carries only the
+reaches the wasm side reports dirty, as wb-id / q arrays, and the main thread
+writes their feature-state. Deposits and the hovered-reach readout go through
+messages too — `reachState()` returns `undefined` while a probe is out and
+fires `onSimUpdate` when it lands. Every message carries an `epoch`, bumped on
+start/stop, so late replies from a stopped sim are dropped. While
 `state.simActive` it owns the flowpaths paint and feature-state; starting it
 calls `clearData()`, and it subscribes to the active-dataset event (registered
 *before* `syncPaintToDataset`) to stop when a run loads. It rebuilds on
 `moveend`/`sourcedata`, never `idle` — a running sim keeps the map from idling.
-The typed-array views onto wasm memory detach whenever memory grows, so go
-through `liveViews()` rather than caching them. `sim/brush.js` imports
+In the worker, the typed-array views onto wasm memory detach whenever memory
+grows, so go through `liveViews()` rather than caching them. `sim/brush.js` imports
 `network.js`, never the reverse (it listens through `onSimUpdate`).
 
 ### Changing the timestep, and the active dataset
