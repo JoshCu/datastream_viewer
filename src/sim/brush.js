@@ -309,8 +309,13 @@ export function setupBrush() {
     stopPainting();
     positionBrush();
   });
+  // The brush comes on with the sim and drops out when it stops.
+  let wasActive = state.simActive;
   onSimUpdate(() => {
-    if (!state.simActive && state.brushActive) setBrushActive(false);
+    if (state.simActive !== wasActive) {
+      wasActive = state.simActive;
+      setBrushActive(wasActive);
+    }
     updateReadout(cursor);
   });
   // The camera moving under a still cursor changes what's beneath it, and

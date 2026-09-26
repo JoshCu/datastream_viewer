@@ -399,11 +399,13 @@ function syncControls() {
   document.getElementById("simControls").style.display = active ? "" : "none";
   const pauseBtn = document.getElementById("simPauseBtn");
   pauseBtn.textContent = running ? "Pause" : "Resume";
-  pauseBtn.classList.toggle("active", running);
+  // Lit while paused: the button is a call to resume.
+  pauseBtn.classList.toggle("active", !running);
   // The map-bottom twins of these buttons (mobile, sidebar hidden).
   document.getElementById("simMapControls").classList.toggle("visible", active);
   const mapPlay = document.getElementById("simMapPlayBtn");
   mapPlay.classList.toggle("paused", !running);
+  mapPlay.classList.toggle("active", !running);
   mapPlay.title = running ? "Pause simulation" : "Resume simulation";
 }
 
