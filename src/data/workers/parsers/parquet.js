@@ -6,7 +6,7 @@
 // `intoIPCStream()` hands it to apache-arrow's `tableFromIPC` as a JS-side
 // columnar table we read column-at-a-time below.
 // ====================================================================
-import { FILL_VALUE } from "../../../config.js";
+import { FILL_VALUE, VARIABLE_KEYS } from "../../../config.js";
 
 // apache-arrow's Timestamp vector getter already normalizes every unit
 // (second / micro / nanosecond) to epoch milliseconds — get() returns a JS
@@ -14,8 +14,7 @@ import { FILL_VALUE } from "../../../config.js";
 // by the declared unit; doing so collapsed every timestep onto ~the same
 // instant, freezing the time readout. A plain numeric column is assumed ms.
 function toMillis(v) {
-  if (v instanceof Date) return v.getTime();
-  return typeof v === "bigint" ? Number(v) : Number(v);
+  return v instanceof Date ? v.getTime() : Number(v);
 }
 
 export async function parseParquet(url, parquetWasm) {
@@ -33,11 +32,8 @@ export function parseParquetBuffer(bytes, parquetWasm) {
 
   const timeVec = table.getChild("time");
   const featureVec = table.getChild("feature_id");
-  const flowVec = table.getChild("flow");
-  const velocityVec = table.getChild("velocity");
-  const depthVec = table.getChild("depth");
+  const vectors = VARIABLE_KEYS.map((v) => [v, table.getChild(v)]);
 
-  const timeUnit = timeVec?.type?.unit;
   const numRows = table.numRows;
 
   // Column values reused across both passes.
@@ -46,7 +42,7 @@ export function parseParquetBuffer(bytes, parquetWasm) {
   const timeSet = new Set();
   const featureSet = new Set();
   for (let i = 0; i < numRows; i++) {
-    const t = toMillis(timeVec.get(i), timeUnit);
+    const t = toMillis(timeVec.get(i));
     const f = Number(featureVec.get(i));
     times[i] = t;
     features[i] = f;
@@ -62,35 +58,32 @@ export function parseParquetBuffer(bytes, parquetWasm) {
   const timeIndexMap = new Map(sortedTimes.map((t, i) => [t, i]));
   const featureIndexMap = new Map(sortedFeatureIds.map((id, i) => [id, i]));
 
-  const alloc = () => {
-    const a = new Float32Array(numFeatures * numTimes);
-    a.fill(FILL_VALUE);
-    return a;
-  };
-  const flow = alloc();
-  const velocity = alloc();
-  const depth = alloc();
+  const matrices = Object.fromEntries(
+    VARIABLE_KEYS.map((v) => {
+      const a = new Float32Array(numFeatures * numTimes);
+      a.fill(FILL_VALUE);
+      return [v, a];
+    }),
+  );
 
   for (let i = 0; i < numRows; i++) {
     const fi = featureIndexMap.get(features[i]);
     const ti = timeIndexMap.get(times[i]);
     if (fi === undefined || ti === undefined) continue;
     const offset = fi * numTimes + ti;
-    const fv = flowVec?.get(i);
-    const vv = velocityVec?.get(i);
-    const dv = depthVec?.get(i);
-    if (fv != null) flow[offset] = fv;
-    if (vv != null) velocity[offset] = vv;
-    if (dv != null) depth[offset] = dv;
+    for (const [name, vec] of vectors) {
+      const value = vec?.get(i);
+      if (value != null) matrices[name][offset] = value;
+    }
   }
 
+  // Parquet runs already carry epoch milliseconds (see toMillis above), so the
+  // clock is absolute without needing a reference time.
   return {
-    isParquet: true,
     time: sortedTimes,
+    timeAbsolute: true,
     nTimes: numTimes,
     featureIds: sortedFeatureIds,
-    flow,
-    velocity,
-    depth,
+    matrices,
   };
 }

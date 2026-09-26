@@ -44,6 +44,8 @@
     --transition-fast: 150ms ease;
     --transition-base: 250ms ease;
     --transition-slow: 400ms ease;
+    /* Sidebar width: also read by the map when centering on loaded data. */
+    --sidebar-w: 360px;
 }
 
 * {
@@ -67,7 +69,7 @@ body {
 
 /* Sidebar */
 .sidebar {
-    width: 360px;
+    width: var(--sidebar-w);
     background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
     border-right: 1px solid var(--border-color);
     display: flex;
@@ -203,10 +205,11 @@ body {
 }
 
 .status-dot {
-    width: var(--space-sm);
-    height: var(--space-sm);
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    background: var(--text-secondary);
+    background: var(--text-muted);
+    transition: background var(--transition-base);
 }
 
 .status-dot.loading {
@@ -541,6 +544,55 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* Color scale dropdown */
+/* Dropdowns: one look for every <select> in the app. Callers add only the
+   layout bits that genuinely differ (width/flex, padding, font-size). */
+.select {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    padding: 8px 10px;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.select:hover {
+    border-color: var(--accent-primary);
+}
+
+.select:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px var(--dropshadow-color);
+}
+
+.select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.scale-select {
+    flex: 1;
+}
+
+.bucket-selector .select {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 13px;
+}
+
+.file-select {
+    width: 100%;
+    padding: 10px 12px;
+}
+
+.diff-select {
+    flex: 1;
+    min-width: 0;
+}
+
 .scale-select-wrap {
     display: flex;
     align-items: center;
@@ -554,34 +606,6 @@ input[type="range"]::-webkit-slider-thumb {
     text-transform: uppercase;
     letter-spacing: 0.3px;
     white-space: nowrap;
-}
-
-.scale-select {
-    flex: 1;
-    padding: 8px 10px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    color: var(--text-primary);
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 12px;
-    cursor: pointer;
-    outline: none;
-    transition: all 0.2s;
-}
-
-.scale-select:hover {
-    border-color: var(--accent-primary);
-}
-
-.scale-select:focus {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px var(--dropshadow-color);
-}
-
-.scale-select option {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
 }
 
 /* Play controls */
@@ -720,184 +744,9 @@ input[type="range"]::-webkit-slider-thumb {
     line-height: 1.4;
 }
 
-.sidebar-footer {
-    padding: var(--space-md);
-    border-top: 1px solid var(--border-color);
-    display: none;
-    flex-direction: column;
-    gap: var(--space-sm);
-    background: var(--bg-tertiary);
-}
-
-/* Recording Controls */
-.recording-controls {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    padding-bottom: 0px;
-}
-
-.recording-controls > .panel-title {
-    margin-bottom: 4px;
-}
-
-.recording-status {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-sm);
-    background: var(--bg-primary);
-    border-radius: var(--radius-sm);
-}
-
-.status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--text-muted);
-    transition: background var(--transition-base);
-}
-
-.recording-status.recording .status-dot {
-    background: #ff4466;
-    animation: pulse-recording 1s ease-in-out infinite;
-}
-
-.recording-status.ready .status-dot {
-    background: var(--accent-secondary);
-}
-
-@keyframes pulse-recording {
-    0%,
-    100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.5;
-        transform: scale(1.2);
-    }
-}
-
-.status-text {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-}
-
-.recording-settings {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-sm);
-}
-
-.recording-settings .input-group {
-    gap: 2px;
-}
-
-.recording-settings input,
-.recording-settings select {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    padding: var(--space-xs) var(--space-sm);
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: var(--text-primary);
-    width: 100%;
-}
-
-.recording-settings select {
-    cursor: pointer;
-}
-
-.record-btn {
-    background: linear-gradient(135deg, #ff4466 0%, #cc2244 100%) !important;
-}
-
-.record-btn:hover {
-    border-color: #ff4466;
-    color: var(--text-primary);
-    background: linear-gradient(135deg, #ff5577 0%, #dd3355 100%) !important;
-}
-
-.record-btn.recording {
-    animation: pulse-btn 1s ease-in-out infinite;
-}
-
-@keyframes pulse-btn {
-    0%,
-    100% {
-        box-shadow: 0 0 0 0 rgba(255, 68, 102, 0.4);
-    }
-    50% {
-        box-shadow: 0 0 0 10px rgba(255, 68, 102, 0);
-    }
-}
-
-.record-btn svg {
-    width: 14px;
-    height: 14px;
-}
-
-.divider {
-    border: none;
-    border-top: 1px solid var(--border-color);
-    margin: 0;
-}
-
-/* Recording overlay */
-.recording-overlay {
-    position: fixed;
-    top: var(--space-md);
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(255, 68, 102, 0.9);
-    color: white;
-    padding: var(--space-sm) var(--space-lg);
-    border-radius: var(--radius-md);
-    font-weight: 600;
-    font-size: 0.875rem;
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    z-index: 1000;
-    box-shadow: 0 4px 20px rgba(255, 68, 102, 0.4);
-}
-
-.recording-overlay .dot {
-    width: 12px;
-    height: 12px;
-    background: white;
-    border-radius: 50%;
-    animation: pulse-recording 1s ease-in-out infinite;
-}
-
 /* S3 Browser Styles */
 .bucket-selector {
     margin-bottom: 12px;
-}
-
-.bucket-selector select {
-    width: 100%;
-    padding: 10px 12px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    color: var(--text-primary);
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 13px;
-    cursor: pointer;
-    outline: none;
-    transition: all 0.2s;
-}
-
-.bucket-selector select:hover {
-    border-color: var(--accent-primary);
-}
-
-.bucket-selector select:focus {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px var(--dropshadow-color);
 }
 
 .breadcrumb {
@@ -1047,34 +896,6 @@ input[type="range"]::-webkit-slider-thumb {
     font-family: "IBM Plex Mono", monospace;
     font-size: 11px;
     color: var(--accent-secondary);
-}
-
-.file-select {
-    width: 100%;
-    padding: 10px 12px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    color: var(--text-primary);
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 12px;
-    cursor: pointer;
-    outline: none;
-    transition: all 0.2s;
-}
-
-.file-select:hover {
-    border-color: var(--accent-primary);
-}
-
-.file-select:focus {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px var(--dropshadow-color);
-}
-
-.file-select option {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
 }
 
 /* Scrollbar styling */
@@ -1352,30 +1173,6 @@ input[type="range"]::-webkit-slider-thumb {
     gap: var(--space-sm);
 }
 
-.diff-select {
-    flex: 1;
-    min-width: 0;
-    padding: 8px 10px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    color: var(--text-primary);
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 12px;
-    cursor: pointer;
-    outline: none;
-    transition: all 0.2s;
-}
-
-.diff-select:hover {
-    border-color: var(--accent-primary);
-}
-
-.diff-select option {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-}
-
 .diff-op {
     color: var(--text-secondary);
     font-weight: 600;
@@ -1403,7 +1200,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 .hydro-dock {
     position: absolute;
-    left: calc(360px + var(--space-md));
+    left: calc(var(--sidebar-w) + var(--space-md));
     right: var(--space-md);
     bottom: var(--space-md);
     height: var(--hydro-h);

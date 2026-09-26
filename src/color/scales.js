@@ -1,17 +1,16 @@
 // ====================================================================
 // Continuous color-scale transforms
 // ====================================================================
-import { state } from "../state.js";
 import { RESULT_VALUE } from "../config.js";
 
 // Continuous transform scales: map the feature-state value to an
 // interpolate() input expression, plus the transformed data-range
 // endpoints a (at min) and b (at max) where the palette stops are spread.
-export function scaleTransform(bounds) {
+export function scaleTransform(bounds, scale) {
   const V = RESULT_VALUE;
   const min = bounds.min;
   const max = bounds.max;
-  switch (state.scale) {
+  switch (scale) {
     case "log": {
       // Floor to a small positive number so zeros and min don't blow up.
       const lo = Math.max(min, 1e-6);

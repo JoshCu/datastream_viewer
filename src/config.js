@@ -11,6 +11,12 @@ export const VARIABLES = {
   depth: { label: "Depth", units: "m" },
 };
 
+// The routed variables, in display order. This is the single source of truth:
+// parsers, merge, diff and the loader all iterate it rather than spelling out
+// the triple. config.js is the one module workers may import, so both sides of
+// the worker boundary share it.
+export const VARIABLE_KEYS = Object.keys(VARIABLES);
+
 // Ice-fire ramp (matches the static legend gradient in the sidebar).
 export const PALETTE = [
   "#0077b6",
@@ -50,13 +56,26 @@ export const SCALE_LABELS = {
 // single-VPU subset shows only the loaded reaches.
 export const NO_DATA_COLOR = "rgba(0, 0, 0, 0)";
 export const FILL_VALUE = -9999; // t-route missing-data sentinel
+// Anything at or below this is the fill value; real data is always above it.
+// Tested rather than compared to FILL_VALUE directly so float round-trips
+// through Float32Array can't land just shy of the sentinel and read as data.
+export const FILL_THRESHOLD = FILL_VALUE + 1;
+export function isValid(v) {
+  return v > FILL_THRESHOLD;
+}
 export const FLOWPATH_FEATURE = { source: "flowpaths", sourceLayer: "flowpaths" };
 // Current value in feature-state; the fill value means "no data".
 export const RESULT_VALUE = ["coalesce", ["feature-state", "value"], FILL_VALUE];
+// MapLibre-expression form of isValid(): true when the feature-state value is
+// real data. Paired with RESULT_VALUE so the sentinel has one definition.
+export const RESULT_IS_FILL = ["<=", RESULT_VALUE, FILL_THRESHOLD];
 
 // Hydrofabric gage points (hydrolocations with hl_reference == "gages"). Each
 // carries the flowpath it sits on in its `id` property and its USGS site
 // number in `hl_uri` ("gages-<site>").
+// hl_uri is "gages-<site>"; the label layer slices this prefix off in a style
+// expression, so its length has to come from here rather than a counted literal.
+export const GAGE_URI_PREFIX = "gages-";
 export const GAGE_LAYER = "conus_gages";
 export const GAGE_GLOW_LAYER = "conus_gages_glow";
 export const GAGE_LABEL_LAYER = "conus_gages_label";
@@ -85,3 +104,16 @@ export const SERIES_COLORS = [
 export const SERIES_OVERFLOW_COLOR = "#8899aa";
 export const OBS_COLOR = "#e6edf5";
 export const CURRENT_TIME_COLOR = "#ffba08";
+
+// t-route writes file_reference_time as "YYYY-MM-DD HH:MM:SS" (sometimes with
+// "_" or "T" as the separator) and no timezone; it is UTC. Returns epoch ms, or
+// undefined when the string is unparseable. Lives here rather than in
+// data/access.js because the NetCDF parser needs it worker-side, and config.js
+// is the only module workers may import.
+export function refTimeMillis(raw) {
+  if (typeof raw !== "string") return undefined;
+  let s = raw.trim().replace(/^(\d{4}-\d{2}-\d{2})[ _]/, "$1T");
+  if (!/(Z|[+-]\d{2}:?\d{2})$/.test(s)) s += "Z";
+  const ms = Date.parse(s);
+  return Number.isNaN(ms) ? undefined : ms;
+}

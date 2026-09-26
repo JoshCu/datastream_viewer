@@ -11,8 +11,9 @@
 //   in  { id, type: "merge", datasets }
 //   out { id, ok: true,  dataset, bounds }
 //   out { id, ok: false, error }
-// Matrix buffers (flow/velocity/depth) are transferred, not copied.
+// Matrix buffers (one per VARIABLE_KEYS entry) are transferred, not copied.
 // ====================================================================
+import { VARIABLE_KEYS } from "../../config.js";
 import { parseNetCDF, parseNetCDFBuffer } from "./parsers/netcdf.js";
 import { parseParquet, parseParquetBuffer } from "./parsers/parquet.js";
 import { mergeDatasets, computeAllBounds } from "./merge.js";
@@ -78,9 +79,7 @@ async function parseLocal(buffer, filename) {
 
 // Buffers to hand off when returning a dataset (avoids a structured-clone copy).
 function transferListOf(dataset) {
-  return ["flow", "velocity", "depth"]
-    .map((v) => dataset[v]?.buffer)
-    .filter(Boolean);
+  return VARIABLE_KEYS.map((v) => dataset.matrices[v]?.buffer).filter(Boolean);
 }
 
 self.onmessage = async (e) => {

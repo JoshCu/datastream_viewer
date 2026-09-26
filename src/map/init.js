@@ -8,6 +8,7 @@ import {
   applyResultsPaint,
   scheduleFeatureStateUpdate,
   scheduleTilePaint,
+  syncPaintToDataset,
 } from "./paint.js";
 import {
   onDivideClick,
@@ -17,24 +18,28 @@ import {
   onGageClick,
   onGageHover,
   onGageLeave,
-  refreshTooltip,
+  invalidateCanvasBox,
   HillshadeControl,
 } from "./interactions.js";
-import { GageControl } from "./gages.js";
+import { GageControl, updateGageFilter } from "./gages.js";
 import { setupS3Browser } from "../s3/browser.js";
 import { setupUploadPanel } from "../ui/upload.js";
 import { loadConus, preloadParquetWasm } from "../data/loader.js";
-import { updateLegend, initCollapsiblePanels } from "../ui/panels.js";
-import { updateTimeDisplay } from "../ui/time.js";
-import { seekFromOverview } from "../ui/overview.js";
-import { setupHydrograph, closeHydrograph } from "../ui/hydrograph.js";
+import { onActiveDatasetChange } from "../data/sources.js";
 import {
-  startPlayback,
-  stopPlayback,
-  togglePlay,
-  stepForward,
-  stepBackward,
-} from "../ui/playback.js";
+  updateLegend,
+  initCollapsiblePanels,
+  syncPanelsToDataset,
+} from "../ui/panels.js";
+import {
+  setTimeIndex,
+  updateTimeDisplay,
+  syncTimeToDataset,
+} from "../ui/time.js";
+import { seekFromOverview, invalidateOverview } from "../ui/overview.js";
+import { setupHydrograph, closeHydrograph } from "../ui/hydrograph.js";
+import { togglePlay, stepForward, stepBackward } from "../ui/playback.js";
+
 
 // maplibregl and pmtiles are globals provided by CDN <script>s in index.html.
 
@@ -44,15 +49,15 @@ import {
 // requery — and it lets idle skip the idles that setFeatureState itself emits.
 let cameraMoved = false;
 
-// Set when a camera move interrupts active playback, so idle can resume it once
-// the gesture settles. Only movestart-while-playing sets it, so repeated
-// movestarts within one gesture don't clobber it.
-let resumePlaybackAfterMove = false;
-
 export function init() {
-  // Warm the shared parquet-wasm binary in the background so it's compiled and
-  // ready by the time a Parquet/CONUS load fires — the workers reuse it.
-  preloadParquetWasm();
+  // Each module owns its own reaction to the active run changing; the loader
+  // just announces it. Order matters only in that the overview's cached curve
+  // must be dropped before anything redraws it.
+  onActiveDatasetChange(invalidateOverview);
+  onActiveDatasetChange(syncPanelsToDataset);
+  onActiveDatasetChange(syncTimeToDataset);
+  onActiveDatasetChange(syncPaintToDataset);
+  onActiveDatasetChange(updateGageFilter);
 
   const protocol = new pmtiles.Protocol({ metadata: true });
   maplibregl.addProtocol("pmtiles", protocol.tile);
@@ -113,33 +118,30 @@ export function init() {
   // settles, not on every frame mid-pan.
   map.on("movestart", () => {
     cameraMoved = true;
-    // Pause playback while the camera is moving; idle resumes it. Guarded on
-    // isPlaying so a second movestart mid-gesture doesn't overwrite the flag.
-    if (state.isPlaying) {
-      resumePlaybackAfterMove = true;
-      stopPlayback();
-    }
   });
   map.on("idle", () => {
     if (state.data && cameraMoved) {
       cameraMoved = false;
       state.viewDirty = true;
       scheduleFeatureStateUpdate();
-      if (resumePlaybackAfterMove) {
-        resumePlaybackAfterMove = false;
-        startPlayback();
-      }
     }
   });
   // Paint each flowpaths tile the moment it finishes loading, so reaches light
   // up as they stream in mid-pan instead of only once the pan stops. Bounded
   // to the loaded tile's footprint (not the whole screen) and rAF-coalesced,
   // so a burst of tiles is at most one small query per frame.
+  map.on("resize", invalidateCanvasBox);
+
   map.on("sourcedata", (e) => {
     if (state.data && e.sourceId === "flowpaths" && e.tile) {
       scheduleTilePaint(e.tile.tileID);
     }
   });
+
+  // Warm the shared parquet-wasm binary once the map has settled, so its 6.5MB
+  // fetch doesn't contend with the basemap style, glyphs and first tiles. It
+  // still lands long before any Parquet/CONUS load can be requested.
+  map.once("idle", preloadParquetWasm);
 
   setupEventListeners();
   setupS3Browser();
@@ -150,10 +152,7 @@ export function init() {
 
 function setupEventListeners() {
   document.getElementById("timeSlider").addEventListener("input", (e) => {
-    state.timeIndex = parseInt(e.target.value, 10);
-    scheduleFeatureStateUpdate();
-    updateTimeDisplay();
-    refreshTooltip();
+    setTimeIndex(parseInt(e.target.value, 10));
   });
 
   document.querySelectorAll(".var-btn").forEach((btn) => {
@@ -165,9 +164,10 @@ function setupEventListeners() {
       state.variable = btn.dataset.var;
       updateLegend();
       applyResultsPaint();
+      // scheduleFeatureStateUpdate() ends in refreshTooltip(), so the tooltip
+      // picks up the new variable without a second call here.
       scheduleFeatureStateUpdate();
       updateTimeDisplay();
-      refreshTooltip();
     });
   });
 
@@ -181,17 +181,14 @@ function setupEventListeners() {
 
   document.getElementById("close-info").addEventListener("click", () => {
     document.getElementById("info-panel").classList.remove("visible");
-    state.selectedFeature = null;
     closeHydrograph();
   });
 
   document.getElementById("speed-slider").addEventListener("input", (e) => {
     state.playSpeed = parseInt(e.target.value, 10);
     document.getElementById("speed-value").textContent = state.playSpeed + "x";
-    if (state.isPlaying) {
-      stopPlayback();
-      startPlayback();
-    }
+    // The playback loop reads playSpeed each frame, so a speed change takes
+    // effect without stopping and restarting.
   });
 
   // Playback transport (previously inline onclick handlers in index.html).

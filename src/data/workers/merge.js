@@ -1,13 +1,17 @@
 // ====================================================================
 // Dataset merge + bounds (worker-side, pure).
 // ====================================================================
-import { FILL_VALUE } from "../../config.js";
+import { FILL_VALUE, VARIABLE_KEYS, isValid } from "../../config.js";
 
 // Merge many single-VPU datasets into one, taking the union of timestamps
 // and concatenating the (disjoint) feature sets. Missing cells stay at the
 // fill value so they render as no-data.
 export function mergeDatasets(datasets) {
-  const isParquet = datasets.some((d) => d.isParquet);
+  // Every parser normalizes its clock to epoch ms, so a merged run only has an
+  // absolute clock if *all* its inputs do. Taken with `every` rather than
+  // `some`: one relative-time member would otherwise have its raw seconds read
+  // as milliseconds by every consumer.
+  const timeAbsolute = datasets.every((d) => d.timeAbsolute);
 
   const timeSet = new Set();
   datasets.forEach((d) => d.time.forEach((t) => timeSet.add(+t)));
@@ -28,36 +32,38 @@ export function mergeDatasets(datasets) {
   const rowOf = new Map(featureIds.map((id, i) => [id, i]));
   const nF = featureIds.length;
 
-  const alloc = () => {
-    const a = new Float32Array(nF * nTimes);
-    a.fill(FILL_VALUE);
-    return a;
-  };
-  const out = { flow: alloc(), velocity: alloc(), depth: alloc() };
+  const matrices = Object.fromEntries(
+    VARIABLE_KEYS.map((v) => {
+      const a = new Float32Array(nF * nTimes);
+      a.fill(FILL_VALUE);
+      return [v, a];
+    }),
+  );
 
   for (const d of datasets) {
-    const cols = d.time.map((t) => timeCol.get(+t));
-    for (const v of ["flow", "velocity", "depth"]) {
-      const src = d[v];
+    // Flat column map for this member, so the innermost loop indexes a typed
+    // array instead of walking a JS array of boxed numbers.
+    const cols = Int32Array.from(d.time, (t) => timeCol.get(+t));
+    for (const v of VARIABLE_KEYS) {
+      const src = d.matrices[v];
       if (!src || !src.length) continue;
+      const dst = matrices[v]; // hoisted: CONUS runs this ~10^8 times
       for (let lf = 0; lf < d.featureIds.length; lf++) {
         const base = rowOf.get(d.featureIds[lf]) * nTimes;
         const sbase = lf * d.nTimes;
         for (let lt = 0; lt < d.nTimes; lt++) {
-          out[v][base + cols[lt]] = src[sbase + lt];
+          dst[base + cols[lt]] = src[sbase + lt];
         }
       }
     }
   }
 
   return {
-    isParquet,
     time,
+    timeAbsolute,
     nTimes,
     featureIds,
-    flow: out.flow,
-    velocity: out.velocity,
-    depth: out.depth,
+    matrices,
     refTime: datasets[0]?.refTime,
   };
 }
@@ -67,7 +73,7 @@ export function computeBounds(arr) {
   let max = -Infinity;
   for (let i = 0; i < arr.length; i++) {
     const v = arr[i];
-    if (v > -9998) {
+    if (isValid(v)) {
       if (v < min) min = v;
       if (v > max) max = v;
     }
@@ -76,11 +82,9 @@ export function computeBounds(arr) {
   return { min, max };
 }
 
-// Bounds for all three variables of a dataset in one place.
+// Bounds for every variable of a dataset in one place.
 export function computeAllBounds(dataset) {
-  return {
-    flow: computeBounds(dataset.flow),
-    velocity: computeBounds(dataset.velocity),
-    depth: computeBounds(dataset.depth),
-  };
+  return Object.fromEntries(
+    VARIABLE_KEYS.map((v) => [v, computeBounds(dataset.matrices[v])]),
+  );
 }

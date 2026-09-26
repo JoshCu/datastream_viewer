@@ -48,12 +48,20 @@ function nextListBase() {
   return bases[shardCounter++ % bases.length];
 }
 
+// GET a ListBucketResult and parse it. Both listings went through their own
+// copy of this, and neither checked response.ok — so an S3 error page was
+// parsed as XML and surfaced as "0 folders" rather than as an error.
+async function listXml(prefix, extraParams = "") {
+  const url = `${nextListBase()}/?list-type=2&prefix=${encodeURIComponent(prefix)}${extraParams}`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`S3 listing failed: ${response.status}`);
+  const text = await response.text();
+  return new DOMParser().parseFromString(text, "text/xml");
+}
+
 // List the "folders" (CommonPrefixes) directly under a prefix.
 export async function fetchS3Folders(prefix) {
-  const url = `${nextListBase()}/?list-type=2&prefix=${encodeURIComponent(prefix)}&delimiter=/`;
-  const response = await fetch(url);
-  const text = await response.text();
-  const xml = new DOMParser().parseFromString(text, "text/xml");
+  const xml = await listXml(prefix, "&delimiter=/");
 
   const prefixes = xml.querySelectorAll("CommonPrefixes > Prefix");
   const folders = Array.from(prefixes).map((p) => {
@@ -78,10 +86,7 @@ export async function fetchS3Folders(prefix) {
 // fallback) for the current bucket.
 export async function listTrouteFileUrls(vpuPath) {
   const troutePath = vpuPath + "ngen-run/outputs/troute/";
-  const url = `${nextListBase()}/?list-type=2&prefix=${encodeURIComponent(troutePath)}`;
-  const response = await fetch(url);
-  const text = await response.text();
-  const xml = new DOMParser().parseFromString(text, "text/xml");
+  const xml = await listXml(troutePath);
   const base = objectBase(s3State.currentBucket);
   return Array.from(xml.querySelectorAll("Contents > Key"))
     .map((k) => k.textContent)

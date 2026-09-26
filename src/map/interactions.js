@@ -8,9 +8,13 @@ import {
   GAGE_LAYER,
   GAGE_FEATURE,
   USGS_FLOW_PARAM,
+  VARIABLES,
+  isValid,
 } from "../config.js";
 import { valueAt, dataTimeRangeMs } from "../data/access.js";
 import { fetchGageMeta, peekGageMeta } from "../data/usgs.js";
+import { siteFromGageFeature } from "./gages.js";
+import { iconButton, labeledRow, fmtDay } from "../ui/dom.js";
 import { showFeatureInfo } from "../ui/infopanel.js";
 import { showGageInfo } from "../ui/gagepanel.js";
 // maplibregl is a global provided by the CDN <script> in index.html.
@@ -30,24 +34,15 @@ export class HillshadeControl {
     this._map = map;
     this._container = document.createElement("div");
     this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
-    this._button = document.createElement("button");
-    this._button.className = "maplibregl-ctrl-hillshade";
-    this._button.title = "Enable hillshade";
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("id", "Line");
-    svg.setAttribute("fill", "#000000");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("id", "primary");
-    path.setAttribute("d", "M9.4,13.61,13,21H4l3.6-7.39A1,1,0,0,1,9.4,13.61Zm5.48-2.09a1,1,0,0,0-1.76,0l-2.49,4.62L13,21h7ZM3,21H21M6,3A3,3,0,1,0,9,6,3,3,0,0,0,6,3Z");
-    path.setAttribute("style", "fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1px");
-    svg.appendChild(path);
-    this._icon = document.createElement("span");
-    this._icon.className = "maplibregl-ctrl-icon";
-    this._icon.setAttribute("aria-hidden", "true");
-    this._icon.appendChild(svg);
-    this._button.appendChild(this._icon);
-
+    this._button = iconButton(
+      "maplibregl-ctrl-hillshade",
+      "Enable hillshade",
+      "M9.4,13.61,13,21H4l3.6-7.39A1,1,0,0,1,9.4,13.61Zm5.48-2.09a1,1,0,0,0-1.76,0l-2.49,4.62L13,21h7ZM3,21H21M6,3A3,3,0,1,0,9,6,3,3,0,0,0,6,3Z",
+      {
+        pathStyle:
+          "fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1px",
+      },
+    );
     this._button.onclick = toggleHillshade.bind(this);
     this._container.appendChild(this._button);
     return this._container;
@@ -84,18 +79,17 @@ export function onFlowpathLeave() {
 
 function updateTooltipContent(id) {
   const row = state.data.index.get(id);
-  const fmt = (variable, units) => {
-    if (row === undefined) return "N/A";
-    const v = valueAt(variable, row, state.timeIndex);
-    return v !== undefined && v > -9998 ? `${v.toFixed(3)} ${units}` : "N/A";
-  };
   document.getElementById("tooltipTitle").textContent = `wb-${id}`;
-  document.getElementById("tooltipFlow").textContent = fmt("flow", "m³/s");
-  document.getElementById("tooltipVelocity").textContent = fmt(
-    "velocity",
-    "m/s",
+  // One row per routed variable, so adding a variable to config.VARIABLES is
+  // all it takes to show up here.
+  document.getElementById("tooltipRows").replaceChildren(
+    ...Object.entries(VARIABLES).map(([key, { label, units }]) => {
+      const v = row === undefined ? undefined : valueAt(key, row, state.timeIndex);
+      const text =
+        v !== undefined && isValid(v) ? `${v.toFixed(3)} ${units}` : "N/A";
+      return labeledRow(label, text, { prefix: "tooltip" });
+    }),
   );
-  document.getElementById("tooltipDepth").textContent = fmt("depth", "m");
 }
 
 export function refreshTooltip() {
@@ -159,18 +153,34 @@ function setGageHover(id, hover) {
 
 // The gage tooltip grows once its metadata lands, so unlike the reach tooltip
 // it has to be kept inside the map rather than always hung below-right.
+// Canvas size, refreshed on map resize rather than read on every pointermove:
+// the read came straight after writing the tooltip's contents, so it forced a
+// synchronous layout each time the cursor moved over a gage.
+let canvasBox = null;
+export function invalidateCanvasBox() {
+  canvasBox = null;
+}
+
+function canvasSize() {
+  if (!canvasBox) {
+    const canvas = map.getCanvas();
+    canvasBox = { w: canvas.clientWidth, h: canvas.clientHeight };
+  }
+  return canvasBox;
+}
+
 function positionGageTooltip() {
   if (!hoveredGagePoint) return;
   const tooltip = document.getElementById("gageTooltip");
-  const canvas = map.getCanvas();
+  const { w, h } = canvasSize();
   const pad = 8;
   let x = hoveredGagePoint.x + 15;
   let y = hoveredGagePoint.y + 15;
-  if (x + tooltip.offsetWidth > canvas.clientWidth - pad) {
+  if (x + tooltip.offsetWidth > w - pad) {
     x = Math.max(pad, hoveredGagePoint.x - 15 - tooltip.offsetWidth);
   }
-  if (y + tooltip.offsetHeight > canvas.clientHeight - pad) {
-    y = Math.max(pad, canvas.clientHeight - pad - tooltip.offsetHeight);
+  if (y + tooltip.offsetHeight > h - pad) {
+    y = Math.max(pad, h - pad - tooltip.offsetHeight);
   }
   tooltip.style.left = `${x}px`;
   tooltip.style.top = `${y}px`;
@@ -180,7 +190,7 @@ function positionGageTooltip() {
 // fill in once the (cached) lookup resolves, provided this gage is still the
 // hovered one.
 function showGageTooltip(feature) {
-  const site = String(feature.properties.hl_uri || "").replace(/^gages-/, "");
+  const site = siteFromGageFeature(feature);
   const reachId = feature.properties.id;
   const tooltip = document.getElementById("gageTooltip");
   document.getElementById("gageTooltipTitle").textContent = `USGS-${site}`;
@@ -247,7 +257,11 @@ function renderGageMeta(meta, reachId) {
 
   document
     .getElementById("gageTooltipMeta")
-    .replaceChildren(...rows.map((row) => metaRow(...row)));
+    .replaceChildren(
+      ...rows.map(([label, value, cls]) =>
+        labeledRow(label, value, { prefix: "tooltip", cls }),
+      ),
+    );
   positionGageTooltip();
 }
 
@@ -268,19 +282,6 @@ function runCoverage(flow) {
   return { text: "partial", cls: "warn" };
 }
 
-function metaRow(label, value, cls) {
-  const row = document.createElement("div");
-  row.className = "tooltip-row";
-  const labelEl = document.createElement("span");
-  labelEl.className = "tooltip-label";
-  labelEl.textContent = label;
-  const valueEl = document.createElement("span");
-  valueEl.className = cls ? `tooltip-value ${cls}` : "tooltip-value";
-  valueEl.textContent = value;
-  row.append(labelEl, valueEl);
-  return row;
-}
-
 // Parameter names are of the form "Temperature, water" / "NO3+NO2,water,..";
 // the head of the name is the part worth the tooltip's width.
 function otherParamsLabel(series) {
@@ -299,15 +300,6 @@ const UNIT_LABELS = {
 
 function prettyUnits(units) {
   return UNIT_LABELS[units] ?? String(units || "").replace(/^_/, "");
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function fmtDay(ms) {
-  if (ms == null) return "?";
-  // Still-reporting gages are the common case; an exact end date is noise.
-  if (Date.now() - ms < 3 * DAY_MS) return "present";
-  return new Date(ms).toISOString().slice(0, 10);
 }
 
 function fmtArea(mi2) {

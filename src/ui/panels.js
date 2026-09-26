@@ -1,5 +1,5 @@
 // ====================================================================
-// Sidebar panels: data info summary + legend
+// Sidebar panels: data info summary, legend, scale picker, status lines
 // ====================================================================
 import { state } from "../state.js";
 import { VARIABLES, SCALE_LABELS, PALETTE, DIFF_PALETTE } from "../config.js";
@@ -17,27 +17,47 @@ export function initCollapsiblePanels() {
   });
 }
 
-export function showDataPanels() {
-  document.getElementById("dataPanel").style.display = "block";
-  document.getElementById("varPanel").style.display = "block";
-  document.getElementById("timePanel").style.display = "block";
+// ---- Status lines ---------------------------------------------------
+
+// The dot class per status, shared by the sidebar status lines and the
+// per-row dots in the upload list.
+export const STATUS_DOT_CLASS = {
+  pending: "",
+  idle: "",
+  loading: "loading",
+  loaded: "success",
+  success: "success",
+  error: "error",
+};
+
+// Update a "<dot> <text>" status line. `prefix` selects which one: "" is the
+// S3/load status, "diff" is the upload panel's diff status.
+export function setStatus(kind, text, prefix = "") {
+  const id = (suffix) =>
+    prefix ? `${prefix}Status${suffix}` : `status${suffix}`;
+  const dot = document.getElementById(id("Dot"));
+  const label = document.getElementById(id("Text"));
+  if (dot) dot.className = `status-dot ${STATUS_DOT_CLASS[kind] ?? ""}`.trim();
+  if (label) label.textContent = text;
 }
 
-// Reverse of showDataPanels(), used when the active dataset is cleared
-// (e.g. its source file was removed from the upload list).
-export function hideDataPanels() {
-  document.getElementById("dataPanel").style.display = "none";
-  document.getElementById("varPanel").style.display = "none";
-  document.getElementById("timePanel").style.display = "none";
+// ---- Panel visibility ------------------------------------------------
+
+const DATA_PANEL_IDS = ["dataPanel", "varPanel", "timePanel"];
+
+export function setDataPanels(on) {
+  for (const id of DATA_PANEL_IDS) {
+    document.getElementById(id).style.display = on ? "block" : "none";
+  }
 }
+
+// ---- Readouts --------------------------------------------------------
 
 export function updateDataInfo() {
   const refTime = state.data.refTime || "N/A";
   document.getElementById("featureCount").textContent =
     state.data.featureIds.length;
   document.getElementById("timeSteps").textContent = state.data.nTimes;
-  document.getElementById("matchedCount").textContent =
-    state.data.featureIds.length;
   document.getElementById("refTime").textContent =
     typeof refTime === "string" ? refTime.substring(0, 10) : "N/A";
 }
@@ -61,4 +81,23 @@ export function updateLegend() {
   }
   document.getElementById("legendMin").textContent = bounds.min.toFixed(2);
   document.getElementById("legendMax").textContent = bounds.max.toFixed(2);
+}
+
+// A diff only permits the linear scale (its signed, symmetric values don't
+// suit the magnitude-oriented transforms). That's a property of the dataset,
+// so the picker reads it rather than the loader reaching in to set it.
+function applyScaleAvailability(data) {
+  const scaleSelect = document.getElementById("scaleSelect");
+  const linearOnly = !!data?.isDiff;
+  if (linearOnly) scaleSelect.value = "linear";
+  scaleSelect.disabled = linearOnly;
+}
+
+// Reaction to the active run changing. Registered in map/init.js.
+export function syncPanelsToDataset({ data }) {
+  applyScaleAvailability(data);
+  setDataPanels(!!data);
+  if (!data) return;
+  updateDataInfo();
+  updateLegend();
 }

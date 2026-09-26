@@ -1,9 +1,26 @@
 // ====================================================================
 // S3 browser UI: bucket/folder navigation, breadcrumb, file picker.
 // ====================================================================
-import { s3State, map } from "../state.js";
+import { s3State } from "../state.js";
 import { fetchS3Folders, listTrouteFileUrls } from "./client.js";
 import { loadFile } from "../data/loader.js";
+import { setStatus } from "../ui/panels.js";
+import { escapeHtml } from "../ui/dom.js";
+
+// Reset the file picker back to "nothing chosen". Four call sites used to
+// inline these three steps, and one of them had already drifted (it left the
+// Load button enabled).
+function clearFileSelection() {
+  document.getElementById("fileSection").style.display = "none";
+  document.getElementById("loadBtn").disabled = true;
+  s3State.selectedFile = null;
+}
+
+// "Load latest" needs a model subfolder selected (outputs/<model>/…) to anchor
+// the search from; it's disabled at the bucket/outputs root.
+function canLoadLatest() {
+  return s3State.pathSegments[0] === "outputs" && s3State.pathSegments.length >= 2;
+}
 
 export function setupS3Browser() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -16,10 +33,7 @@ export function setupS3Browser() {
       s3State.currentBucket = this.value;
       s3State.pathSegments = ["outputs"];
       s3State.currentPath = "outputs/";
-      s3State.selectedFile = null;
-      s3State.trouteFiles = [];
-      document.getElementById("fileSection").style.display = "none";
-      document.getElementById("loadBtn").disabled = true;
+      clearFileSelection();
       setConusEnabled(false);
 
       if (s3State.currentBucket) {
@@ -54,12 +68,8 @@ export function setupS3Browser() {
     s3State.currentBucket = bucket;
     s3State.pathSegments = cleanPath.split("/");
     s3State.currentPath = cleanPath;
-    s3State.selectedFile = null;
-    s3State.trouteFiles = [];
-    document.getElementById("fileSection").style.display = "none";
-    map.on("load", () => {
-      handleFolderClick(path.replace(/\/?$/, "/"), "");
-    });
+    clearFileSelection();
+    handleFolderClick(path.replace(/\/?$/, "/"), "");
   } else if (s3State.currentBucket) {
     listS3Folder("outputs/");
   }
@@ -81,30 +91,23 @@ async function listS3Folder(prefix) {
   try {
     const folders = await fetchS3Folders(prefix);
     renderFolderList(folders);
-    document.getElementById("statusText").textContent =
-      `Found ${folders.length} folders`;
+    setStatus("idle", `Found ${folders.length} folders`);
   } catch (error) {
     console.error("Error listing S3:", error);
     folderList.innerHTML =
       '<div class="folder-empty">Error loading folder</div>';
-    document.getElementById("statusDot").className = "status-dot error";
-    document.getElementById("statusText").textContent =
-      "Error: " + error.message;
+    setStatus("error", `Error: ${error.message}`);
   } finally {
     s3State.isLoading = false;
   }
 }
 
 async function listTrouteFiles(vpuPath) {
-  const statusDot = document.getElementById("statusDot");
-  const statusText = document.getElementById("statusText");
-  statusDot.className = "status-dot loading";
-  statusText.textContent = "Loading T-Route files...";
+  setStatus("loading", "Loading T-Route files...");
 
   try {
     const urls = await listTrouteFileUrls(vpuPath);
     const files = urls.map((u) => ({ name: u.split("/").pop(), url: u }));
-    s3State.trouteFiles = files;
 
     const fileSection = document.getElementById("fileSection");
     const fileSelect = document.getElementById("fileSelect");
@@ -127,12 +130,10 @@ async function listTrouteFiles(vpuPath) {
     fileCount.textContent = `${files.length} files`;
     fileSection.style.display = "block";
 
-    statusDot.className = "status-dot success";
-    statusText.textContent = `Found ${files.length} T-Route files`;
+    setStatus("success", `Found ${files.length} T-Route files`);
   } catch (error) {
     console.error("Error listing T-Route files:", error);
-    statusDot.className = "status-dot error";
-    statusText.textContent = "Error loading files: " + error.message;
+    setStatus("error", `Error loading files: ${error.message}`);
   }
 }
 
@@ -157,11 +158,11 @@ function renderFolderList(folders) {
   folderList.innerHTML = folders
     .map(
       (f) => `
-                    <div class="folder-item folder" data-path="${f.path}" data-name="${f.name}">
+                    <div class="folder-item folder" data-path="${escapeHtml(f.path)}" data-name="${escapeHtml(f.name)}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                         </svg>
-                        <span class="folder-item-name">${f.name}</span>
+                        <span class="folder-item-name">${escapeHtml(f.name)}</span>
                     </div>
                 `,
     )
@@ -189,10 +190,7 @@ function handleFolderClick(path, name) {
     s3State.currentPath = path;
     updateBreadcrumb();
   } else {
-    document.getElementById("fileSection").style.display = "none";
-    s3State.selectedFile = null;
-    s3State.trouteFiles = [];
-    document.getElementById("loadBtn").disabled = true;
+    clearFileSelection();
     listS3Folder(path);
   }
 }
@@ -207,11 +205,7 @@ function updateBreadcrumb() {
     return;
   }
 
-  // "Load latest" needs a model subfolder selected (outputs/<model>/…) to
-  // anchor the search from; disabled at the bucket/outputs root.
-  setLatestEnabled(
-    s3State.pathSegments[0] === "outputs" && s3State.pathSegments.length >= 2,
-  );
+  setLatestEnabled(canLoadLatest());
 
   let html = `<span class="breadcrumb-item" data-index="0">${s3State.currentBucket}</span>`;
   s3State.pathSegments.forEach((segment, index) => {
@@ -234,10 +228,7 @@ function updateBreadcrumb() {
         const index = parseInt(item.dataset.index, 10);
         s3State.pathSegments = s3State.pathSegments.slice(0, index + 1);
         s3State.currentPath = s3State.pathSegments.join("/") + "/";
-        document.getElementById("fileSection").style.display = "none";
-        s3State.selectedFile = null;
-        s3State.trouteFiles = [];
-        document.getElementById("loadBtn").disabled = true;
+        clearFileSelection();
         listS3Folder(s3State.currentPath);
       });
     });
@@ -277,11 +268,8 @@ const dateKey = (name) => {
 async function loadLatest(rangeKey, label) {
   if (s3State.isLoading) return;
 
-  const statusDot = document.getElementById("statusDot");
-  const statusText = document.getElementById("statusText");
   setLatestEnabled(false);
-  statusDot.className = "status-dot loading";
-  statusText.textContent = `Finding latest ${label} run...`;
+  setStatus("loading", `Finding latest ${label} run...`);
 
   try {
     const cyclePath = await resolveLatestCycle(rangeKey);
@@ -289,12 +277,9 @@ async function loadLatest(rangeKey, label) {
     handleFolderClick(cyclePath, name);
   } catch (error) {
     console.error("Load latest error:", error);
-    statusDot.className = "status-dot error";
-    statusText.textContent = `Error: ${error.message}`;
+    setStatus("error", `Error: ${error.message}`);
     // Re-enable if we're still at a model subfolder.
-    setLatestEnabled(
-      s3State.pathSegments[0] === "outputs" && s3State.pathSegments.length >= 2,
-    );
+    setLatestEnabled(canLoadLatest());
   }
 }
 
