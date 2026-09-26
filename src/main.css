@@ -59,12 +59,15 @@ body {
     background: var(--bg-primary);
     color: var(--text-primary);
     height: 100vh;
+    /* Mobile: 100vh runs under the browser's bottom toolbar; dvh doesn't. */
+    height: 100dvh;
     overflow: hidden;
 }
 
 .app-container {
     display: flex;
     height: 100vh;
+    height: 100dvh;
 }
 
 /* Sidebar */
