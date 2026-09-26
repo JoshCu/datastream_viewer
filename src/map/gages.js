@@ -4,13 +4,24 @@
 import { state, map } from "../state.js";
 import {
   HIDDEN_FILTER,
+  GAGE_URI_PREFIX,
   GAGE_LAYER,
   GAGE_GLOW_LAYER,
   GAGE_LABEL_LAYER,
   GAGE_FEATURE,
 } from "../config.js";
+import { iconButton } from "../ui/dom.js";
 
-const LAYERS = [GAGE_LAYER, GAGE_GLOW_LAYER, GAGE_LABEL_LAYER];
+// The dot layers always carry the reach filter; the label layer only gets it
+// when labels are actually switched on. For a CONUS run that filter is a
+// multi-megabyte id list, structured-cloned to every style worker, so building
+// it for a layer nobody is looking at is pure waste.
+const DOT_LAYERS = [GAGE_LAYER, GAGE_GLOW_LAYER];
+
+// Last filter handed to the dot layers, replayed onto the label layer the
+// first time labels are shown.
+let currentFilter = HIDDEN_FILTER;
+let labelFilterApplied = false;
 
 // User toggles from GageControl. Labels only draw while gages are shown.
 let gagesVisible = true;
@@ -34,7 +45,12 @@ export function setGagesVisible(on) {
 
 export function setGageLabelsVisible(on) {
   labelsVisible = on;
-  if (map.getLayer(GAGE_LAYER)) applyGageVisibility();
+  if (!map.getLayer(GAGE_LAYER)) return;
+  if (on && !labelFilterApplied) {
+    map.setFilter(GAGE_LABEL_LAYER, currentFilter);
+    labelFilterApplied = true;
+  }
+  applyGageVisibility();
 }
 
 // Show the gages whose flowpath (`id` property) is in the loaded dataset, or
@@ -44,10 +60,16 @@ export function setGageLabelsVisible(on) {
 export function updateGageFilter() {
   if (!map.getLayer(GAGE_LAYER)) return;
   // index keys are de-duplicated; match rejects repeated labels.
-  const filter = state.data
+  currentFilter = state.data
     ? ["match", ["get", "id"], Array.from(state.data.index.keys()), true, false]
     : HIDDEN_FILTER;
-  for (const layer of LAYERS) map.setFilter(layer, filter);
+  for (const layer of DOT_LAYERS) map.setFilter(layer, currentFilter);
+  if (labelsVisible) {
+    map.setFilter(GAGE_LABEL_LAYER, currentFilter);
+    labelFilterApplied = true;
+  } else {
+    labelFilterApplied = false;
+  }
   // Catch up on any toggle clicked before the style finished loading.
   applyGageVisibility();
 }
@@ -55,37 +77,24 @@ export function updateGageFilter() {
 // USGS site number of a gage sitting on `reachId`, or null. Only gage tiles
 // already loaded can be searched, which is fine for a reach just clicked on
 // screen: its gage (if any) is drawn in the same view.
+// USGS site number from a gage feature's hl_uri ("gages-<site>").
+export function siteFromGageFeature(feature) {
+  return String(feature.properties?.hl_uri || "").replace(
+    new RegExp(`^${GAGE_URI_PREFIX}`),
+    "",
+  );
+}
+
 export function gageSiteForReach(reachId) {
   if (!map.getSource(GAGE_FEATURE.source)) return null;
   const hits = map.querySourceFeatures(GAGE_FEATURE.source, {
     sourceLayer: GAGE_FEATURE.sourceLayer,
     filter: ["==", ["get", "id"], reachId],
   });
-  const uri = hits[0]?.properties.hl_uri;
-  return uri ? String(uri).replace(/^gages-/, "") : null;
+  return hits[0] ? siteFromGageFeature(hits[0]) || null : null;
 }
 
 // ---- Map control: show/hide gages, show/hide gage id labels -----------
-
-const SVG_NS = "http://www.w3.org/2000/svg";
-
-function iconButton(className, title, pathD) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = `maplibregl-ctrl-gage ${className}`;
-  button.title = title;
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  const path = document.createElementNS(SVG_NS, "path");
-  path.setAttribute("d", pathD);
-  svg.appendChild(path);
-  const icon = document.createElement("span");
-  icon.className = "maplibregl-ctrl-icon";
-  icon.setAttribute("aria-hidden", "true");
-  icon.appendChild(svg);
-  button.appendChild(icon);
-  return button;
-}
 
 export class GageControl {
   onAdd() {
@@ -94,13 +103,13 @@ export class GageControl {
 
     // Dot with a ring: a gage marker.
     this._gageBtn = iconButton(
-      "maplibregl-ctrl-gage-toggle",
+      "maplibregl-ctrl-gage maplibregl-ctrl-gage-toggle",
       "Show gages",
       "M12,9a3,3,0,1,0,3,3A3,3,0,0,0,12,9ZM12,5a7,7,0,1,0,7,7A7,7,0,0,0,12,5Z",
     );
     // Dot beside a text line: a labelled gage.
     this._labelBtn = iconButton(
-      "maplibregl-ctrl-gage-labels",
+      "maplibregl-ctrl-gage maplibregl-ctrl-gage-labels",
       "Show gage id labels",
       "M7,12a2,2,0,1,0-2,2A2,2,0,0,0,7,12ZM11,9h9M11,12h9M11,15h6",
     );

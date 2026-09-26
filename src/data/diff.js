@@ -8,7 +8,7 @@
 // true) so it can be promoted straight into state.data and painted with
 // the existing pipeline.
 // ====================================================================
-import { FILL_VALUE } from "../config.js";
+import { FILL_VALUE, VARIABLE_KEYS, isValid } from "../config.js";
 
 export function diffDatasets(a, b) {
   // Feature intersection: only reaches present in both sources are
@@ -44,6 +44,11 @@ export function diffDatasets(a, b) {
   const nFeatures = featureIds.length;
   const nTimes = timePairs.length;
   const time = timePairs.map(([ai]) => a.time[ai]);
+  // Flat column maps: the cell loop below runs nFeatures * nTimes * nVariables
+  // times on the main thread, so it indexes typed arrays rather than
+  // destructuring a nested pair on every iteration.
+  const aCols = Int32Array.from(timePairs, (p) => p[0]);
+  const bCols = Int32Array.from(timePairs, (p) => p[1]);
 
   const diffVariable = (varName) => {
     const out = new Float32Array(nFeatures * nTimes).fill(FILL_VALUE);
@@ -54,20 +59,17 @@ export function diffDatasets(a, b) {
       const bBase = bRows[fi] * b.nTimes;
       const outBase = fi * nTimes;
       for (let ti = 0; ti < nTimes; ti++) {
-        const [ati, bti] = timePairs[ti];
-        const x = av[aBase + ati];
-        const y = bv[bBase + bti];
-        if (x > -9998 && y > -9998) out[outBase + ti] = x - y;
+        const x = av[aBase + aCols[ti]];
+        const y = bv[bBase + bCols[ti]];
+        if (isValid(x) && isValid(y)) out[outBase + ti] = x - y;
       }
     }
     return out;
   };
 
-  const matrices = {
-    flow: diffVariable("flow"),
-    velocity: diffVariable("velocity"),
-    depth: diffVariable("depth"),
-  };
+  const matrices = Object.fromEntries(
+    VARIABLE_KEYS.map((v) => [v, diffVariable(v)]),
+  );
 
   const featureIdsArr = Float64Array.from(featureIds);
   const index = new Map();
@@ -75,19 +77,18 @@ export function diffDatasets(a, b) {
 
   return {
     isDiff: true,
-    isParquet: a.isParquet,
+    // Both inputs are already normalized to epoch ms; the diff keeps whichever
+    // clock both sides share.
+    timeAbsolute: a.timeAbsolute && b.timeAbsolute,
     time,
     nTimes,
     featureIds: featureIdsArr,
     index,
     matrices,
-    bounds: {
-      flow: diffBounds(matrices.flow),
-      velocity: diffBounds(matrices.velocity),
-      depth: diffBounds(matrices.depth),
-    },
+    bounds: Object.fromEntries(
+      VARIABLE_KEYS.map((v) => [v, diffBounds(matrices[v])]),
+    ),
     refTime: a.refTime,
-    totals: {},
   };
 }
 
@@ -97,7 +98,7 @@ function diffBounds(arr) {
   let maxAbs = 0;
   for (let i = 0; i < arr.length; i++) {
     const v = arr[i];
-    if (v > -9998) {
+    if (isValid(v)) {
       const m = Math.abs(v);
       if (m > maxAbs) maxAbs = m;
     }

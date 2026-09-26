@@ -40,6 +40,22 @@ export function onSourcesChange(fn) {
   listeners.add(fn);
 }
 
+// ---- The active dataset (the one painted on the map) -----------------
+//
+// state.data is still where the active run lives, but changing it is announced
+// here rather than by the loader reaching into the DOM: map, panels, gages,
+// time and the overview each subscribe and own their own reaction. Detail is
+// { data, fitView }, with data === null when the run was cleared.
+const activeListeners = new Set();
+
+export function onActiveDatasetChange(fn) {
+  activeListeners.add(fn);
+}
+
+export function emitActiveDatasetChange(detail) {
+  for (const fn of activeListeners) fn(detail);
+}
+
 function freeSlot() {
   const used = new Set([...sources.values()].map((s) => s.slot));
   let slot = 0;

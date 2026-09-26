@@ -7,15 +7,10 @@
 
 // S3 Browser State
 export const s3State = {
-  buckets: [
-    "ciroh-community-ngen-datastream",
-    "ciroh-community-ngen-datastream-temp",
-  ],
   currentBucket: "ciroh-community-ngen-datastream",
   pathSegments: ["outputs"],
   currentPath: "outputs/",
   selectedFile: null,
-  trouteFiles: [],
   isLoading: false,
   maxNavigationDepth: 6,
   // The VPU_* folders currently listed, if any (drives the CONUS button).
@@ -30,13 +25,11 @@ export const state = {
   variable: "flow",
   timeIndex: 0,
   isPlaying: false,
-  playInterval: null,
   playSpeed: 5,
   scale: "linear", // color scale: linear | log | sqrt | cbrt | symlog | ...
   originalPaint: null, // flowpaths paint to restore on clear
   hoveredId: null,
   lastClickedDivide: null,
-  selectedFeature: null,
   // Set by the map event handlers when the rendered set of reaches may have
   // changed (camera moved or a tile streamed in). updateFeatureStates() reads
   // this to decide whether it must re-run queryRenderedFeatures or can reuse

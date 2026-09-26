@@ -18,7 +18,12 @@ export function alignSeries(sim, ref, x0 = -Infinity, x1 = Infinity) {
   const rt = ref.times;
   const rv = ref.values;
   if (!rt.length) return out;
-  const maxGap = gapTolerance(rt);
+  // Series built by the hydrograph already carry their median step; reuse it
+  // rather than recomputing the same statistic once per run scored against the
+  // same reference.
+  const maxGap = Number.isFinite(ref.step)
+    ? Math.max(HOUR_MS, 2 * ref.step)
+    : gapTolerance(rt);
   let j = 0;
   for (let i = 0; i < sim.times.length; i++) {
     const t = sim.times[i];
@@ -42,17 +47,25 @@ export function alignSeries(sim, ref, x0 = -Infinity, x1 = Infinity) {
   return out;
 }
 
-// Widest gap interpolation may bridge: two median steps, but never less than
-// an hour so an hourly reference still interpolates onto sub-hourly output.
-function gapTolerance(times) {
-  if (times.length < 2) return HOUR_MS;
+// Median interval between consecutive timestamps. Strided: a long observation
+// record is sampled rather than fully sorted, which is the same answer for
+// orders of magnitude less work. Infinity for a series with no interval.
+export function medianStep(times) {
+  if (times.length < 2) return Infinity;
   const steps = [];
   const stride = Math.max(1, Math.floor(times.length / 500));
   for (let i = stride; i < times.length; i += stride) {
     steps.push((times[i] - times[i - stride]) / stride);
   }
   steps.sort((a, b) => a - b);
-  return Math.max(HOUR_MS, 2 * steps[steps.length >> 1]);
+  return steps[steps.length >> 1];
+}
+
+// Widest gap interpolation may bridge: two median steps, but never less than
+// an hour so an hourly reference still interpolates onto sub-hourly output.
+function gapTolerance(times) {
+  const step = medianStep(times);
+  return Number.isFinite(step) ? Math.max(HOUR_MS, 2 * step) : HOUR_MS;
 }
 
 // sim − ref at sim's timestamps, as a plottable series.
@@ -69,7 +82,6 @@ export function differenceSeries(sim, ref) {
 //   KGE   Kling-Gupta efficiency (2009): 1 − √((r−1)² + (α−1)² + (β−1)²)
 //   NSE   Nash-Sutcliffe efficiency: 1 − Σ(s−o)² / Σ(o−ō)²
 //   r     Pearson correlation
-//   alpha σs/σo (variability ratio), beta μs/μo (bias ratio)
 //   pbias 100·Σ(s−o)/Σo, positive = sim over-predicts
 export function computeMetrics(sim, obs) {
   const n = sim.length;
@@ -111,8 +123,6 @@ export function computeMetrics(sim, obs) {
     kge: 1 - Math.sqrt((r - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2),
     nse: sso > 0 ? 1 - sse / sso : NaN,
     r,
-    alpha,
-    beta,
     pbias: sumObs !== 0 ? (100 * sumErr) / sumObs : NaN,
     rmse: Math.sqrt(sse / n),
     mae: sae / n,

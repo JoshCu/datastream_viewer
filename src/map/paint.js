@@ -10,10 +10,15 @@ import {
 import { valueAt } from "../data/access.js";
 import { refreshTooltip } from "./interactions.js";
 
-// Reaches whose feature-state is already set for the current
-// (variable, timeIndex); lets tile-load repaints skip work they've done.
+// What has already been painted for the current (variable, timeIndex).
+// `paintedAll` means every id in renderedIds is up to date; `pendingIds` holds
+// the ids added since then by a tile query. On a bare timestep change — the
+// case that runs every playback frame — everything must be repainted anyway,
+// so tracking individual ids there would be a full-size Set rebuild whose
+// every lookup is a guaranteed miss.
 let paintedKey = null;
-let paintedIds = new Set();
+let paintedAll = false;
+const pendingIds = new Set();
 
 // Ids of the flowpaths currently on screen. Refreshed by a full
 // queryRenderedFeatures only when state.viewDirty says the camera moved (once,
@@ -62,7 +67,6 @@ export function scheduleTilePaint(tileID) {
 // Set once per variable; timestep changes only touch feature-state.
 export function applyResultsPaint() {
   if (!state.data || !map.getLayer("flowpaths")) return;
-  const bounds = state.data.bounds[state.variable];
 
   if (!state.originalPaint) {
     state.originalPaint = {
@@ -71,8 +75,16 @@ export function applyResultsPaint() {
     };
   }
 
-  map.setPaintProperty("flowpaths", "line-color", resultColorExpression(bounds));
-  map.setPaintProperty("flowpaths", "line-width", resultWidthExpression(bounds));
+  map.setPaintProperty(
+    "flowpaths",
+    "line-color",
+    resultColorExpression(state.data, state.variable, state.scale),
+  );
+  map.setPaintProperty(
+    "flowpaths",
+    "line-width",
+    resultWidthExpression(state.data, state.variable),
+  );
 }
 
 // Restore the flowpaths layer to its pre-data appearance and drop every
@@ -84,7 +96,8 @@ export function clearResultsPaint() {
     map.setPaintProperty("flowpaths", "line-width", state.originalPaint["line-width"]);
   }
   paintedKey = null;
-  paintedIds = new Set();
+  paintedAll = false;
+  pendingIds.clear();
   renderedIds = new Set();
   pendingTileBBoxes = new Map();
   zoomQueued = false;
@@ -92,8 +105,8 @@ export function clearResultsPaint() {
 
 // Only set feature-state for the reaches actually on screen. Feature-state
 // persists once set, so panning to a new area (or a tile streaming in) just
-// paints the reaches not yet done for this timestep. paintedIds resets
-// whenever the variable or timestep changes, forcing a full repaint.
+// paints the reaches not yet done for this timestep. A variable or timestep
+// change clears paintedAll, forcing a full repaint of the on-screen set.
 export function updateFeatureStates() {
   if (!state.data || !map.getLayer("flowpaths")) return;
   const { index } = state.data;
@@ -103,7 +116,8 @@ export function updateFeatureStates() {
   const key = variable + ":" + t;
   if (key !== paintedKey) {
     paintedKey = key;
-    paintedIds = new Set();
+    paintedAll = false;
+    pendingIds.clear();
   }
 
   // queryRenderedFeatures is the expensive part, so keep the cached id set and
@@ -115,6 +129,8 @@ export function updateFeatureStates() {
   if (state.viewDirty) {
     state.viewDirty = false;
     pendingTileBBoxes.clear();
+    pendingIds.clear();
+    paintedAll = false;
     renderedIds = new Set();
     for (const feature of map.queryRenderedFeatures({ layers: ["flowpaths"] }))
       renderedIds.add(feature.id);
@@ -130,22 +146,53 @@ export function updateFeatureStates() {
       ];
       for (const feature of map.queryRenderedFeatures(region, {
         layers: ["flowpaths"],
-      }))
-        renderedIds.add(feature.id);
+      })) {
+        // Only ids the viewport didn't already have need painting.
+        if (!renderedIds.has(feature.id)) {
+          renderedIds.add(feature.id);
+          pendingIds.add(feature.id);
+        }
+      }
     }
   }
 
-  for (const id of renderedIds) {
-    if (paintedIds.has(id)) continue;
-    const row = index.get(id);
-    if (row === undefined) continue;
-    map.setFeatureState(
-      { ...FLOWPATH_FEATURE, id },
-      { value: valueAt(variable, row, t) },
-    );
-    paintedIds.add(id);
+  // One descriptor reused for every reach: MapLibre reads source/sourceLayer/id
+  // synchronously and doesn't retain it, so allocating a fresh object per reach
+  // per frame was pure garbage.
+  const target = { ...FLOWPATH_FEATURE, id: 0 };
+  const paint = (ids) => {
+    for (const id of ids) {
+      const row = index.get(id);
+      if (row === undefined) continue;
+      target.id = id;
+      map.setFeatureState(target, { value: valueAt(variable, row, t) });
+    }
+  };
+
+  if (!paintedAll) {
+    paint(renderedIds);
+    paintedAll = true;
+    pendingIds.clear();
+  } else if (pendingIds.size) {
+    paint(pendingIds);
+    pendingIds.clear();
   }
   refreshTooltip();
+}
+
+// Reaction to the active run changing: repaint for the new data, or restore
+// the pre-data appearance when it was cleared. Registered in map/init.js.
+export function syncPaintToDataset({ data, fitView }) {
+  if (!data) {
+    clearResultsPaint();
+    return;
+  }
+  applyResultsPaint();
+  // Force a full-viewport requery for the first paint: the run may already be
+  // in view, so we can't rely on zoomToLoadedData moving the camera.
+  state.viewDirty = true;
+  scheduleFeatureStateUpdate();
+  if (fitView) zoomToLoadedData();
 }
 
 let featureStateUpdateQueued = false;
@@ -172,6 +219,18 @@ export function zoomToLoadedData() {
 // Zoom level to back out to before fitting: wide enough that the flowpath
 // tiles in view cover any run's extent (the initial map view is zoom 4).
 const FIT_OVERVIEW_ZOOM = 4;
+
+// The sidebar overlays the left of the map, so fitBounds has to bias the
+// camera right by half of whatever the sidebar currently covers. Measured
+// rather than hardcoded: the width lives in CSS (--sidebar-w) and the sidebar
+// can be hidden entirely.
+function sidebarFitOffset() {
+  const sidebar = document.querySelector(".sidebar");
+  const width = sidebar && sidebar.classList.contains("hide")
+    ? 0
+    : (sidebar?.getBoundingClientRect().width ?? 0);
+  return [width / 2, 0];
+}
 
 // Move the camera to frame every flowpath that `data` covers. Only tiles
 // already fetched can be inspected, so when zoomed in past the overview
@@ -217,6 +276,6 @@ function fitToLoadedTiles(data) {
         [minX, minY],
         [maxX, maxY],
       ],
-      { padding: 60, maxZoom: 10, offset:[(359/2)-60,0] },
+      { padding: 60, maxZoom: 10, offset: sidebarFitOffset() },
     );
 }

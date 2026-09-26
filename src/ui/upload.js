@@ -9,10 +9,17 @@
 // (the same shape as state.data) so re-selecting it or diffing it against
 // another entry never needs to re-parse the file.
 // ====================================================================
-import { loadLocalFile, showDiff, clearData } from "../data/loader.js";
+import {
+  loadLocalFile,
+  showDiff,
+  clearData,
+  formatLabel,
+} from "../data/loader.js";
 import { fitToData } from "../map/paint.js";
 import { diffDatasets } from "../data/diff.js";
 import { registerSource, unregisterSource, renameSource } from "../data/sources.js";
+import { setStatus, STATUS_DOT_CLASS } from "./panels.js";
+import { escapeHtml } from "./dom.js";
 
 let files = []; // { id, file, nickname, status: "pending"|"loading"|"loaded"|"error", message, dataset }
 let nextId = 1;
@@ -119,8 +126,7 @@ async function loadEntry(id) {
   if (!entry || entry.status === "loading") return;
 
   entry.status = "loading";
-  entry.message =
-    "Loading " + (entry.file.name.endsWith(".parquet") ? "Parquet" : "NetCDF") + "...";
+  entry.message = `Loading ${formatLabel(entry.file.name)}...`;
   renderList();
 
   try {
@@ -155,11 +161,8 @@ function runDiff() {
   if (!aEntry?.dataset || !bEntry?.dataset || aId === bId) return;
 
   const statusEl = document.getElementById("diffStatus");
-  const statusDot = document.getElementById("diffStatusDot");
-  const statusText = document.getElementById("diffStatusText");
   statusEl.style.display = "flex";
-  statusDot.className = "status-dot loading";
-  statusText.textContent = "Computing diff...";
+  setStatus("loading", "Computing diff...", "diff");
 
   try {
     const diff = diffDatasets(aEntry.dataset, bEntry.dataset);
@@ -167,11 +170,13 @@ function runDiff() {
     showDiff(diff, { fitView: false });
     activeFileId = null;
     diffActive = true;
-    statusDot.className = "status-dot success";
-    statusText.textContent = `Showing ${diff.featureIds.length} features × ${diff.nTimes} shared steps`;
+    setStatus(
+      "success",
+      `Showing ${diff.featureIds.length} features × ${diff.nTimes} shared steps`,
+      "diff",
+    );
   } catch (error) {
-    statusDot.className = "status-dot error";
-    statusText.textContent = `Error: ${error.message}`;
+    setStatus("error", `Error: ${error.message}`, "diff");
     console.error("Diff error:", error);
   }
   renderList();
@@ -201,23 +206,6 @@ function formatFileSize(bytes) {
   if (bytes < 1024) return bytes + " B";
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-}
-
-const STATUS_DOT_CLASS = {
-  pending: "",
-  loading: "loading",
-  loaded: "success",
-  error: "error",
-};
-
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[c]);
 }
 
 function renderList() {

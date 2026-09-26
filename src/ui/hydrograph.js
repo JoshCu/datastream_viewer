@@ -19,15 +19,22 @@
 import { state } from "../state.js";
 import {
   VARIABLES,
+  DIFF_PALETTE,
   SERIES_COLORS,
   SERIES_OVERFLOW_COLOR,
   OBS_COLOR,
   CURRENT_TIME_COLOR,
 } from "../config.js";
-import { timeToMillis } from "../data/access.js";
+import { seriesAt } from "../data/access.js";
 import { listSources, onSourcesChange } from "../data/sources.js";
+import { setTimeIndex } from "./time.js";
 import { fetchGageFlow, fetchGageMeta } from "../data/usgs.js";
-import { alignSeries, differenceSeries, computeMetrics } from "../data/metrics.js";
+import {
+  alignSeries,
+  differenceSeries,
+  computeMetrics,
+  medianStep,
+} from "../data/metrics.js";
 
 const OBS_KEY = "obs";
 const MARGIN = { top: 10, right: 16, bottom: 24, left: 60 };
@@ -35,8 +42,12 @@ const DIFF_GAP = 16; // vertical space between the main plot and the diff strip
 const MIN_SPAN_MS = 30 * 60 * 1000;
 const MIN_DOCK_PX = 220;
 const METRICS_DEBOUNCE_MS = 120;
-const DIFF_POS_COLOR = "#ef8a62"; // A above B (matches the map's diff ramp)
-const DIFF_NEG_COLOR = "#67a9cf"; // A below B
+// A above B / A below B, taken from the map's diverging ramp so the strip and
+// the map can't drift apart.
+// Matches .hydro-key.diff / .hydro-diff-line in main.css.
+const DIFF_LINE_COLOR = "#c3cad3";
+const DIFF_POS_COLOR = DIFF_PALETTE[5];
+const DIFF_NEG_COLOR = DIFF_PALETTE[1];
 
 const view = {
   target: null, // { reachId, site }
@@ -140,24 +151,24 @@ export function setupHydrograph() {
     }),
   );
 
-  const onPick = () => {
-    view.compareA = els.selectA.value || null;
-    view.compareB = els.selectB.value || null;
+  // Picking A/B and swapping them differ only in how the pair is set.
+  const applyCompare = () => {
     view.compareTouched = true;
     updateDiff();
     renderCompareControls();
     scheduleRender();
     scheduleMetrics();
   };
+  const onPick = () => {
+    view.compareA = els.selectA.value || null;
+    view.compareB = els.selectB.value || null;
+    applyCompare();
+  };
   els.selectA.addEventListener("change", onPick);
   els.selectB.addEventListener("change", onPick);
   $("hydro-swap").addEventListener("click", () => {
     [view.compareA, view.compareB] = [view.compareB, view.compareA];
-    view.compareTouched = true;
-    updateDiff();
-    renderCompareControls();
-    scheduleRender();
-    scheduleMetrics();
+    applyCompare();
   });
   els.diffToggle.addEventListener("change", () => {
     view.showDiff = els.diffToggle.checked;
@@ -218,7 +229,7 @@ function buildSkeleton() {
     .on("pointerleave", () => {
       if (!drag) {
         hoverPx = null;
-        drawHover();
+        scheduleHover();
       }
     })
     .on("dblclick", resetZoom);
@@ -285,6 +296,14 @@ export function updateHydrographCursor() {
 
 // ---- Series assembly -------------------------------------------------
 
+// What the obs line should say before any fetch resolves. Four independent
+// cases, so they read as four returns rather than a nested ternary.
+function obsStatusFor(site) {
+  if (!site) return "";
+  if (view.variable !== "flow") return "USGS observations are discharge only";
+  return view.full ? "Fetching USGS observations…" : "";
+}
+
 async function rebuild() {
   const seq = ++requestSeq;
   const { reachId, site } = view.target;
@@ -295,13 +314,7 @@ async function rebuild() {
   view.series = modelSeries(reachId, view.variable);
   view.full = extentOf(view.series);
   clampDomain();
-  view.obsStatus = !site
-    ? ""
-    : view.variable !== "flow"
-      ? "USGS observations are discharge only"
-      : view.full
-        ? "Fetching USGS observations…"
-        : "";
+  view.obsStatus = obsStatusFor(site);
   refreshAll();
 
   if (!site || view.variable !== "flow" || !view.full) return;
@@ -341,25 +354,10 @@ async function rebuild() {
 function modelSeries(reachId, variable) {
   const out = [];
   for (const src of listSources()) {
-    const d = src.dataset;
-    const row = d.index.get(reachId);
-    if (row === undefined) continue;
-    const m = d.matrices[variable];
-    const base = row * d.nTimes;
-    let points = [];
-    let absolute = true;
-    for (let t = 0; t < d.nTimes; t++) {
-      const ms = timeToMillis(d.time[t], d);
-      if (ms === undefined) {
-        absolute = false;
-        break;
-      }
-      const v = m[base + t];
-      points.push([ms, v > -9998 ? v : NaN]);
-    }
-    if (!absolute) continue;
-    points = points.sort((a, b) => a[0] - b[0]);
-    const times = Float64Array.from(points, (p) => p[0]);
+    // seriesAt returns null for a reach the run doesn't have, and for a run
+    // with no absolute clock — neither can share this axis.
+    const series = seriesAt(src.dataset, reachId, variable);
+    if (!series) continue;
     const overflow = src.slot >= SERIES_COLORS.length;
     out.push({
       key: src.key,
@@ -367,20 +365,12 @@ function modelSeries(reachId, variable) {
       kind: "model",
       color: overflow ? SERIES_OVERFLOW_COLOR : SERIES_COLORS[src.slot],
       dashed: overflow,
-      times,
-      values: Float32Array.from(points, (p) => p[1]),
-      step: medianStep(times),
+      times: series.times,
+      values: series.values,
+      step: medianStep(series.times),
     });
   }
   return out;
-}
-
-function medianStep(times) {
-  if (times.length < 2) return Infinity;
-  const steps = [];
-  for (let i = 1; i < times.length; i++) steps.push(times[i] - times[i - 1]);
-  steps.sort((a, b) => a - b);
-  return steps[steps.length >> 1];
 }
 
 function extentOf(series) {
@@ -573,7 +563,7 @@ function onPointerMove(e) {
     setDomain([d0 + shift, d1 + shift]);
   }
   hoverPx = cx;
-  drawHover();
+  scheduleHover();
 }
 
 function onPointerUp() {
@@ -591,25 +581,20 @@ function onPointerUp() {
   }
 }
 
-// Move the map's timestep to the one nearest `ms` by driving the time slider,
-// so the slider's own handler does the repaint.
+// Move the map's timestep to the one nearest `ms`.
 function seekMap(ms) {
-  if (!state.data) return;
+  if (!state.data || !state.data.timeAbsolute) return;
+  const { time, nTimes } = state.data;
   let best = -1;
   let bestDt = Infinity;
-  for (let i = 0; i < state.data.nTimes; i++) {
-    const t = timeToMillis(state.data.time[i]);
-    if (t === undefined) return;
-    const dt = Math.abs(t - ms);
+  for (let i = 0; i < nTimes; i++) {
+    const dt = Math.abs(time[i] - ms);
     if (dt < bestDt) {
       bestDt = dt;
       best = i;
     }
   }
-  if (best < 0 || best === state.timeIndex) return;
-  const slider = document.getElementById("timeSlider");
-  slider.value = best;
-  slider.dispatchEvent(new Event("input"));
+  if (best >= 0) setTimeIndex(best);
 }
 
 // ---- Dock resize -------------------------------------------------------
@@ -625,16 +610,33 @@ function setupResizeHandle(handle) {
       const h = Math.max(MIN_DOCK_PX, Math.min(max, startH + startY - ev.clientY));
       document.body.style.setProperty("--hydro-h", `${h}px`);
     };
+    // pointercancel fires when capture is lost (a system gesture, a context
+    // menu); without it the move/up pair leaked once per interrupted drag.
     const up = () => {
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
   });
 }
 
 // ---- Rendering ---------------------------------------------------------
+
+// The hover readout rebuilds tooltip rows and then measures them, which forces
+// a layout flush; at pointer rate that was one flush per move event. One per
+// frame is plenty for a crosshair.
+let hoverQueued = false;
+function scheduleHover() {
+  if (hoverQueued) return;
+  hoverQueued = true;
+  requestAnimationFrame(() => {
+    hoverQueued = false;
+    drawHover();
+  });
+}
 
 function scheduleRender() {
   if (renderQueued) return;
@@ -740,14 +742,14 @@ function render() {
         .line()
         .defined((i) => !Number.isNaN(s.values[i]) && (!log || s.values[i] > 0))
         .x((i) => x(s.times[i]))
-        .y((i) => y(s.values[i]))(d3.range(i0, i1));
+        .y((i) => y(s.values[i]))(indexRange(i0, i1));
     });
 
   // Diff strip (A − B), sharing the time axis.
   chart.diff.style("display", diff ? null : "none").attr("transform", `translate(0,${diffTop})`);
   if (diff) {
     const [i0, i1] = windowRange(diff.times, d0, d1);
-    const idx = d3.range(i0, i1);
+    const idx = indexRange(i0, i1);
     const [lo, hi] = d3.extent(idx, (i) => diff.values[i]);
     const m = Math.max(Math.abs(lo ?? 0), Math.abs(hi ?? 0)) || 1;
     const yDiff = d3.scaleLinear().domain([-m * 1.08, m * 1.08]).range([diffH, 0]).nice();
@@ -794,7 +796,9 @@ function render() {
 }
 
 function drawNowMarker() {
-  const t = state.data ? timeToMillis(state.data.time[state.timeIndex]) : undefined;
+  const t = state.data?.timeAbsolute
+    ? state.data.time[state.timeIndex]
+    : undefined;
   const px = t === undefined ? null : geom.x(t);
   const show = px !== null && px >= 0 && px <= geom.innerW;
   chart.mainNow
@@ -817,12 +821,25 @@ function nearestIndex(times, t) {
 
 // Crosshair snapped to the nearest data time over the visible lines; each
 // line reports its own nearest point if it has one within half a step.
+// One grow-only index buffer shared by every line/area generator. Zoomed out
+// over a full 15-minute observation record, d3.range(i0, i1) was allocating
+// ~35k numbers per series per frame on a wheel/drag path.
+let indexBuf = [];
+function indexRange(i0, i1) {
+  const n = Math.max(0, i1 - i0);
+  if (indexBuf.length < n) indexBuf = new Array(n);
+  else if (indexBuf.length > n) indexBuf.length = n;
+  for (let k = 0; k < n; k++) indexBuf[k] = i0 + k;
+  return indexBuf;
+}
+
+function hideHover() {
+  chart.hover.style("display", "none");
+  els.tooltip.classList.remove("visible");
+}
+
 function drawHover() {
-  if (hoverPx == null || !geom || drag?.mode === "pan") {
-    chart.hover.style("display", "none");
-    els.tooltip.classList.remove("visible");
-    return;
-  }
+  if (hoverPx == null || !geom || drag?.mode === "pan") return hideHover();
   const { x, y, visible } = geom;
   const t = x.invert(hoverPx).getTime();
   let snap = null;
@@ -837,11 +854,7 @@ function drawHover() {
       snap = s.times[i];
     }
   }
-  if (snap === null) {
-    chart.hover.style("display", "none");
-    els.tooltip.classList.remove("visible");
-    return;
-  }
+  if (snap === null) return hideHover();
 
   const valueAtSnap = (s, step) => {
     const i = nearestIndex(s.times, snap);
@@ -860,7 +873,7 @@ function drawHover() {
   if (diffPoint && Number.isFinite(diffPoint.v) && geom.yDiff) {
     dots.push({
       key: "diff",
-      color: "#c3cad3",
+      color: DIFF_LINE_COLOR,
       cx: x(diffPoint.t),
       cy: geom.diffTop + geom.yDiff(diffPoint.v),
     });
@@ -931,10 +944,17 @@ const METRIC_COLUMNS = [
   ["rmse", "RMSE", "Root-mean-square error", fmtValue],
   ["n", "n", "Paired points in the visible window", (v) => v.toLocaleString()],
 ];
+// The compare table shows everything the per-run table does, plus MAE. Spelled
+// out rather than assembled by index surgery on METRIC_COLUMNS, which broke
+// silently if anyone reordered that list.
 const COMPARE_METRICS = [
-  ...METRIC_COLUMNS.slice(0, 5),
+  ["kge", "KGE", "Kling-Gupta efficiency (1 is perfect)", fmtScore],
+  ["nse", "NSE", "Nash-Sutcliffe efficiency (1 is perfect)", fmtScore],
+  ["r", "r", "Pearson correlation", fmtScore],
+  ["pbias", "PBIAS", "Percent bias: + over-predicts, − under-predicts", (v) => (Number.isFinite(v) ? `${fmtScore(v, 1)}%` : "–")],
+  ["rmse", "RMSE", "Root-mean-square error", fmtValue],
   ["mae", "MAE", "Mean absolute error", fmtValue],
-  METRIC_COLUMNS[5],
+  ["n", "n", "Paired points in the visible window", (v) => v.toLocaleString()],
 ];
 
 function renderMetrics() {

@@ -1,26 +1,25 @@
 // ====================================================================
 // Distribution-based class breaks (quantile / Jenks natural breaks)
 // ====================================================================
-import { state } from "../state.js";
+import { isValid } from "../config.js";
+import { derived } from "../data/access.js";
 import { strictlyIncreasing } from "./scales.js";
 
-// Sorted sample of the current variable's valid values (strided across the
+// Sorted sample of `variable`'s valid values (strided across the
 // whole feature x time matrix), cached per variable. The distribution
 // scales (quantile / classed / Jenks) work off this rather than every cell.
-export function resultSamples() {
-  state.data.samples = state.data.samples || {};
-  const cached = state.data.samples[state.variable];
-  if (cached) return cached;
-  const m = state.data.matrices[state.variable];
+export function resultSamples(dataset, variable) {
+  const cache = derived(dataset, variable);
+  if (cache.samples) return cache.samples;
+  const m = dataset.matrices[variable];
   const stride = Math.max(1, Math.floor(m.length / 50000));
   const out = [];
   for (let i = 0; i < m.length; i += stride) {
-    if (m[i] > -9998) out.push(m[i]);
+    if (isValid(m[i])) out.push(m[i]);
   }
   out.sort((a, b) => a - b);
-  const arr = Float64Array.from(out);
-  state.data.samples[state.variable] = arr;
-  return arr;
+  cache.samples = Float64Array.from(out);
+  return cache.samples;
 }
 
 export function quantileOf(sorted, p) {
@@ -88,13 +87,13 @@ export function jenksBreaks(data, nClasses) {
 }
 
 // Interior class boundaries (length nClasses-1) for the classed scales,
-// cached per (variable, scale).
-export function resultBreaks(scale, nClasses) {
-  state.data.breaks = state.data.breaks || {};
-  const key = state.variable + ":" + scale;
-  if (state.data.breaks[key]) return state.data.breaks[key];
+// cached per (dataset, variable, scale).
+export function resultBreaks(dataset, variable, scale, nClasses) {
+  const cache = derived(dataset, variable);
+  cache.breaks = cache.breaks || {};
+  if (cache.breaks[scale]) return cache.breaks[scale];
 
-  const samples = resultSamples();
+  const samples = resultSamples(dataset, variable);
   let breaks;
   if (scale === "jenks") {
     // Downsample so the O(n^2) DP stays fast.
@@ -113,6 +112,6 @@ export function resultBreaks(scale, nClasses) {
       breaks.push(quantileOf(samples, i / nClasses));
   }
   breaks = strictlyIncreasing(breaks);
-  state.data.breaks[key] = breaks;
+  cache.breaks[scale] = breaks;
   return breaks;
 }

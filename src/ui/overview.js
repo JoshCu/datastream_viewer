@@ -2,39 +2,50 @@
 // Results overview sparkline (basin total per timestep) + click-to-seek
 // ====================================================================
 import { state } from "../state.js";
-import { scheduleFeatureStateUpdate } from "../map/paint.js";
-import { refreshTooltip } from "../map/interactions.js";
-import { updateTimeDisplay } from "./time.js";
+import { isValid, CURRENT_TIME_COLOR } from "../config.js";
+import { derived } from "../data/access.js";
+import { setTimeIndex } from "./time.js";
 
-function resultTotals() {
-  const cached = state.data.totals[state.variable];
-  if (cached) return cached;
-  const { matrices, featureIds, nTimes } = state.data;
-  const m = matrices[state.variable];
+function resultTotals(dataset, variable) {
+  const cache = derived(dataset, variable);
+  if (cache.totals) return cache.totals;
+  const { matrices, featureIds, nTimes } = dataset;
+  const m = matrices[variable];
   const totals = new Float64Array(nTimes);
   for (let f = 0; f < featureIds.length; f++) {
     const base = f * nTimes;
     for (let t = 0; t < nTimes; t++) {
       const v = m[base + t];
-      if (v > -9998) totals[t] += v;
+      if (isValid(v)) totals[t] += v;
     }
   }
-  state.data.totals[state.variable] = totals;
+  cache.totals = totals;
   return totals;
 }
 
-export function drawResultsOverview() {
-  const canvas = document.getElementById("results-overview");
-  if (!state.data || canvas.clientWidth === 0) return;
+// The sparkline itself only changes when the dataset, variable or canvas size
+// does — but the marker moves on every seek. So the curve is rendered once to
+// an offscreen canvas and blitted, and a seek costs a drawImage plus one line
+// instead of a full rescan and re-stroke.
+let sprite = null; // { canvas, key, w, h, dpr, totals, min, range }
 
-  const totals = resultTotals();
-  const dpr = window.devicePixelRatio || 1;
+function accentColor() {
+  return (
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--accent-primary")
+      .trim() || "#00d4ff"
+  );
+}
+
+const PAD = 3;
+
+function buildSprite(canvas) {
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  const ctx = canvas.getContext("2d");
-  ctx.scale(dpr, dpr);
+  const dpr = window.devicePixelRatio || 1;
+  const totals = resultTotals(state.data, state.variable);
+  const key = `${state.variable}:${state.data.nTimes}:${w}x${h}@${dpr}`;
+  if (sprite && sprite.key === key && sprite.dataset === state.data) return sprite;
 
   let min = Infinity;
   let max = -Infinity;
@@ -44,15 +55,17 @@ export function drawResultsOverview() {
   }
   const range = max - min || 1;
 
-  const accent =
-    getComputedStyle(document.documentElement)
-      .getPropertyValue("--accent-primary")
-      .trim() || "#00d4ff";
-  const pad = 3;
-  const x = (t) =>
-    totals.length > 1 ? pad + (t / (totals.length - 1)) * (w - 2 * pad) : w / 2;
-  const y = (v) => h - pad - ((v - min) / range) * (h - 2 * pad);
+  const off = document.createElement("canvas");
+  off.width = Math.max(1, Math.round(w * dpr));
+  off.height = Math.max(1, Math.round(h * dpr));
+  const ctx = off.getContext("2d");
+  ctx.scale(dpr, dpr);
 
+  const x = (t) =>
+    totals.length > 1 ? PAD + (t / (totals.length - 1)) * (w - 2 * PAD) : w / 2;
+  const y = (v) => h - PAD - ((v - min) / range) * (h - 2 * PAD);
+
+  const accent = accentColor();
   ctx.beginPath();
   ctx.moveTo(x(0), y(totals[0]));
   for (let t = 1; t < totals.length; t++) ctx.lineTo(x(t), y(totals[t]));
@@ -60,35 +73,67 @@ export function drawResultsOverview() {
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  ctx.lineTo(x(totals.length - 1), h - pad);
-  ctx.lineTo(x(0), h - pad);
+  ctx.lineTo(x(totals.length - 1), h - PAD);
+  ctx.lineTo(x(0), h - PAD);
   ctx.closePath();
   ctx.globalAlpha = 0.15;
   ctx.fillStyle = accent;
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  const markerX = x(state.timeIndex);
-  ctx.strokeStyle = "#ffba08";
+  sprite = { canvas: off, key, dataset: state.data, w, h, dpr, totals, min, range };
+  return sprite;
+}
+
+// Called when the loaded run changes, so the cached curve isn't reused for it.
+export function invalidateOverview() {
+  sprite = null;
+}
+
+export function drawResultsOverview() {
+  const canvas = document.getElementById("results-overview");
+  if (!state.data || canvas.clientWidth === 0) return;
+
+  const s = buildSprite(canvas);
+  const { w, h, dpr, totals } = s;
+  if (canvas.width !== s.canvas.width || canvas.height !== s.canvas.height) {
+    canvas.width = s.canvas.width;
+    canvas.height = s.canvas.height;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(s.canvas, 0, 0);
+  ctx.scale(dpr, dpr);
+
+  const markerX =
+    totals.length > 1
+      ? PAD + (state.timeIndex / (totals.length - 1)) * (w - 2 * PAD)
+      : w / 2;
+  ctx.strokeStyle = CURRENT_TIME_COLOR;
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(markerX, pad);
-  ctx.lineTo(markerX, h - pad);
+  ctx.moveTo(markerX, PAD);
+  ctx.lineTo(markerX, h - PAD);
   ctx.stroke();
+}
+
+// Dragging the time slider fires `input` at pointer rate; coalescing to one
+// draw per frame matches what scheduleFeatureStateUpdate() already does for the
+// map, so a drag does one repaint per frame rather than one per event.
+let drawQueued = false;
+export function scheduleOverviewDraw() {
+  if (drawQueued) return;
+  drawQueued = true;
+  requestAnimationFrame(() => {
+    drawQueued = false;
+    drawResultsOverview();
+  });
 }
 
 export function seekFromOverview(e) {
   if (!state.data) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const fraction = (e.clientX - rect.left) / rect.width;
-  state.timeIndex = Math.max(
-    0,
-    Math.min(
-      state.data.nTimes - 1,
-      Math.round(fraction * (state.data.nTimes - 1)),
-    ),
-  );
-  document.getElementById("timeSlider").value = state.timeIndex;
-  scheduleFeatureStateUpdate();
-  updateTimeDisplay();
-  refreshTooltip();
+  setTimeIndex(Math.round(fraction * (state.data.nTimes - 1)));
 }

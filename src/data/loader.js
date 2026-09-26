@@ -7,23 +7,11 @@
 // from here on (feature-state painting reads them synchronously per frame).
 // ====================================================================
 import { state, s3State } from "../state.js";
+import { VARIABLE_KEYS } from "../config.js";
 import { listTrouteFileUrls } from "../s3/client.js";
-import {
-  applyResultsPaint,
-  clearResultsPaint,
-  scheduleFeatureStateUpdate,
-  zoomToLoadedData,
-} from "../map/paint.js";
-import { updateGageFilter } from "../map/gages.js";
-import {
-  showDataPanels,
-  hideDataPanels,
-  updateDataInfo,
-  updateLegend,
-} from "../ui/panels.js";
-import { updateTimeDisplay } from "../ui/time.js";
 import { stopPlayback } from "../ui/playback.js";
-import { registerSource } from "./sources.js";
+import { setStatus } from "../ui/panels.js";
+import { registerSource, emitActiveDatasetChange } from "./sources.js";
 
 // ---- Worker pool ---------------------------------------------------
 
@@ -58,9 +46,13 @@ export function preloadParquetWasm() {
   return wasmModulePromise;
 }
 
-function ensurePool() {
-  if (workers.length) return;
-  for (let i = 0; i < POOL_SIZE; i++) {
+// Grow the pool to `want` workers (never past POOL_SIZE). A single-file load is
+// one task and used to spin up every core's worth of workers, each paying the
+// module-graph and wasm-handoff cost for nothing; CONUS still fans out fully
+// because it queues every VPU file before pumping.
+function ensurePool(want) {
+  const target = Math.min(POOL_SIZE, Math.max(1, want));
+  for (let i = workers.length; i < target; i++) {
     const w = new Worker(new URL("./workers/parse.worker.js", import.meta.url), {
       type: "module",
     });
@@ -79,6 +71,7 @@ function ensurePool() {
 }
 
 function pump() {
+  ensurePool(queue.length + workers.length - idle.length);
   while (idle.length && queue.length) {
     const w = idle.pop();
     const task = queue.shift();
@@ -114,13 +107,18 @@ function onWorkerError(w, err) {
 // Run one worker task. `message` is cloned with an id attached; `transfer`
 // lists ArrayBuffers to hand off.
 function runTask(message, transfer = []) {
-  ensurePool();
   return new Promise((resolve, reject) => {
     const id = nextId++;
     pending.set(id, { resolve, reject });
     queue.push({ message: { ...message, id }, transfer });
     pump();
   });
+}
+
+// Which parser a name will go to, for status text. The extension is the only
+// thing that decides it (see parse.worker.js), so this stays next to that rule.
+export function formatLabel(name) {
+  return name.toLowerCase().endsWith(".parquet") ? "Parquet" : "NetCDF";
 }
 
 // ---- Model promotion ----------------------------------------------
@@ -135,34 +133,11 @@ function runTask(message, transfer = []) {
 function promote(data, { fitView = true } = {}) {
   state.data = data;
   state.timeIndex = 0;
-
   // A diff's signed, symmetric-around-zero values don't suit the
-  // magnitude-oriented transform scales (log, sqrt, ...), so force linear
-  // and lock the picker while a diff is active; restore it for normal loads.
-  const scaleSelect = document.getElementById("scaleSelect");
-  if (data.isDiff) {
-    state.scale = "linear";
-    scaleSelect.value = "linear";
-    scaleSelect.disabled = true;
-  } else {
-    scaleSelect.disabled = false;
-  }
-
-  const slider = document.getElementById("timeSlider");
-  slider.max = Math.max(0, data.nTimes - 1);
-  slider.value = 0;
-
-  updateDataInfo();
-  showDataPanels();
-  updateLegend();
-  applyResultsPaint();
-  updateGageFilter();
-  // Force a full-viewport requery for the first paint: the run may already be
-  // in view, so we can't rely on zoomToLoadedData moving the camera.
-  state.viewDirty = true;
-  scheduleFeatureStateUpdate();
-  updateTimeDisplay();
-  if (fitView) zoomToLoadedData();
+  // magnitude-oriented transform scales, so it only permits linear. That's a
+  // property of the dataset; the scale picker's own module enforces it.
+  if (data.isDiff) state.scale = "linear";
+  emitActiveDatasetChange({ data, fitView });
   return data;
 }
 
@@ -173,22 +148,20 @@ function finalizeData(dataset, bounds, options) {
   const index = new Map();
   for (let i = 0; i < featureIds.length; i++) index.set(featureIds[i], i);
 
-  return promote({
-    isDiff: false,
-    isParquet: dataset.isParquet,
-    time: dataset.time,
-    nTimes: dataset.nTimes,
-    featureIds,
-    index,
-    matrices: {
-      flow: dataset.flow,
-      velocity: dataset.velocity,
-      depth: dataset.depth,
+  return promote(
+    {
+      isDiff: false,
+      time: dataset.time,
+      timeAbsolute: dataset.timeAbsolute,
+      nTimes: dataset.nTimes,
+      featureIds,
+      index,
+      matrices: dataset.matrices,
+      bounds,
+      refTime: dataset.refTime,
     },
-    bounds,
-    refTime: dataset.refTime,
-    totals: {},
-  }, options);
+    options,
+  );
 }
 
 // Promote a dataset already computed by data/diff.js.
@@ -204,10 +177,7 @@ export function clearData() {
   stopPlayback();
   state.data = null;
   state.timeIndex = 0;
-  document.getElementById("scaleSelect").disabled = false;
-  hideDataPanels();
-  clearResultsPaint();
-  updateGageFilter();
+  emitActiveDatasetChange({ data: null, fitView: false });
 }
 
 // ---- Public entry points ------------------------------------------
@@ -228,22 +198,19 @@ function s3Label(path) {
 // Load a single selected file.
 export async function loadFile(url) {
   const btn = document.getElementById("loadBtn");
-  const statusDot = document.getElementById("statusDot");
-  const statusText = document.getElementById("statusText");
 
   btn.disabled = true;
-  statusDot.className = "status-dot loading";
-  statusText.textContent =
-    "Loading " + (url.endsWith(".parquet") ? "Parquet" : "NetCDF") + "...";
+  setStatus("loading", `Loading ${formatLabel(url)}...`);
 
   try {
     const { dataset, bounds } = await runTask({ type: "parse", url });
     registerSource(S3_SOURCE, s3Label(new URL(url).pathname), finalizeData(dataset, bounds));
-    statusDot.className = "status-dot success";
-    statusText.textContent = `Loaded ${state.data.featureIds.length} features × ${state.data.nTimes} steps`;
+    setStatus(
+      "success",
+      `Loaded ${state.data.featureIds.length} features × ${state.data.nTimes} steps`,
+    );
   } catch (error) {
-    statusDot.className = "status-dot error";
-    statusText.textContent = `Error: ${error.message}`;
+    setStatus("error", `Error: ${error.message}`);
     console.error("Load error:", error);
   } finally {
     btn.disabled = false;
@@ -268,19 +235,17 @@ export async function loadLocalFile(file, options) {
 export async function loadConus() {
   const conusBtn = document.getElementById("conusBtn");
   const loadBtn = document.getElementById("loadBtn");
-  const statusDot = document.getElementById("statusDot");
-  const statusText = document.getElementById("statusText");
 
   const vpuFolders = s3State.vpuFolders.slice();
   if (vpuFolders.length === 0) return;
 
   conusBtn.disabled = true;
   loadBtn.disabled = true;
-  statusDot.className = "status-dot loading";
+  setStatus("loading", "Starting CONUS load...");
 
   try {
     // Resolve every VPU's t-route file urls.
-    statusText.textContent = `Listing files across ${vpuFolders.length} VPUs...`;
+    setStatus("loading", `Listing files across ${vpuFolders.length} VPUs...`);
     const urlLists = await Promise.all(
       vpuFolders.map((f) => listTrouteFileUrls(f.path).catch(() => [])),
     );
@@ -299,19 +264,17 @@ export async function loadConus() {
             return null;
           })
           .finally(() => {
-            statusText.textContent = `Loading VPU files ${++done} / ${fileUrls.length}...`;
+            setStatus("loading", `Loading VPU files ${++done} / ${fileUrls.length}...`);
           }),
       ),
     );
     const datasets = results.filter(Boolean).map((r) => r.dataset);
     if (datasets.length === 0) throw new Error("Failed to parse any VPU files");
 
-    statusText.textContent = `Merging ${datasets.length} VPUs...`;
-    const transfer = datasets.flatMap((d) => [
-      d.flow.buffer,
-      d.velocity.buffer,
-      d.depth.buffer,
-    ]);
+    setStatus("loading", `Merging ${datasets.length} VPUs...`);
+    const transfer = datasets.flatMap((d) =>
+      VARIABLE_KEYS.map((v) => d.matrices[v]?.buffer).filter(Boolean),
+    );
     const { dataset, bounds } = await runTask(
       { type: "merge", datasets },
       transfer,
@@ -322,11 +285,12 @@ export async function loadConus() {
       finalizeData(dataset, bounds),
     );
 
-    statusDot.className = "status-dot success";
-    statusText.textContent = `Loaded CONUS: ${state.data.featureIds.length} features × ${state.data.nTimes} steps (${datasets.length} VPUs)`;
+    setStatus(
+      "success",
+      `Loaded CONUS: ${state.data.featureIds.length} features × ${state.data.nTimes} steps (${datasets.length} VPUs)`,
+    );
   } catch (error) {
-    statusDot.className = "status-dot error";
-    statusText.textContent = `Error: ${error.message}`;
+    setStatus("error", `Error: ${error.message}`);
     console.error("CONUS load error:", error);
   } finally {
     conusBtn.disabled = false;

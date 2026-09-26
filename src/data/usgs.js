@@ -17,6 +17,21 @@ const MAX_PAGES = 20; // 50k rows/page; 15-min data is ~35k rows/year
 const seriesMemo = new Map(); // url -> Promise<series>
 const metaMemo = new Map(); // site -> Promise<meta>
 
+// Memoize an in-flight/resolved promise per key, without caching failures —
+// a transient network error shouldn't poison the entry for the session.
+function memo(cache, key, load) {
+  if (!cache.has(key)) {
+    cache.set(
+      key,
+      load().catch((err) => {
+        cache.delete(key);
+        throw err;
+      }),
+    );
+  }
+  return cache.get(key);
+}
+
 // Station properties worth showing next to a modelled hydrograph: what the
 // gage is, how big a basin it drains, and where its datum sits.
 const SITE_PROPS = [
@@ -40,14 +55,7 @@ const SERIES_PROPS = [
 // Resolves to { site, name, siteType, drainageArea (mi2), altitude (ft),
 // verticalDatum, series: [{ code, name, units, beginMs, endMs }], flow }.
 export function fetchGageMeta(site) {
-  if (!metaMemo.has(site)) {
-    const p = loadMeta(site).catch((err) => {
-      metaMemo.delete(site); // don't memoise failures
-      throw err;
-    });
-    metaMemo.set(site, p);
-  }
-  return metaMemo.get(site);
+  return memo(metaMemo, site, () => loadMeta(site));
 }
 
 // The memoised metadata promise for a site, or undefined if it was never
@@ -137,14 +145,7 @@ function numberOrNull(v) {
 // (m³/s), units, fromCache } with points sorted by time.
 export function fetchGageFlow(site, startMs, endMs) {
   const url = itemsUrl(site, startMs, endMs);
-  if (!seriesMemo.has(url)) {
-    const p = loadSeries(site, url).catch((err) => {
-      seriesMemo.delete(url); // don't memoise failures
-      throw err;
-    });
-    seriesMemo.set(url, p);
-  }
-  return seriesMemo.get(url);
+  return memo(seriesMemo, url, () => loadSeries(site, url));
 }
 
 function itemsUrl(site, startMs, endMs) {
@@ -160,7 +161,9 @@ function itemsUrl(site, startMs, endMs) {
 }
 
 async function loadSeries(site, firstUrl) {
-  const points = [];
+  const ts = [];
+  const vs = [];
+  let ordered = true;
   let units = null;
   let fromCache = true;
   let url = firstUrl;
@@ -173,20 +176,29 @@ async function loadSeries(site, firstUrl) {
       const v = parseFloat(p.value);
       if (Number.isNaN(t) || Number.isNaN(v)) continue;
       units ??= p.unit_of_measure;
-      points.push([t, v]);
+      if (ordered && ts.length && t < ts[ts.length - 1]) ordered = false;
+      ts.push(t);
+      vs.push(v);
     }
     url = (json.links || []).find((l) => l.rel === "next")?.href;
   }
 
-  points.sort((a, b) => a[0] - b[0]);
-  const times = new Float64Array(points.length);
-  const values = new Float32Array(points.length);
+  // Pages come back in order, so the sort is only paid for when the API
+  // actually hands back something out of order.
+  let order = null;
+  if (!ordered) {
+    order = Array.from(ts.keys()).sort((a, b) => ts[a] - ts[b]);
+  }
+  const n = ts.length;
+  const times = new Float64Array(n);
+  const values = new Float32Array(n);
   // The API reports discharge in ft³/s; convert to match t-route's m³/s.
   const toCms = /ft/.test(units || "") ? CFS_TO_CMS : 1;
-  points.forEach(([t, v], i) => {
-    times[i] = t;
-    values[i] = v * toCms;
-  });
+  for (let i = 0; i < n; i++) {
+    const j = order ? order[i] : i;
+    times[i] = ts[j];
+    values[i] = vs[j] * toCms;
+  }
   return { site, times, values, units: "m³/s", rawUnits: units, fromCache };
 }
 

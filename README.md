@@ -69,8 +69,8 @@ src/
     client.js                 S3 listing: fetch + XML parsing only (no DOM)
     browser.js                folder/breadcrumb/file-picker UI
   data/
-    access.js                 valueAt() accessor over the loaded matrices
-    sources.js                registry of every loaded run, for the hydrograph
+    access.js                 valueAt/seriesAt accessors + derived-value cache
+    sources.js                registry of loaded runs + active-dataset events
     metrics.js                series alignment + KGE / NSE / PBIAS / … (pure)
     usgs.js                   USGS gage metadata + observed discharge client
     diff.js                   A − B diff of two loaded runs
@@ -82,9 +82,10 @@ src/
         netcdf.js             NetCDF4/HDF5 parser (worker-side, pure)
         parquet.js            Parquet parser (worker-side, pure)
   ui/
+    dom.js                    shared row/button builders + escaping (leaf)
     playback.js               play/pause/step transport
-    panels.js                 data-info summary + legend
-    time.js                   current-timestep readout
+    panels.js                 data-info summary, legend, status lines
+    time.js                   setTimeIndex() + current-timestep readout
     overview.js               basin-total sparkline + click-to-seek
     infopanel.js              reach click info panel
     gagepanel.js              gage click info panel (USGS station details)
@@ -102,6 +103,10 @@ src/
 3. The parsed matrices are **transferred** (not copied) back to the main thread,
    which owns them from then on — so recoloring per timestep reads them
    synchronously without touching the worker again.
-4. `map/paint.js` sets a paint expression once per variable/scale
+4. `loader.js` promotes the run to `state.data` and announces it
+   (`emitActiveDatasetChange`); map, panels, gages, time and the overview each
+   react to that event rather than being driven from the loader.
+5. `map/paint.js` sets a paint expression once per variable/scale
    (`color/expressions.js`) and updates only the on-screen reaches' feature-state
-   as the timestep or viewport changes.
+   as the timestep or viewport changes. Seeks all go through
+   `setTimeIndex()` in `ui/time.js`.
