@@ -258,7 +258,7 @@
 
               <div id="simControls" style="display: none">
                 <div class="sim-actions">
-                  <button class="play-btn" id="simBrushBtn" title="Hold the left button on the map to add water">
+                  <button class="play-btn" id="simBrushBtn" title="Drag on the map to add water">
                     Brush
                   </button>
                   <button class="play-btn" id="simPauseBtn">Pause</button>
@@ -318,8 +318,8 @@
 
               <p class="info-text">
                 Routes water down the reaches loaded on screen. Turn on the brush and hold
-                the left mouse button over rivers to add lateral inflow; it fades once
-                released. Channel shapes are guessed from stream order, and flow leaving
+                the left mouse button (or drag a finger) over rivers to add lateral inflow;
+                it fades once released. Pinch to zoom while the brush is on. Channel shapes are guessed from stream order, and flow leaving
                 the loaded area is lost.
               </p>
             </div>
@@ -439,6 +439,33 @@
         <div id="map"></div>
         <!-- Live-routing brush cursor, positioned by src/sim/brush.js -->
         <div class="sim-brush" id="simBrush"></div>
+        <!-- Live-routing quick controls along the map's bottom, shown on mobile
+             while the sim runs so they work with the sidebar hidden.
+             Wired by src/sim/network.js (play/reset) and src/sim/brush.js. -->
+        <div class="sim-map-controls" id="simMapControls">
+          <button class="sim-map-btn" id="simMapPlayBtn" title="Pause simulation">
+            <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <rect x="6" y="4" width="4" height="16" />
+              <rect x="14" y="4" width="4" height="16" />
+            </svg>
+            <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+          </button>
+          <button class="sim-map-btn" id="simMapResetBtn" title="Drain all water">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+            </svg>
+          </button>
+          <button class="sim-map-btn" id="simMapBrushBtn" title="Brush: drag on the map to add water">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2.7s-6 6.6-6 11.3a6 6 0 0 0 12 0c0-4.7-6-11.3-6-11.3z" />
+            </svg>
+          </button>
+        </div>
         <div class="tooltip" id="tooltip">
           <div class="tooltip-title" id="tooltipTitle">-</div>
           <!-- One row per config.VARIABLES entry, built in map/interactions.js -->

@@ -1,11 +1,16 @@
 // ====================================================================
 // The live-routing "paintbrush": a circular cursor over the map that holds
-// lateral inflow on every reach it covers while the mouse button is down.
+// lateral inflow on every reach it covers while the mouse button (or a
+// finger) is down.
 //
 // Owns the cursor overlay, the diameter / qlat sliders, the hovered-reach
 // readout and deposits; the water itself lives in sim/network.js. Holding
 // the button keeps qlat at the slider value on the reaches under the brush;
 // releasing lets it decay (SIM_QLAT_DECAY per routing step).
+//
+// Input goes through pointer events on the canvas container so mouse, pen and
+// touch share one path. One finger paints; a second finger hands the gesture
+// back to MapLibre's pinch zoom.
 // ====================================================================
 import { state, map } from "../state.js";
 import { depositQlat, reachState, onSimUpdate } from "./network.js";
@@ -13,8 +18,11 @@ import { depositQlat, reachState, onSimUpdate } from "./network.js";
 let diameterPx = 60;
 let qlat = 1;
 let painting = false;
+let paintPointer = null; // pointerId of the pointer doing the painting
 let paintRaf = null;
-let cursor = null; // last map-relative mouse point {x, y}
+let cursor = null; // last map-relative pointer point (maplibregl.Point)
+const touches = new Set(); // pointerIds of fingers currently down
+let cursorIsTouch = false; // a touch cursor only shows the ring while held
 let hitCache = null; // { x, y, ids } for the last picked point
 
 // The qlat slider is logarithmic: 0..300 -> 0.1..100 m³/s.
@@ -78,6 +86,7 @@ function paintFrame() {
 
 function stopPainting() {
   painting = false;
+  paintPointer = null;
   if (paintRaf !== null) cancelAnimationFrame(paintRaf);
   paintRaf = null;
 }
@@ -90,7 +99,7 @@ function brushEl() {
 
 function positionBrush() {
   const el = brushEl();
-  if (!cursor || !state.brushActive) {
+  if (!cursor || !state.brushActive || (cursorIsTouch && !touches.size)) {
     el.classList.remove("visible");
     return;
   }
@@ -104,12 +113,20 @@ export function setBrushActive(on) {
   on = on && state.simActive;
   state.brushActive = on;
   stopPainting();
-  // Left-drag deposits water while the brush is on; wheel zoom still works,
-  // and right-drag still rotates.
-  if (on) map.dragPan.disable();
-  else map.dragPan.enable();
+  // Left-drag / one-finger drag deposits water while the brush is on; wheel
+  // and pinch zoom still work, and right-drag still rotates. Double-tap zoom
+  // is off so quick dabs don't zoom the map.
+  if (on) {
+    map.dragPan.disable();
+    map.doubleClickZoom.disable();
+  } else {
+    map.dragPan.enable();
+    map.doubleClickZoom.enable();
+  }
   map.getContainer().classList.toggle("sim-brush-on", on);
-  document.getElementById("simBrushBtn").classList.toggle("active", on);
+  for (const id of ["simBrushBtn", "simMapBrushBtn"]) {
+    document.getElementById(id).classList.toggle("active", on);
+  }
   positionBrush();
 }
 
@@ -156,30 +173,61 @@ export function setupBrush() {
   qlatSlider.addEventListener("input", applyQlat);
   applyQlat();
 
-  document
-    .getElementById("simBrushBtn")
-    .addEventListener("click", () => setBrushActive(!state.brushActive));
+  for (const id of ["simBrushBtn", "simMapBrushBtn"]) {
+    document
+      .getElementById(id)
+      .addEventListener("click", () => setBrushActive(!state.brushActive));
+  }
 
-  map.on("mousemove", (e) => {
-    cursor = e.point;
+  const container = map.getCanvasContainer();
+  const pointOf = (e) => {
+    const r = container.getBoundingClientRect();
+    return new maplibregl.Point(e.clientX - r.left, e.clientY - r.top);
+  };
+
+  container.addEventListener("pointermove", (e) => {
+    if (e.pointerType === "touch" && !touches.has(e.pointerId)) return;
+    // Only the painting finger steers the brush during a touch.
+    if (painting && e.pointerId !== paintPointer) return;
+    cursor = pointOf(e);
+    cursorIsTouch = e.pointerType === "touch";
     if (state.brushActive) positionBrush();
-    if (state.simActive) updateReadout(e.point);
+    if (state.simActive) updateReadout(cursor);
   });
-  map.getCanvasContainer().addEventListener("mouseleave", () => {
-    cursor = null;
-    stopPainting();
-    positionBrush();
-  });
-  map.on("mousedown", (e) => {
-    if (!state.brushActive || e.originalEvent.button !== 0) return;
-    cursor = e.point;
+  container.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "touch") {
+      touches.add(e.pointerId);
+      // Second finger: this is a pinch, not a stroke.
+      if (touches.size > 1) {
+        stopPainting();
+        positionBrush();
+        return;
+      }
+    }
+    // A tap is the only "hover" a touch screen has, so it moves the readout.
+    cursor = pointOf(e);
+    cursorIsTouch = e.pointerType === "touch";
+    if (state.simActive) updateReadout(cursor);
+    if (!state.brushActive || e.button !== 0) return;
     painting = true;
+    paintPointer = e.pointerId;
     positionBrush();
     paintFrame();
   });
-  // Released anywhere, including off the map.
-  window.addEventListener("mouseup", () => {
-    if (!painting) return;
+  // Released anywhere, including off the map; cancel covers the browser
+  // taking over a touch (e.g. the page scrolling).
+  const release = (e) => {
+    touches.delete(e.pointerId);
+    if (painting && e.pointerId === paintPointer) stopPainting();
+    // The ring hides once the last finger lifts (positionBrush), but the
+    // cursor stays so the readout keeps showing the reach last touched.
+    positionBrush();
+  };
+  window.addEventListener("pointerup", release);
+  window.addEventListener("pointercancel", release);
+  container.addEventListener("pointerleave", (e) => {
+    if (e.pointerType !== "mouse") return;
+    cursor = null;
     stopPainting();
     positionBrush();
   });

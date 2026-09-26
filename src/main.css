@@ -1808,3 +1808,75 @@ body.hydro-open #info-panel {
 #map.sim-brush-on canvas {
     cursor: crosshair !important;
 }
+
+/* The brush owns one-finger drags, so the browser mustn't claim them for
+   scrolling (that cancels the pointer stream after the first touch). */
+#map.sim-brush-on .maplibregl-canvas-container,
+#map.sim-brush-on canvas {
+    touch-action: none;
+}
+
+/* Quick sim controls along the bottom of the map (see index.html). Mobile
+   only: that's where the full-width sidebar gets hidden to see the map. */
+.sim-map-controls {
+    position: absolute;
+    left: 50%;
+    bottom: var(--space-md);
+    transform: translateX(-50%);
+    display: none;
+    gap: var(--space-sm);
+    z-index: 95;
+}
+
+@media (max-width: 768px) {
+    .sim-map-controls.visible {
+        display: flex;
+    }
+}
+
+body.hydro-open .sim-map-controls {
+    bottom: calc(var(--hydro-h) + 2 * var(--space-md));
+}
+
+.sim-map-btn {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    color: var(--text-primary);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(15px);
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.sim-map-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+@media (hover: hover) {
+    .sim-map-btn:hover {
+        border-color: var(--accent-primary);
+        color: var(--accent-primary);
+    }
+}
+
+.sim-map-btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: var(--bg-primary);
+}
+
+#simMapPlayBtn .icon-play,
+#simMapPlayBtn.paused .icon-pause {
+    display: none;
+}
+
+#simMapPlayBtn.paused .icon-play {
+    display: block;
+}

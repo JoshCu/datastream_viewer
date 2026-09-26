@@ -383,6 +383,16 @@ function syncControls() {
   const pauseBtn = document.getElementById("simPauseBtn");
   pauseBtn.textContent = running ? "Pause" : "Resume";
   pauseBtn.classList.toggle("active", running);
+  // The map-bottom twins of these buttons (mobile, sidebar hidden).
+  document.getElementById("simMapControls").classList.toggle("visible", active);
+  const mapPlay = document.getElementById("simMapPlayBtn");
+  mapPlay.classList.toggle("paused", !running);
+  mapPlay.title = running ? "Pause simulation" : "Resume simulation";
+}
+
+function togglePlay() {
+  if (running) pause();
+  else play();
 }
 
 function fmtDuration(seconds) {
@@ -418,11 +428,12 @@ export function setupSimPanel() {
     if (state.simActive) stopSim();
     else startSim();
   });
-  document.getElementById("simPauseBtn").addEventListener("click", () => {
-    if (running) pause();
-    else play();
-  });
-  document.getElementById("simResetBtn").addEventListener("click", resetWater);
+  for (const id of ["simPauseBtn", "simMapPlayBtn"]) {
+    document.getElementById(id).addEventListener("click", togglePlay);
+  }
+  for (const id of ["simResetBtn", "simMapResetBtn"]) {
+    document.getElementById(id).addEventListener("click", resetWater);
+  }
 
   const speed = document.getElementById("simSpeed");
   const speedValue = document.getElementById("simSpeedValue");
