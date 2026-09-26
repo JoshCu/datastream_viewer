@@ -32,9 +32,15 @@ const qlatFromSlider = (v) => 10 ** (v / 100 - 1);
 // camera. Its radius is set where the pointer is: diameterPx wide along the
 // screen's horizontal there, which a pitched view doesn't foreshorten.
 //
-// { center, radius, outline }: center in MercatorCoordinate units, radius in
-// the same units, outline the disk's rim projected to screen points. Null
-// when the pointer is off the ground (e.g. in the sky of a pitched view).
+// With 3D terrain on it becomes a sphere of the same radius centred on the
+// terrain surface, so it reaches reaches in a valley below or on a ridge
+// beside the pointer by true 3D distance rather than flat ground distance.
+//
+// { center, radius, outline, sphere }: center in MercatorCoordinate units,
+// radius in the same units, outline the disk's rim projected to screen points
+// (it still bounds the rendered-feature query), and sphere { z, mpu } when
+// terrain is on: the centre's elevation (m) and mercator units per metre.
+// Null when the pointer is off the ground (e.g. in the sky of a pitched view).
 const OUTLINE_POINTS = 48;
 let footprintCache = null; // { x, y, fp } for the last computed point
 
@@ -42,7 +48,8 @@ function footprint(point) {
   if (footprintCache && footprintCache.x === point.x && footprintCache.y === point.y) {
     return footprintCache.fp;
   }
-  const center = maplibregl.MercatorCoordinate.fromLngLat(map.unproject(point));
+  const lngLat = map.unproject(point);
+  const center = maplibregl.MercatorCoordinate.fromLngLat(lngLat);
   const edge = maplibregl.MercatorCoordinate.fromLngLat(
     map.unproject([point.x + diameterPx / 2, point.y]),
   );
@@ -58,7 +65,9 @@ function footprint(point) {
       );
       outline.push(map.project(rim.toLngLat()));
     }
-    fp = { center, radius, outline };
+    const z = map.getTerrain() ? map.queryTerrainElevation(lngLat) : null;
+    const sphere = z === null ? null : { z, mpu: center.meterInMercatorCoordinateUnits() };
+    fp = { center, radius, outline, sphere };
   }
   footprintCache = { x: point.x, y: point.y, fp };
   return fp;
@@ -97,9 +106,11 @@ function reachesUnderBrush(point) {
 
 // Mercator is conformal, so a ground circle stays a circle in its units
 // over a brush-sized area.
-function lineWithin(geometry, { center, radius }) {
+function lineWithin(geometry, fp) {
+  const { center, radius } = fp;
   const lines =
     geometry.type === "MultiLineString" ? geometry.coordinates : [geometry.coordinates];
+  if (fp.sphere) return lineWithinSphere(lines, fp);
   const r2 = radius * radius;
   for (const line of lines) {
     let a = maplibregl.MercatorCoordinate.fromLngLat(line[0]);
@@ -111,6 +122,45 @@ function lineWithin(geometry, { center, radius }) {
     }
   }
   return false;
+}
+
+// The sphere test, in metres relative to the centre. A segment is flat-
+// checked first (a sphere's shadow is its disk), so only candidates near the
+// centre pay for terrain lookups.
+function lineWithinSphere(lines, { center, radius, sphere }) {
+  const r2 = radius * radius;
+  const rm2 = (radius / sphere.mpu) ** 2;
+  const toLocal = (lngLat, m) => ({
+    x: (m.x - center.x) / sphere.mpu,
+    y: (m.y - center.y) / sphere.mpu,
+    z: (map.queryTerrainElevation(lngLat) ?? sphere.z) - sphere.z,
+  });
+  for (const line of lines) {
+    const merc = line.map((c) => maplibregl.MercatorCoordinate.fromLngLat(c));
+    const local = new Array(line.length);
+    const at = (k) => (local[k] ??= toLocal(line[k], merc[k]));
+    if (merc.length === 1) {
+      if (dist2(center, merc[0]) <= r2 && norm2(at(0)) <= rm2) return true;
+      continue;
+    }
+    for (let k = 1; k < merc.length; k++) {
+      if (segmentDist2(center, merc[k - 1], merc[k]) > r2) continue;
+      if (segmentDist2Origin3(at(k - 1), at(k)) <= rm2) return true;
+    }
+  }
+  return false;
+}
+
+const norm2 = (p) => p.x * p.x + p.y * p.y + p.z * p.z;
+
+// Squared distance from the origin to segment ab, in 3D.
+function segmentDist2Origin3(a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const dz = b.z - a.z;
+  const len2 = dx * dx + dy * dy + dz * dz;
+  const t = len2 ? Math.max(0, Math.min(1, -(a.x * dx + a.y * dy + a.z * dz) / len2)) : 0;
+  return norm2({ x: a.x + t * dx, y: a.y + t * dy, z: a.z + t * dz });
 }
 
 const dist2 = (p, a) => (p.x - a.x) ** 2 + (p.y - a.y) ** 2;
@@ -152,8 +202,18 @@ function positionBrush() {
     el.classList.remove("visible");
     return;
   }
-  const d = fp.outline.map((p, k) => `${k ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`);
-  el.querySelector("path").setAttribute("d", `${d.join("")}Z`);
+  // A sphere's silhouette is a circle whatever the camera angle; its screen
+  // radius at the pointer is the slider's, by construction of `radius`.
+  el.classList.toggle("sphere", !!fp.sphere);
+  if (fp.sphere) {
+    const circle = el.querySelector("circle");
+    circle.setAttribute("cx", cursor.x);
+    circle.setAttribute("cy", cursor.y);
+    circle.setAttribute("r", diameterPx / 2);
+  } else {
+    const d = fp.outline.map((p, k) => `${k ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+    el.querySelector("path").setAttribute("d", `${d.join("")}Z`);
+  }
   el.classList.add("visible");
   el.classList.toggle("painting", painting);
 }
@@ -289,5 +349,10 @@ export function setupBrush() {
   map.on("move", () => {
     hitCache = footprintCache = null;
     if (state.brushActive) positionBrush();
+  });
+  // Terrain toggled: the brush swaps between disk and sphere.
+  map.on("terrain", () => {
+    hitCache = footprintCache = null;
+    positionBrush();
   });
 }
