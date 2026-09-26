@@ -39,6 +39,21 @@ function accentColor() {
 
 const PAD = 3;
 
+// The slider thumb's centre travels from half its width to width minus half
+// its width, so the curve is inset horizontally by the same amount to keep the
+// current-time marker directly under the thumb. The thumb is sized by
+// --space-md (see input[type="range"]::-webkit-slider-thumb in main.css).
+function thumbInset() {
+  const size = parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--space-md"),
+  );
+  return (Number.isFinite(size) ? size : 16) / 2;
+}
+
+function timeToX(t, n, w, inset) {
+  return n > 1 ? inset + (t / (n - 1)) * (w - 2 * inset) : w / 2;
+}
+
 function buildSprite(canvas) {
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
@@ -61,8 +76,8 @@ function buildSprite(canvas) {
   const ctx = off.getContext("2d");
   ctx.scale(dpr, dpr);
 
-  const x = (t) =>
-    totals.length > 1 ? PAD + (t / (totals.length - 1)) * (w - 2 * PAD) : w / 2;
+  const inset = thumbInset();
+  const x = (t) => timeToX(t, totals.length, w, inset);
   const y = (v) => h - PAD - ((v - min) / range) * (h - 2 * PAD);
 
   const accent = accentColor();
@@ -81,7 +96,7 @@ function buildSprite(canvas) {
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  sprite = { canvas: off, key, dataset: state.data, w, h, dpr, totals, min, range };
+  sprite = { canvas: off, key, dataset: state.data, w, h, dpr, inset, totals, min, range };
   return sprite;
 }
 
@@ -95,7 +110,7 @@ export function drawResultsOverview() {
   if (!state.data || canvas.clientWidth === 0) return;
 
   const s = buildSprite(canvas);
-  const { w, h, dpr, totals } = s;
+  const { w, h, dpr, inset, totals } = s;
   if (canvas.width !== s.canvas.width || canvas.height !== s.canvas.height) {
     canvas.width = s.canvas.width;
     canvas.height = s.canvas.height;
@@ -106,10 +121,7 @@ export function drawResultsOverview() {
   ctx.drawImage(s.canvas, 0, 0);
   ctx.scale(dpr, dpr);
 
-  const markerX =
-    totals.length > 1
-      ? PAD + (state.timeIndex / (totals.length - 1)) * (w - 2 * PAD)
-      : w / 2;
+  const markerX = timeToX(state.timeIndex, totals.length, w, inset);
   ctx.strokeStyle = CURRENT_TIME_COLOR;
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -134,6 +146,8 @@ export function scheduleOverviewDraw() {
 export function seekFromOverview(e) {
   if (!state.data) return;
   const rect = e.currentTarget.getBoundingClientRect();
-  const fraction = (e.clientX - rect.left) / rect.width;
+  const inset = thumbInset();
+  const span = rect.width - 2 * inset;
+  const fraction = span > 0 ? (e.clientX - rect.left - inset) / span : 0.5;
   setTimeIndex(Math.round(fraction * (state.data.nTimes - 1)));
 }
