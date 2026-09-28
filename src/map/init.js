@@ -1,17 +1,18 @@
 // ====================================================================
 // App bootstrap: create the map, bind map + DOM event listeners.
 // ====================================================================
-import { state, setMap } from "../state.js";
-import { GAGE_LAYER } from "../config.js";
+import { state, forcingState, setMap } from "../state.js";
+import { GAGE_LAYER, FORCING_LAYER } from "../config.js";
 import { updateIncomingStyle } from "./basemap-style.js";
 import {
   applyResultsPaint,
+  invalidateResultsView,
   scheduleFeatureStateUpdate,
   scheduleTilePaint,
   syncPaintToDataset,
 } from "./paint.js";
 import {
-  onDivideClick,
+  onCatchmentClick,
   onFlowpathHover,
   onFlowpathLeave,
   onFlowpathClick,
@@ -42,12 +43,15 @@ import { setupHydrograph, closeHydrograph } from "../ui/hydrograph.js";
 import { togglePlay, stepForward, stepBackward } from "../ui/playback.js";
 import { setupSimPanel, scheduleSimRebuild, stopSimForDataset } from "../sim/network.js";
 import { setupBrush } from "../sim/brush.js";
+import { forcingTileLoaded, invalidateForcingView } from "../forcing/paint.js";
+import { setupForcingPanel, onForcingHover, onForcingLeave } from "../ui/forcingpanel.js";
+import { setupForcingPlot } from "../ui/forcingplot.js";
+import { setupContextMenu } from "../ui/contextmenu.js";
 
 
 // maplibregl and pmtiles are globals provided by CDN <script>s in index.html.
 
-// Persistent "a camera move is in progress" gate for the idle handler. Unlike
-// state.viewDirty (which updateFeatureStates consumes on its next query) this
+// Persistent "a camera move is in progress" gate for the idle handler. It
 // stays set for the whole gesture, so idle reliably fires one settle-time
 // requery — and it lets idle skip the idles that setFeatureState itself emits.
 let cameraMoved = false;
@@ -100,14 +104,11 @@ export function init() {
   map.addControl(new CatchmentControl());
   map.addControl(new GageControl());
 
-  // Upstream highlight on divide click.
-  map.on("click", "divides", onDivideClick);
-  map.on("mouseenter", "divides", () => {
-    map.getCanvas().style.cursor = "pointer";
-  });
-  map.on("mouseleave", "divides", () => {
-    map.getCanvas().style.cursor = "";
-  });
+  // Catchment click -> forcing plot; the forcing hover readout. The upstream
+  // highlight moved to the right-click menu (ui/contextmenu.js).
+  map.on("click", FORCING_LAYER, onCatchmentClick);
+  map.on("mousemove", FORCING_LAYER, onForcingHover);
+  map.on("mouseleave", FORCING_LAYER, onForcingLeave);
 
   // Flowpath hover tooltip + click info panel (bound to the fat overlay).
   map.on("mousemove", "flowpaths-hover", onFlowpathHover);
@@ -119,18 +120,17 @@ export function init() {
   map.on("mousemove", GAGE_LAYER, onGageHover);
   map.on("mouseleave", GAGE_LAYER, onGageLeave);
 
-  // A camera move only marks cameraMoved; the full-viewport requery is
-  // deferred to idle (via state.viewDirty) so it happens once when the pan
-  // settles, not on every frame mid-pan.
+  // A camera move only marks cameraMoved; the full-viewport requery of each
+  // painter is deferred to idle so it happens once when the pan settles, not
+  // on every frame mid-pan.
   map.on("movestart", () => {
     cameraMoved = true;
   });
   map.on("idle", () => {
-    if (state.data && cameraMoved) {
-      cameraMoved = false;
-      state.viewDirty = true;
-      scheduleFeatureStateUpdate();
-    }
+    if (!cameraMoved) return;
+    cameraMoved = false;
+    if (state.data) invalidateResultsView();
+    if (forcingState.run) invalidateForcingView();
   });
   // Paint each flowpaths tile the moment it finishes loading, so reaches light
   // up as they stream in mid-pan instead of only once the pan stops. Bounded
@@ -139,6 +139,10 @@ export function init() {
   map.on("resize", invalidateCanvasBox);
 
   map.on("sourcedata", (e) => {
+    if (e.sourceId === "divides" && e.tile && forcingState.run) {
+      forcingTileLoaded(e.tile.tileID);
+      return;
+    }
     if (e.sourceId !== "flowpaths" || !e.tile) return;
     if (state.data) scheduleTilePaint(e.tile.tileID);
     // The live sim routes over every loaded tile, so new tiles mean a rebuild.
@@ -159,6 +163,9 @@ export function init() {
   setupS3Browser();
   setupUploadPanel();
   setupHydrograph();
+  setupForcingPanel();
+  setupForcingPlot();
+  setupContextMenu();
   setupSimPanel();
   setupBrush();
 }

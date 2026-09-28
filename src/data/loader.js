@@ -91,7 +91,7 @@ function settle(w, id, fn) {
 
 function onWorkerDone(w, data) {
   settle(w, data.id, (p) => {
-    if (data.ok) p.resolve({ dataset: data.dataset, bounds: data.bounds });
+    if (data.ok) p.resolve(data.result);
     else p.reject(new Error(data.error));
   });
 }
@@ -105,8 +105,10 @@ function onWorkerError(w, err) {
 }
 
 // Run one worker task. `message` is cloned with an id attached; `transfer`
-// lists ArrayBuffers to hand off.
-function runTask(message, transfer = []) {
+// lists ArrayBuffers to hand off. Resolves with the task's result (see the
+// protocol in workers/parse.worker.js). Exported for the forcing loader,
+// which shares this pool.
+export function runTask(message, transfer = []) {
   return new Promise((resolve, reject) => {
     const id = nextId++;
     pending.set(id, { resolve, reject });

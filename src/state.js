@@ -33,16 +33,27 @@ export const state = {
   originalPaint: null, // flowpaths paint to restore on clear
   hoveredId: null,
   lastClickedDivide: null,
-  // Set by the map event handlers when the rendered set of reaches may have
-  // changed (camera moved or a tile streamed in). updateFeatureStates() reads
-  // this to decide whether it must re-run queryRenderedFeatures or can reuse
-  // its cached on-screen ids (e.g. on a bare timestep change during playback).
-  viewDirty: false,
   // Live routing sim (src/sim/). While simActive the sim owns the flowpaths
   // paint and feature-state instead of a loaded run; while brushActive, left
   // clicks on the map deposit water rather than select things.
   simActive: false,
   brushActive: false,
+};
+
+// Forcings (src/forcing/). Independent of state.data: a t-route run can sit
+// on the flowpaths while forcings are painted on the catchments.
+export const forcingState = {
+  // Where rows come from: one entry per forcing file, keyed by VPU id for an
+  // S3 cycle (url sources) or by a local key for dropped files. Each is
+  // { key, vpu, label, source: { url } | { file }, layout, rowOf, loaded }
+  // with layout/rowOf/loaded filled in once the file's layout is known.
+  files: new Map(),
+  sourceLabel: null, // the cycle path or the dropped file names
+  run: null, // the ForcingRun (forcing/store.js) once any rows have loaded
+  variable: null,
+  scale: "linear",
+  timeIndex: 0,
+  busy: false,
 };
 
 // The MapLibre map instance. It's created asynchronously in map/init.js;

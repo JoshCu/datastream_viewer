@@ -16,7 +16,14 @@ velocity / depth on the hydrofabric flowpaths over time.
 - **Color scales** — linear, log, sqrt, cbrt, symlog, plus quantile / quantile-class
   / Jenks natural-breaks classifications.
 - **Inspection** — hover tooltip, per-reach click panel, a basin-total
-  sparkline, and click-to-highlight upstream catchments.
+  sparkline, and a right-click menu (forcings, hydrograph, highlight upstream
+  catchments).
+- **Forcings** — pick an ngen forcing cycle from S3 (or drop forcing `.nc`
+  files) and paint any forcing variable on the catchments over time. Nothing is
+  downloaded whole: the file layout is read in-browser and only the rows for
+  the catchments in view ("Load viewport"), a whole VPU ("Load VPU") or a
+  clicked catchment are fetched with HTTP range requests, then cached. Clicking
+  a catchment plots all its forcing variables.
 - **Hydrograph** — clicking a reach or USGS gage opens a D3 hydrograph of that
   reach from every loaded run (each uploaded file plus the latest S3 load),
   with the gage's observed discharge when there is one. Toggle/isolate lines
@@ -73,7 +80,8 @@ src/
     basemap-style.js          merges the hydrofabric layers into the base style
     init.js                   creates the map, binds map + DOM event listeners
     paint.js                  results paint expression + per-reach feature-state
-    interactions.js           hover tooltip, click info, upstream highlight
+    statepainter.js           on-screen feature-state painter (reaches + catchments)
+    interactions.js           hover tooltip, click info, catchment click, upstream highlight
   color/
     scales.js                 continuous transforms (log, sqrt, symlog, …)
     breaks.js                 quantile / Jenks class breaks
@@ -89,8 +97,10 @@ src/
     diff.js                   A − B diff of two loaded runs
     loader.js                 load orchestration + the parse/merge worker pool
     workers/
-      parse.worker.js         module worker hosting the parsers + merge
+      parse.worker.js         module worker hosting the parsers, merge + forcing fetches
       merge.js                mergeDatasets + bounds (worker-side, pure)
+      hdf5layout.js           async HDF5 layout reader for forcing files (pure)
+      forcing.js              forcing row fetch/decode over range requests (pure)
       parsers/
         netcdf.js             NetCDF4/HDF5 parser (worker-side, pure)
         parquet.js            Parquet parser (worker-side, pure)
@@ -103,6 +113,15 @@ src/
     infopanel.js              reach click info panel
     gagepanel.js              gage click info panel (USGS station details)
     hydrograph.js             D3 hydrograph dock: runs vs obs, zoom, metrics
+    forcingpanel.js           forcings sidebar panel: source, load buttons, controls
+    forcingplot.js            per-catchment forcing small multiples (dock)
+    contextmenu.js            map right-click menu
+  forcing/
+    store.js                  sparse, growable catchment store + change events
+    layout.js                 per-file layout scan + IndexedDB cache
+    loader.js                 load planning/orchestration (viewport, VPU, catchment)
+    viewport.js               VPUs and catchments in view
+    paint.js                  catchment fill expression + feature-state, forcing clock
   sim/
     network.js                live routing: reach collection, step loop, paint + panel
     sim.worker.js             owns the wasm Network; steps it off the main thread

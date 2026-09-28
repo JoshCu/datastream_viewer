@@ -133,6 +133,9 @@ export function setupHydrograph() {
   buildSkeleton();
 
   $("hydro-close").addEventListener("click", closeHydrograph);
+  document.addEventListener("dockopen", (e) => {
+    if (e.detail !== "hydro" && view.target) closeHydrograph();
+  });
   $("hydro-fullscreen").addEventListener("click", () => setFullscreen(!isFullscreen()));
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && isFullscreen()) setFullscreen(false);
@@ -241,6 +244,8 @@ function buildSkeleton() {
 // Chart `reachId` from every loaded run; `site` (USGS site number, or null)
 // adds the gage's observed discharge and the vs-observed skill table.
 export function openHydrograph({ reachId, site = null }) {
+  // The forcing plot shares the dock's spot; it closes itself on this.
+  document.dispatchEvent(new CustomEvent("dockopen", { detail: "hydro" }));
   view.target = { reachId, site };
   view.variable = site ? "flow" : state.variable;
   view.hidden.clear();

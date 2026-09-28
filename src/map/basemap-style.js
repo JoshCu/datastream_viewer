@@ -2,7 +2,13 @@
 // Hydrofabric style merge — inlined copy of map_app/map_layers.js so this
 // viewer paints the same base.json layers (flowpaths, divides, gages).
 // ====================================================================
-import { HIDDEN_FILTER } from "../config.js";
+import {
+  HIDDEN_FILTER,
+  FORCING_LAYER,
+  VPU_LAYER,
+  FORCING_FILL_OPACITY,
+  NO_DATA_COLOR,
+} from "../config.js";
 
 export function updateIncomingStyle(previousStyle, nextStyle) {
   const s3_url = "https://communityhydrofabric.s3.us-east-1.amazonaws.com/map/";
@@ -26,6 +32,11 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         type: "raster-dem",
         url: "https://tiles.mapterhorn.com/tilejson.json",
       },
+      // VPU polygons (vpuid "01".."18"): which forcing file covers the view.
+      vpus: {
+        type: "vector",
+        url: "pmtiles://" + s3_url + "vpu.pmtiles",
+      },
       gages: {
         type: "vector",
         url: "pmtiles://" + s3_url + "pmtiles/gages.pmtiles",
@@ -36,6 +47,28 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
 
     },
     layers: [
+      {
+        // Forcing colours on the catchments (src/forcing/paint.js), under the
+        // rivers. Always rendered — transparent until forcings load — so
+        // catchment clicks and viewport queries work with the outlines off.
+        id: FORCING_LAYER,
+        type: "fill",
+        source: "divides",
+        "source-layer": "divides",
+        paint: {
+          "fill-color": NO_DATA_COLOR,
+          "fill-opacity": FORCING_FILL_OPACITY,
+          "fill-antialias": false,
+        },
+      },
+      {
+        // Invisible, but queryable: which VPUs the view covers.
+        id: VPU_LAYER,
+        type: "fill",
+        source: "vpus",
+        "source-layer": "vpu",
+        paint: { "fill-color": "#000000", "fill-opacity": 0 },
+      },
       {
         id: "flowpaths",
         type: "line",
@@ -114,6 +147,15 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
           "fill-outline-color": "rgba(0, 255, 136, 0.6)",
         },
         filter: HIDDEN_FILTER,
+      },
+      {
+        // Outline of the catchment shown in the forcing plot.
+        id: "forcing-selected",
+        type: "line",
+        source: "divides",
+        "source-layer": "divides",
+        filter: HIDDEN_FILTER,
+        paint: { "line-color": "#00d4ff", "line-width": 2.5 },
       },
       {
         id: "hills",

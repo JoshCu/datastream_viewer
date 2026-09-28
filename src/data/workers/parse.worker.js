@@ -9,14 +9,20 @@
 //   in  { id, type: "parse", url }
 //   in  { id, type: "parseLocal", buffer, filename }
 //   in  { id, type: "merge", datasets }
-//   out { id, ok: true,  dataset, bounds }
+//     -> result { dataset, bounds }
+//   in  { id, type: "forcingLayout", source }
+//     -> result { ids, variables, skipped, stats }        (data/workers/forcing.js)
+//   in  { id, type: "forcingRows", source, variables, rows, withTime }
+//     -> result { rows, nTimes, blocks, time, stats }
+//   out { id, ok: true,  result }
 //   out { id, ok: false, error }
-// Matrix buffers (one per VARIABLE_KEYS entry) are transferred, not copied.
+// Matrix buffers are transferred, not copied.
 // ====================================================================
 import { VARIABLE_KEYS } from "../../config.js";
 import { parseNetCDF, parseNetCDFBuffer } from "./parsers/netcdf.js";
 import { parseParquet, parseParquetBuffer } from "./parsers/parquet.js";
 import { mergeDatasets, computeAllBounds } from "./merge.js";
+import { scanForcingLayout, fetchForcingRows } from "./forcing.js";
 
 let hdf5Promise = null;
 let parquetWasmPromise = null;
@@ -90,6 +96,16 @@ self.onmessage = async (e) => {
     return;
   }
   try {
+    if (type === "forcingLayout") {
+      self.postMessage({ id, ok: true, result: await scanForcingLayout(e.data.source) });
+      return;
+    }
+    if (type === "forcingRows") {
+      const result = await fetchForcingRows(e.data);
+      const transfer = Object.values(result.blocks).map((b) => b.buffer);
+      self.postMessage({ id, ok: true, result }, transfer);
+      return;
+    }
     let dataset;
     if (type === "parse") {
       dataset = await parse(e.data.url);
@@ -101,7 +117,7 @@ self.onmessage = async (e) => {
       throw new Error(`Unknown worker message type: ${type}`);
     }
     const bounds = computeAllBounds(dataset);
-    self.postMessage({ id, ok: true, dataset, bounds }, transferListOf(dataset));
+    self.postMessage({ id, ok: true, result: { dataset, bounds } }, transferListOf(dataset));
   } catch (error) {
     self.postMessage({ id, ok: false, error: error.message });
   }

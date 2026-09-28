@@ -42,33 +42,35 @@ function listBases(bucket) {
 
 let shardCounter = 0;
 
-// Next listing base in the round-robin for the current bucket.
-function nextListBase() {
-  const bases = listBases(s3State.currentBucket);
+// Next listing base in the round-robin for `bucket`.
+function nextListBase(bucket) {
+  const bases = listBases(bucket);
   return bases[shardCounter++ % bases.length];
 }
 
 // GET a ListBucketResult and parse it. Both listings went through their own
 // copy of this, and neither checked response.ok — so an S3 error page was
 // parsed as XML and surfaced as "0 folders" rather than as an error.
-async function listXml(prefix, extraParams = "") {
-  const url = `${nextListBase()}/?list-type=2&prefix=${encodeURIComponent(prefix)}${extraParams}`;
+async function listXml(prefix, extraParams = "", bucket = s3State.currentBucket) {
+  const url = `${nextListBase(bucket)}/?list-type=2&prefix=${encodeURIComponent(prefix)}${extraParams}`;
   const response = await fetch(url);
   if (!response.ok) throw new Error(`S3 listing failed: ${response.status}`);
   const text = await response.text();
   return new DOMParser().parseFromString(text, "text/xml");
 }
 
-// List the "folders" (CommonPrefixes) directly under a prefix.
-export async function fetchS3Folders(prefix) {
-  const xml = await listXml(prefix, "&delimiter=/");
-
-  const prefixes = xml.querySelectorAll("CommonPrefixes > Prefix");
-  const folders = Array.from(prefixes).map((p) => {
+function foldersOf(xml) {
+  return Array.from(xml.querySelectorAll("CommonPrefixes > Prefix")).map((p) => {
     const fullPath = p.textContent;
     const parts = fullPath.replace(/\/$/, "").split("/");
     return { name: parts[parts.length - 1], path: fullPath, type: "folder" };
   });
+}
+
+// List the "folders" (CommonPrefixes) directly under a prefix.
+export async function fetchS3Folders(prefix, bucket = s3State.currentBucket) {
+  const xml = await listXml(prefix, "&delimiter=/", bucket);
+  const folders = foldersOf(xml);
 
   // The ngen.YYYYMMDD date folders directly under a hydrofabric folder come
   // back oldest-first (lexicographic); reverse so the most recent run is at
@@ -92,4 +94,17 @@ export async function listTrouteFileUrls(vpuPath) {
     .map((k) => k.textContent)
     .filter((f) => f.endsWith(".nc") || f.endsWith(".parquet"))
     .map((f) => `${base}/${f}`);
+}
+
+// One level of `bucket` under `prefix`: its folders plus the files directly
+// in it, each file with its download URL.
+export async function listS3Level(prefix, bucket) {
+  const xml = await listXml(prefix, "&delimiter=/", bucket);
+  const base = objectBase(bucket);
+  const files = Array.from(xml.querySelectorAll("Contents > Key")).map((k) => ({
+    name: k.textContent.split("/").pop(),
+    key: k.textContent,
+    url: `${base}/${k.textContent}`,
+  }));
+  return { folders: foldersOf(xml), files };
 }

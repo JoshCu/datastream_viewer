@@ -159,3 +159,59 @@ export const SIM_CHANNEL_BY_ORDER = [
   { bw: 26, tw: 70, cs: 0.15, n: 0.04 },
   { bw: 110, tw: 250, cs: 0.12, n: 0.04 }, // order 10+
 ];
+
+// ---- Forcings (src/forcing/) -----------------------------------------
+//
+// ngen forcing files hold one (catchment × time) float64 matrix per
+// variable, painted on the catchment polygons. Rows are fetched on demand
+// with HTTP Range requests (see data/workers/forcing.js).
+export const FORCING_BUCKET = "ciroh-community-ngen-datastream";
+export const FORCING_ROOT = "forcings/";
+export const FORCING_TIME_VAR = "Time"; // per-catchment epoch seconds, (ncat, nt)
+export const DIVIDE_FEATURE = { source: "divides", sourceLayer: "divides" };
+// Fill over the catchments carrying the forcing colours. Always rendered
+// (transparent until a run loads) so clicks and viewport queries hit it
+// whether or not the catchment outlines are toggled on.
+export const FORCING_LAYER = "forcing-divides";
+// Invisible VPU polygons: which forcing file(s) cover the view.
+export const VPU_LAYER = "forcing-vpus";
+export const FORCING_FILL_OPACITY = 0.75;
+// What one extra range request is worth in transferred bytes, when deciding
+// whether to merge nearby rows into one request (data/workers/forcing.js).
+export const FORCING_REQUEST_COST_BYTES = 64 * 1024;
+// When a scattered fetch would move at least this fraction of the bytes of
+// fetching every remaining row, fetch the whole variable blocks instead.
+export const FORCING_WHOLE_FILE_FRACTION = 0.6;
+// Loads estimated above either of these ask first.
+export const FORCING_CONFIRM_BYTES = 300 * 1024 * 1024;
+export const FORCING_CONFIRM_REQUESTS = 4000;
+export const FORCING_FETCH_CONCURRENCY = 24;
+
+// Display metadata per forcing variable, in panel order. Values stay in the
+// file's units in memory and on the map; `scale`/`offset` convert them for
+// display only (shown = raw * scale + offset), so colour ramps are unchanged.
+// Variables not listed here still load, under their raw name.
+export const FORCING_VARIABLES = {
+  precip_rate: { label: "Precip rate", units: "mm/h", scale: 3600, bars: true },
+  // A rate in the datastream files, identical to precip_rate (kg m⁻² s⁻¹),
+  // not the hourly accumulation the GRIB name suggests.
+  APCP_surface: { label: "APCP", units: "mm/h", scale: 3600, bars: true },
+  TMP_2maboveground: { label: "Temperature", units: "°C", offset: -273.15 },
+  SPFH_2maboveground: { label: "Specific humidity", units: "g/kg", scale: 1000 },
+  PRES_surface: { label: "Pressure", units: "kPa", scale: 0.001 },
+  DSWRF_surface: { label: "Shortwave down", units: "W/m²" },
+  DLWRF_surface: { label: "Longwave down", units: "W/m²" },
+  UGRD_10maboveground: { label: "Wind U", units: "m/s" },
+  VGRD_10maboveground: { label: "Wind V", units: "m/s" },
+};
+
+export function forcingMeta(name) {
+  const m = FORCING_VARIABLES[name];
+  return {
+    label: m?.label ?? name,
+    units: m?.units ?? "",
+    scale: m?.scale ?? 1,
+    offset: m?.offset ?? 0,
+    bars: !!m?.bars,
+  };
+}

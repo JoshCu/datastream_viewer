@@ -1,6 +1,6 @@
 // ====================================================================
 // Map feature interactions: flowpath hover tooltip, click info panel,
-// divide click -> upstream highlight.
+// catchment click -> forcing plot, upstream highlight.
 // ====================================================================
 import { state, map } from "../state.js";
 import {
@@ -17,6 +17,8 @@ import { siteFromGageFeature } from "./gages.js";
 import { iconButton, labeledRow, fmtDay } from "../ui/dom.js";
 import { showFeatureInfo } from "../ui/infopanel.js";
 import { showGageInfo } from "../ui/gagepanel.js";
+import { openForcingPlot } from "../ui/forcingplot.js";
+import { hasForcingSource } from "../forcing/loader.js";
 // maplibregl is a global provided by the CDN <script> in index.html.
 
 
@@ -54,14 +56,27 @@ export class HillshadeControl {
 }
 
 // Catchment toggle: the divide outlines plus the selected/upstream highlight
-// layers, hidden by default. Hidden layers don't take clicks, so the upstream
-// highlight is only selectable while catchments are shown.
+// layers, hidden by default. Choosing "Highlight upstream" from the context
+// menu turns them on (setCatchmentsVisible), since the highlight is drawn by
+// those layers.
 const CATCHMENT_LAYERS = ["divides", "selected-divides", "upstream-divides"];
+let catchmentsVisible = false;
+let catchmentButton = null;
+
+export function setCatchmentsVisible(visible) {
+  catchmentsVisible = visible;
+  for (const layer of CATCHMENT_LAYERS) {
+    if (!map.getLayer(layer)) continue;
+    map.setLayoutProperty(layer, "visibility", visible ? "visible" : "none");
+  }
+  if (catchmentButton) {
+    catchmentButton.classList.toggle("active", visible);
+    catchmentButton.title = visible ? "Hide catchments" : "Show catchments";
+  }
+}
 
 export class CatchmentControl {
-  onAdd(map) {
-    this._map = map;
-    this._visible = false;
+  onAdd() {
     this._container = document.createElement("div");
     this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
     // Irregular polygon: a catchment outline.
@@ -70,25 +85,14 @@ export class CatchmentControl {
       "Show catchments",
       "M4,8,10,4l8,3,2,8-7,5L5,17Z",
     );
-    this._button.onclick = () => {
-      this._visible = !this._visible;
-      for (const layer of CATCHMENT_LAYERS) {
-        if (!this._map.getLayer(layer)) continue;
-        this._map.setLayoutProperty(
-          layer,
-          "visibility",
-          this._visible ? "visible" : "none",
-        );
-      }
-      this._button.classList.toggle("active", this._visible);
-      this._button.title = this._visible ? "Hide catchments" : "Show catchments";
-    };
+    this._button.onclick = () => setCatchmentsVisible(!catchmentsVisible);
+    catchmentButton = this._button;
     this._container.appendChild(this._button);
     return this._container;
   }
   onRemove() {
     this._container.remove();
-    this._map = undefined;
+    catchmentButton = null;
   }
 }
 
@@ -352,7 +356,23 @@ export function onGageClick(e) {
   showGageInfo(e.features[0]);
 }
 
-// ---- Upstream highlight (divide click) -----------------------------
+// ---- Catchment click -> forcing plot ---------------------------------
+
+// Left click on a catchment opens its forcings. A reach under the cursor
+// (with a run loaded, so the reach click does something) or a gage keeps the
+// click; the context menu offers the catchment's forcings there instead.
+export function onCatchmentClick(e) {
+  if (state.brushActive || !e.features?.length || clickHitsGage(e)) return;
+  if (state.data && reachAt(e.point)) return;
+  if (!hasForcingSource()) return;
+  openForcingPlot(e.features[0].id, e.point);
+}
+
+export function reachAt(point) {
+  return map.queryRenderedFeatures(point, { layers: ["flowpaths-hover"] })[0] ?? null;
+}
+
+// ---- Upstream highlight ------------------------------------------------
 
 export function clearUpstreamHighlight() {
   state.lastClickedDivide = null;
@@ -360,23 +380,23 @@ export function clearUpstreamHighlight() {
   map.setFilter("upstream-divides", HIDDEN_FILTER);
 }
 
-export function onDivideClick(e) {
-  // With the live-routing brush on, a click deposits water instead.
-  if (state.brushActive || !e.features?.length || clickHitsGage(e)) return;
-  const divide = e.features[0];
+export function isUpstreamHighlighted(divide) {
+  return state.lastClickedDivide?.upstreamId === divide.properties.upstream_id;
+}
+
+// Highlight `divide` (a divides-source feature) and everything upstream of
+// it; the same catchment again clears the highlight.
+export function toggleUpstreamHighlight(divide, lngLat) {
   const upstreamId = divide.properties.upstream_id;
   const numUpstreams = divide.properties.num_upstreams;
 
-  // Clicking the already-selected catchment toggles the highlight off.
-  if (
-    state.lastClickedDivide &&
-    state.lastClickedDivide.upstreamId === upstreamId
-  ) {
+  if (isUpstreamHighlighted(divide)) {
     clearUpstreamHighlight();
     return;
   }
 
-  state.lastClickedDivide = { upstreamId, numUpstreams, lngLat: e.lngLat };
+  state.lastClickedDivide = { upstreamId, numUpstreams, lngLat };
+  setCatchmentsVisible(true);
 
   map.setFilter("selected-divides", ["==", "upstream_id", upstreamId]);
   map.setFilter("upstream-divides", [
@@ -388,7 +408,7 @@ export function onDivideClick(e) {
 
   if (!numUpstreams) {
     new maplibregl.Popup()
-      .setLngLat(e.lngLat)
+      .setLngLat(lngLat)
       .setHTML("No upstreams")
       .addTo(map);
   }

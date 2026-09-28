@@ -68,16 +68,20 @@ The flowpaths line paint expression is set **once per (variable, scale)** in
 `map/paint.js` using expressions from `color/expressions.js`; those expressions
 read `["feature-state", "value"]` (see `RESULT_VALUE` in `config.js`). Changing
 the timestep therefore does **not** touch paint — it only writes new feature-state
-values. `updateFeatureStates()` sets state for **only the reaches currently on
+values. The on-screen bookkeeping lives in **`map/statepainter.js`**
+(`createStatePainter`), which sets state for **only the features currently on
 screen** (`queryRenderedFeatures`), tracks what it has already painted for the
-current `variable:timeIndex` key, and reruns incrementally as
-tiles stream in or the viewport moves (wired in `map/init.js` via `movestart` /
-`idle` / `sourcedata`, rAF-coalesced through `scheduleFeatureStateUpdate`). When
-touching color scales or painting, preserve this: expression = per-variable,
+current `variable:timeIndex` key, and reruns incrementally as tiles stream in
+or the viewport moves (wired in `map/init.js` via `movestart` / `idle` /
+`sourcedata`, rAF-coalesced). `map/paint.js` owns the flowpaths painter
+(`updateFeatureStates` / `scheduleFeatureStateUpdate` are its methods) and
+`forcing/paint.js` owns a second one for the catchments; each painter has its
+own view-dirty flag, so there's no global one in `state.js`. When touching
+color scales or painting, preserve this: expression = per-variable,
 feature-state = per-timestep.
 
-`updateFeatureStates()` tracks a `paintedAll` flag plus a small delta set rather
-than a per-id `Set`: on a bare timestep change every on-screen reach must be
+The painter tracks a `paintedAll` flag plus a small delta set rather than a
+per-id `Set`: on a bare timestep change every on-screen feature must be
 repainted anyway, so a full-size Set whose every lookup misses was pure
 overhead. It also reuses one feature descriptor object across the loop.
 
@@ -93,7 +97,9 @@ which owns them from then on; that is deliberate, because feature-state painting
 reads them synchronously every frame during playback, so a per-frame worker
 round-trip would add latency. `data/loader.js` runs a bounded worker pool: a
 single file is one `parse` task; a CONUS load fans every VPU file across the pool
-then sends the results back in for a `merge` task.
+then sends the results back in for a `merge` task. Every reply carries its
+payload as `result` (the protocol is listed at the top of `parse.worker.js`);
+the forcing loader shares the same pool through the exported `runTask`.
 
 **Worker-side modules** (`data/workers/**`) must stay pure — no DOM, no map, no
 `state.js`. They may import only `config.js`. Parsers receive their CDN library as
@@ -130,6 +136,47 @@ calls `clearData()`, and it subscribes to the active-dataset event (registered
 In the worker, the typed-array views onto wasm memory detach whenever memory
 grows, so go through `liveViews()` rather than caching them. `sim/brush.js` imports
 `network.js`, never the reverse (it listens through `onSimUpdate`).
+
+### Forcings (`src/forcing/`)
+
+Another mode independent of `state.data`: ngen forcing files painted on the
+catchments (the `forcing-divides` fill on the `divides` source), with state in
+`forcingState` (`state.js`). A t-route run and forcings can be on screen at
+once — their feature-state lives on different sources.
+
+- **Nothing is downloaded whole.** Each forcing variable is a contiguous
+  (catchment × time) float64 matrix, so rows are fetched with HTTP Range
+  requests. `data/workers/hdf5layout.js` is a small async HDF5 reader (only the
+  subset these files use; anything else throws "unsupported") that finds each
+  variable's byte offset and the ordered `cat-N` ids in ~10 requests;
+  `forcing/layout.js` caches that per file URL in IndexedDB. Offsets differ
+  per file, even between cycles, so the URL is the only safe key.
+- **Row order is not spatial**, so a viewport's rows are scattered through the
+  file. `planRuns()` in `data/workers/forcing.js` picks the merge gap per
+  request by a cost model (requests × `FORCING_REQUEST_COST_BYTES` + bytes);
+  the main thread runs the same function to estimate a load before it starts,
+  and the panel confirms big ones. Don't swap in a fixed gap.
+- **The store is sparse** (`forcing/store.js`): catchments get a slot as they
+  load and the matrices grow by doubling, with the same
+  `matrix[slot * nTimes + t]` shape as a t-route dataset, so `valueAt`,
+  `seriesAt`, `derived()` and `color/*` work on it unchanged. `index` is keyed
+  by the numeric catchment id (the divides tiles' feature id). Bounds and the
+  derived cache are recomputed after each load batch.
+- **Sources** are `{ url }` (Range fetch; anything but 206 is an error) or
+  `{ file }` (a dropped File, read with `Blob.slice`), so local files go
+  through exactly the same path.
+- `setForcingTimeIndex()` (`forcing/paint.js`) is the only way to seek the
+  forcing clock, which is separate from `setTimeIndex()`'s. Changes are
+  announced through `onForcingChange` (`forcing/store.js`) — panel, plot and
+  paint subscribe; the loader doesn't drive the DOM.
+
+**Clicks:** left-click on a catchment opens the forcing plot
+(`ui/forcingplot.js`) unless a reach (with a run loaded) or a gage is under the
+cursor. The right-click menu (`ui/contextmenu.js`) offers forcings, the
+hydrograph and the upstream highlight; it only opens for a right click that
+didn't drag, since right-drag rotates the map. The forcing plot and the
+hydrograph share the dock's spot and close each other via a `dockopen`
+document event.
 
 ### Changing the timestep, and the active dataset
 

@@ -240,6 +240,128 @@
             </div>
           </div>
 
+          <!-- Forcings (src/forcing/, src/ui/forcingpanel.js): ngen forcing
+               files painted on the catchments, fetched on demand with range
+               requests from an S3 cycle or read from dropped files. -->
+          <div class="panel collapsed" id="forcingPanel" data-url-key="forcing">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25" />
+                <line x1="8" y1="16" x2="8" y2="20" />
+                <line x1="12" y1="18" x2="12" y2="22" />
+                <line x1="16" y1="16" x2="16" y2="20" />
+              </svg>
+              Forcings
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <div class="latest-section">
+                <span class="latest-label">Latest cycle</span>
+                <div class="latest-btns">
+                  <button class="btn secondary latest-btn" data-forcing-latest="short_range">Short</button>
+                  <button class="btn secondary latest-btn" data-forcing-latest="medium_range">Medium</button>
+                  <button class="btn secondary latest-btn" data-forcing-latest="analysis_assim_extend">
+                    AnA ext
+                  </button>
+                </div>
+              </div>
+
+              <div class="breadcrumb" id="forcingBreadcrumb"></div>
+              <div class="folder-list" id="forcingFolderList">
+                <div class="folder-empty">Open the panel to browse forcings</div>
+              </div>
+
+              <div class="upload-zone forcing-drop" id="forcingDrop">
+                <div class="upload-zone-title">Drop forcing .nc files</div>
+                <div class="upload-zone-subtitle">or <span>browse files</span></div>
+              </div>
+              <input type="file" id="forcingFileInput" accept=".nc,.nc4,.h5,.hdf5" multiple style="display: none" />
+
+              <div class="forcing-source" id="forcingSource">No forcing source selected</div>
+
+              <div class="forcing-actions">
+                <button class="btn" id="forcingViewportBtn" disabled
+                        title="Fetch the catchments currently on screen">Load viewport</button>
+                <button class="btn secondary" id="forcingVpuBtn" disabled
+                        title="Fetch the whole forcing file of every VPU in view">Load VPU</button>
+                <button class="btn secondary" id="forcingClearBtn" disabled title="Drop the forcing source">
+                  Clear
+                </button>
+              </div>
+
+              <div class="status" id="forcingStatus">
+                <span class="status-dot" id="forcingStatusDot"></span>
+                <span id="forcingStatusText">Idle</span>
+              </div>
+
+              <div id="forcingControls" style="display: none">
+                <div class="scale-select-wrap">
+                  <label class="scale-label" for="forcingVarSelect">Variable</label>
+                  <select id="forcingVarSelect" class="select scale-select"></select>
+                </div>
+                <div class="scale-select-wrap">
+                  <label class="scale-label" for="forcingScaleSelect">Color scale</label>
+                  <select id="forcingScaleSelect" class="select scale-select">
+                    <option value="linear">Linear</option>
+                    <option value="log">Log</option>
+                    <option value="sqrt">Square root (√)</option>
+                    <option value="cbrt">Cube root (∛)</option>
+                    <option value="symlog">Symlog</option>
+                    <option value="quantile">Quantile (rank)</option>
+                    <option value="quantile-classes">Quantile classes</option>
+                    <option value="jenks">Natural breaks (Jenks)</option>
+                  </select>
+                </div>
+                <div class="legend">
+                  <div class="legend-title" id="forcingLegendTitle">-</div>
+                  <div class="legend-gradient" id="forcingLegendGradient"></div>
+                  <div class="legend-labels">
+                    <span id="forcingLegendMin">0</span>
+                    <span id="forcingLegendMax">1</span>
+                  </div>
+                </div>
+
+                <div class="time-control">
+                  <div class="time-display">
+                    <span class="time-label">Forcing time</span>
+                    <span class="time-value" id="forcingTime">-</span>
+                  </div>
+                  <input type="range" id="forcingTimeSlider" min="0" max="0" value="0" />
+                </div>
+                <div class="play-controls">
+                  <button class="play-btn" id="forcingPlayBtn" title="Play">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                  </button>
+                  <button class="play-btn" id="forcingStepBackBtn" title="Previous step">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="19 20 9 12 19 4 19 20" fill="currentColor" />
+                      <line x1="5" y1="19" x2="5" y2="5" />
+                    </svg>
+                  </button>
+                  <button class="play-btn" id="forcingStepFwdBtn" title="Next step">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="5 4 15 12 5 20 5 4" fill="currentColor" />
+                      <line x1="19" y1="5" x2="19" y2="19" />
+                    </svg>
+                  </button>
+                </div>
+                <p class="info-text forcing-hover" id="forcingHover">Hover a catchment to read its value.</p>
+              </div>
+
+              <p class="info-text">
+                Pick a forcing cycle (or drop forcing files), then load the catchments in view or
+                whole VPU files. Click a catchment to plot its forcings; right-click for more.
+              </p>
+            </div>
+          </div>
+
           <!-- Live routing sim (src/sim/): Muskingum-Cunge in wasm over the
                reaches on screen, fed by a lateral-inflow brush. -->
           <div class="panel collapsed" id="simPanel" data-url-key="sim">
@@ -567,6 +689,22 @@
                 <table class="hydro-metrics hydro-kv" id="hydro-compare-table"></table>
               </div>
             </aside>
+          </div>
+        </section>
+        <!-- Forcing plot dock: every forcing variable of the clicked
+             catchment. Filled in by src/ui/forcingplot.js. -->
+        <section class="hydro-dock forcing-dock" id="forcing-dock" aria-label="Forcings">
+          <header class="hydro-header">
+            <div class="hydro-titles">
+              <span class="hydro-title" id="forcing-title">--</span>
+              <span class="hydro-subtitle" id="forcing-subtitle"></span>
+            </div>
+            <span class="hydro-status" id="forcing-plot-status"></span>
+            <button class="close-btn" id="forcing-close" aria-label="Close forcings">×</button>
+          </header>
+          <div class="forcing-body">
+            <div class="forcing-grid" id="forcing-grid"></div>
+            <div class="hydro-empty" id="forcing-empty"></div>
           </div>
         </section>
       </main>
