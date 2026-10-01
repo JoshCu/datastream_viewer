@@ -183,8 +183,10 @@ document event.
 A third independent mode: Level II volume scans from the public
 `unidata-nexrad-level2` bucket, one per chosen station (`nexradState.radars`),
 each drawn as a deck.gl `PointCloudLayer` in one
-`MapboxOverlay` (deck.gl is injected from unpkg on first use — it's not in
-`index.html`). `source.js` downloads the file and splits it into LDM records
+`MapboxOverlay` (deck.gl is imported as ES modules from esm.sh on first use —
+it's not in `index.html` — and runs on WebGPU when `requestAdapter()` succeeds,
+WebGL2 otherwise; the UMD bundle can't be used because its `window.luma` lacks
+the classes `@luma.gl/webgpu` extends). `source.js` downloads the file and splits it into LDM records
 on the main thread (`splitRecords`), then fans byte-balanced batches across the
 shared parse pool (`runTask({ type: "nexrad" })`); `data/workers/nexrad.js` +
 `bzip2.js` decode them into per-cut x/y (metres from the radar) / z (metres

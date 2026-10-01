@@ -2,7 +2,8 @@
 // The NEXRAD point clouds: one deck.gl PointCloudLayer per radar in a
 // MapboxOverlay.
 //
-// deck.gl is only fetched the first time a scan is shown. Gate positions are
+// deck.gl is only fetched the first time a scan is shown, and renders on
+// WebGPU where available, WebGL2 otherwise. Gate positions are
 // metres east/north of the radar (METER_OFFSETS around the site), z metres
 // above sea level; vertical exaggeration is a model-matrix scale on z, so
 // changing it doesn't rebuild anything. A radar's display arrays are rebuilt
@@ -11,22 +12,46 @@
 import { map, nexradState } from "../state.js";
 import { PRODUCTS, LUT_SIZE, colorLut } from "./products.js";
 
-const DECK_URL = "https://unpkg.com/deck.gl@9.4.0/dist.min.js";
+// ES modules rather than deck.gl's UMD bundle: the UMD's `window.luma` only
+// carries a subset of @luma.gl/core, which the WebGPU adapter can't extend.
+// esm.sh resolves every package's @luma.gl/core range to the same module, so
+// deck and both adapters share one luma instance.
+const ESM = "https://esm.sh";
+const DECK_VERSION = "9.4.0";
+const LUMA_VERSION = "9.4.2";
 
 let deckPromise = null;
 let overlay = null;
 
+// WebGPU when the browser can actually hand out an adapter (navigator.gpu can
+// exist with none, e.g. blocklisted GPUs), WebGL2 otherwise. The overlay draws
+// on its own canvas (not interleaved), so it doesn't need MapLibre's context.
+async function deviceProps() {
+  const { webgl2Adapter } = await import(`${ESM}/@luma.gl/webgl@${LUMA_VERSION}`);
+  const gpu = await navigator.gpu?.requestAdapter().catch(() => null);
+  if (!gpu) return { type: "webgl", adapters: [webgl2Adapter] };
+  const { webgpuAdapter } = await import(`${ESM}/@luma.gl/webgpu@${LUMA_VERSION}`);
+  return { type: "webgpu", adapters: [webgpuAdapter, webgl2Adapter] };
+}
+
 function loadDeck() {
-  deckPromise ??= new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = DECK_URL;
-    script.onload = () => resolve(window.deck);
-    script.onerror = () => {
+  deckPromise ??= Promise.all([
+    import(`${ESM}/@deck.gl/core@${DECK_VERSION}`),
+    import(`${ESM}/@deck.gl/layers@${DECK_VERSION}`),
+    import(`${ESM}/@deck.gl/mapbox@${DECK_VERSION}`),
+    deviceProps(),
+  ]).then(
+    ([{ COORDINATE_SYSTEM }, { PointCloudLayer }, { MapboxOverlay }, device]) => ({
+      COORDINATE_SYSTEM,
+      PointCloudLayer,
+      MapboxOverlay,
+      deviceProps: device,
+    }),
+    (err) => {
       deckPromise = null;
-      reject(new Error("Couldn't load deck.gl"));
-    };
-    document.head.append(script);
-  });
+      throw new Error("Couldn't load deck.gl", { cause: err });
+    },
+  );
   return deckPromise;
 }
 
@@ -129,7 +154,12 @@ export async function renderNexrad() {
   }
   const deck = await loadDeck();
   if (!overlay) {
-    overlay = new deck.MapboxOverlay({ interleaved: false, getTooltip: tooltip });
+    overlay = new deck.MapboxOverlay({
+      interleaved: false,
+      deviceProps: deck.deviceProps,
+      getTooltip: tooltip,
+      onDeviceInitialized: (device) => console.info(`NEXRAD: deck.gl on ${device.type}`),
+    });
     map.addControl(overlay);
   }
   // Re-read: a radar can be removed while deck.gl is loading.
