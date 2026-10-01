@@ -191,6 +191,10 @@ MSL) / value columns, and `mergeCuts` joins cuts split across batches and drops
 repeated tilts (split cuts, SAILS). The display arrays are rebuilt only for
 product/threshold/tilt changes; vertical exaggeration is a model-matrix scale,
 so it only re-renders. State is `nexradState` (`state.js`).
+`stations.json` is a static GeoJSON of the sites, imported with
+`with { type: "json" }` so the single-file build inlines it. Its coordinates
+come from each radar's own Level II header rather than HOMR, because the point
+cloud is placed by that header and HOMR is kilometres off for most TDWRs.
 
 ### Changing the timestep, and the active dataset
 

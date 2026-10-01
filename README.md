@@ -28,8 +28,9 @@ velocity / depth on the hydrofabric flowpaths over time.
   NOAA NEXRAD Level II archive (`unidata-nexrad-level2`) and see the whole
   volume scan as a deck.gl point cloud, each gate at its beam height. Choose
   reflectivity / velocity / ZDR / CC, one tilt or all, a minimum value, and the
-  vertical exaggeration, point size and opacity. The file is bzip2-decoded in
-  the worker pool.
+  vertical exaggeration, point size and opacity. Station dots (WSR-88D and
+  TDWR) show on the map while the panel is open; click one to pick it. The file
+  is bzip2-decoded in the worker pool.
 - **Hydrograph** — clicking a reach or USGS gage opens a D3 hydrograph of that
   reach from every loaded run (each uploaded file plus the latest S3 load),
   with the gage's observed discharge when there is one. Toggle/isolate lines
@@ -135,6 +136,8 @@ src/
     source.js                 bucket listings, scan download, worker fan-out + tilt merge
     layer.js                  deck.gl PointCloudLayer overlay (lazy-loads deck.gl)
     products.js               moment labels, ranges, colour ramps
+    sites.js                  station dots/labels, click to pick
+    stations.json             station table (GeoJSON), see its `source` field
   sim/
     network.js                live routing: reach collection, step loop, paint + panel
     sim.worker.js             owns the wasm Network; steps it off the main thread

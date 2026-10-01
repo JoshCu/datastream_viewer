@@ -8,11 +8,13 @@ import { setStatus } from "./panels.js";
 import { PRODUCTS, legendCss } from "../nexrad/products.js";
 import { listStations, listScans, loadVolume } from "../nexrad/source.js";
 import { rebuildNexrad, renderNexrad } from "../nexrad/layer.js";
+import { showSites, styleSites, stationCoords } from "../nexrad/sites.js";
 
 const $ = (id) => document.getElementById(id);
 const STATION_KEY = "nexradStation";
 
 let scans = [];
+let stations = []; // ICAOs with data on the picked date
 let listSeq = 0; // newer listings/loads supersede older ones
 let loadSeq = 0;
 
@@ -50,8 +52,9 @@ async function refreshStations() {
   const seq = ++listSeq;
   status("loading", "Listing stations…");
   try {
-    const stations = await listStations(date);
+    const found = await listStations(date);
     if (seq !== listSeq) return;
+    stations = found;
     const want = $("nexradStation").value || savedStation();
     fillSelect($("nexradStation"), stations.map((s) => [s, s]), "Station…");
     if (stations.includes(want)) $("nexradStation").value = want;
@@ -67,6 +70,7 @@ async function refreshScans() {
   const station = $("nexradStation").value;
   scans = [];
   fillSelect($("nexradScan"), [], "Scan time…");
+  styleSites(stations, station);
   if (!date || !station) return;
   saveStation(station);
   const seq = ++listSeq;
@@ -157,6 +161,16 @@ async function showScan(url) {
   }
 }
 
+// A station dot was clicked.
+function pickStation(id) {
+  if (!stations.includes(id)) {
+    status("error", `No ${id} data on ${$("nexradDate").value}`);
+    return;
+  }
+  $("nexradStation").value = id;
+  refreshScans();
+}
+
 function loadScanAt(i) {
   if (!scans[i]) return;
   $("nexradScan").value = String(i);
@@ -228,19 +242,25 @@ export function setupNexradPanel() {
   $("nexradDate").value = isoDate(Date.now());
   $("nexradDate").max = isoDate(Date.now());
 
-  // List stations the first time the panel is opened (or now, if a shared
-  // link opened it).
+  // Station dots show while the panel is open; stations are listed the
+  // first time it opens (or now, if a shared link opened it).
   let listed = false;
-  const listOnce = () => {
-    if (listed || panel.classList.contains("collapsed")) return;
+  const onToggle = () => {
+    const open = !panel.classList.contains("collapsed");
+    showSites(open, pickStation);
+    if (!open || listed) return;
     listed = true;
     refreshStations();
   };
-  panel.querySelector(".panel-title").addEventListener("click", listOnce);
-  listOnce();
+  panel.querySelector(".panel-title").addEventListener("click", onToggle);
+  onToggle();
 
   $("nexradDate").addEventListener("change", refreshStations);
-  $("nexradStation").addEventListener("change", refreshScans);
+  $("nexradStation").addEventListener("change", (e) => {
+    const at = stationCoords(e.target.value);
+    if (at) map.easeTo({ center: at });
+    refreshScans();
+  });
   $("nexradScan").addEventListener("change", (e) => loadScanAt(Number(e.target.value)));
   $("nexradPrevBtn").addEventListener("click", () => step(-1));
   $("nexradNextBtn").addEventListener("click", () => step(1));

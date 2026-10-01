@@ -6,6 +6,7 @@ import { state, map } from "../state.js";
 import {
   HIDDEN_FILTER,
   GAGE_LAYER,
+  NEXRAD_SITE_LAYER,
   GAGE_FEATURE,
   USGS_FLOW_PARAM,
   VARIABLES,
@@ -154,8 +155,11 @@ export function onFlowpathClick(e) {
 // MapLibre runs every layer's click handler for one click, so the gage
 // handler can't stop the flowpath/divide ones; those layers bail out when a
 // gage dot is under the cursor instead.
+// Gages and NEXRAD station dots own their clicks.
 function clickHitsGage(e) {
-  return map.queryRenderedFeatures(e.point, { layers: [GAGE_LAYER] }).length > 0;
+  const layers = [GAGE_LAYER];
+  if (map.getLayer(NEXRAD_SITE_LAYER)) layers.push(NEXRAD_SITE_LAYER);
+  return map.queryRenderedFeatures(e.point, { layers }).length > 0;
 }
 
 let hoveredGageId = null;
