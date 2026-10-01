@@ -12,7 +12,7 @@ import { map, nexradState } from "../state.js";
 import { setStatus } from "./panels.js";
 import { PRODUCTS, legendCss } from "../nexrad/products.js";
 import { listStations, listScans, loadVolume, forgetStation, SAME_TILT_DEG } from "../nexrad/source.js";
-import { rebuildNexrad, renderNexrad } from "../nexrad/layer.js";
+import { rebuildNexrad, renderNexrad, refadeNexrad } from "../nexrad/layer.js";
 import { showSites, styleSites, stationCoords } from "../nexrad/sites.js";
 
 const $ = (id) => document.getElementById(id);
@@ -534,6 +534,7 @@ export function setupNexradPanel() {
   bindSlider("nexradExaggeration", "exaggeration", (v) => `${v}×`, renderNexrad);
   bindSlider("nexradPointSize", "pointSize", (v) => `${v}px`, renderNexrad);
   bindSlider("nexradOpacity", "opacity", (v) => v.toFixed(2), renderNexrad);
+  bindSlider("nexradFade", "fade", (v) => (v ? v.toFixed(2) : "off"), refadeNexrad);
 
   syncProduct();
 }

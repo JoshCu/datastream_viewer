@@ -7,7 +7,8 @@
 // metres east/north of the radar (METER_OFFSETS around the site), z metres
 // above sea level; vertical exaggeration is a model-matrix scale on z, so
 // changing it doesn't rebuild anything. A radar's display arrays are rebuilt
-// only when its volume, the product, the threshold or the tilt changes.
+// only when its volume, the product, the threshold or the tilt changes; the
+// fade only rewrites the colours' alpha.
 // ====================================================================
 import { map, nexradState } from "../state.js";
 import { PRODUCTS, LUT_SIZE, colorLut } from "./products.js";
@@ -55,9 +56,31 @@ function loadDeck() {
   return deckPromise;
 }
 
+// Floor for faded alpha, so gates just past the threshold stay faintly visible.
+const MIN_FADE_ALPHA = 0.03;
+
+// Write each gate's alpha into `colors` from how far its value sits past the
+// threshold: t^fade, with t = 0 at the threshold and 1 at the end of the
+// product's range (|value| for signed moments). Low values turn see-through
+// first; fade 0 leaves every gate opaque.
+function writeAlpha(colors, points, product, threshold, fade) {
+  const lo = product.signed ? threshold : Math.max(threshold, product.min);
+  const hi = product.signed ? Math.max(-product.min, product.max) : product.max;
+  const span = hi - lo;
+  for (let n = 0; n < points.count; n++) {
+    let a = 1;
+    if (fade > 0 && span > 0) {
+      const v = product.signed ? Math.abs(points.values[n]) : points.values[n];
+      const t = Math.min(1, Math.max(0, (v - lo) / span));
+      a = Math.max(MIN_FADE_ALPHA, t ** fade);
+    }
+    colors[n * 4 + 3] = Math.round(a * 255);
+  }
+}
+
 // Flatten the selected tilt(s) of `volume` into deck attribute arrays,
 // keeping only gates past the threshold.
-export function buildPoints(volume, { threshold, cut }) {
+export function buildPoints(volume, { threshold, cut, fade = 0 }) {
   const product = PRODUCTS[volume.moment];
   const keep = product.signed ? (v) => Math.abs(v) >= threshold : (v) => v >= threshold;
   const cuts = cut < 0 ? volume.cuts.map((c, i) => [c, i]) : [[volume.cuts[cut], cut]];
@@ -84,13 +107,14 @@ export function buildPoints(volume, { threshold, cut }) {
       colors[n * 4] = lut[k];
       colors[n * 4 + 1] = lut[k + 1];
       colors[n * 4 + 2] = lut[k + 2];
-      colors[n * 4 + 3] = 255;
       values[n] = v;
       cutOf[n] = ci;
       n++;
     }
   }
-  return { count, positions, colors, values, cutOf };
+  const points = { count, positions, colors, values, cutOf };
+  writeAlpha(colors, points, product, threshold, fade);
+  return points;
 }
 
 // The cut of `volume` nearest `tilt` (degrees), or -1 (every cut) for null.
@@ -139,6 +163,11 @@ function layerOf(deck, radar) {
     pointSize: nexradState.pointSize,
     sizeUnits: "pixels",
     opacity: nexradState.opacity,
+    // Translucent points mustn't write depth: a point drawn later but further
+    // away would fail the depth test and vanish instead of blending, which
+    // shows where one radar's cloud overlaps another's. Opaque points keep
+    // depth so nearer gates still hide farther ones.
+    parameters: { depthWriteEnabled: nexradState.opacity >= 1 && !nexradState.fade },
     material: false,
     pickable: true,
   });
@@ -171,8 +200,25 @@ export async function renderNexrad() {
 export async function rebuildNexrad(radars = nexradState.radars) {
   for (const r of radars) {
     r.points = r.volume
-      ? buildPoints(r.volume, { threshold: nexradState.threshold, cut: cutFor(r.volume, nexradState.tilt) })
+      ? buildPoints(r.volume, {
+          threshold: nexradState.threshold,
+          cut: cutFor(r.volume, nexradState.tilt),
+          fade: nexradState.fade,
+        })
       : null;
+  }
+  await renderNexrad();
+}
+
+// Re-apply the fade to every radar's points without rebuilding them, then
+// redraw. Each gets a fresh colors array: deck only re-uploads an attribute
+// whose value changed identity.
+export async function refadeNexrad() {
+  for (const r of nexradState.radars) {
+    if (!r.points) continue;
+    const colors = r.points.colors.slice();
+    writeAlpha(colors, r.points, PRODUCTS[r.volume.moment], nexradState.threshold, nexradState.fade);
+    r.points.colors = colors;
   }
   await renderNexrad();
 }

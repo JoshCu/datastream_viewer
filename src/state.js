@@ -73,6 +73,7 @@ export const nexradState = {
   exaggeration: 4,
   pointSize: 2,
   opacity: 0.8,
+  fade: 0, // alpha = t^fade, t = value's position from threshold to max; 0 = off
 };
 
 // The MapLibre map instance. It's created asynchronously in map/init.js;
