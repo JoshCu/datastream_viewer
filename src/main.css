@@ -2047,3 +2047,35 @@ body.hydro-open .sim-map-controls {
 .forcing-cell-chart svg {
     cursor: crosshair;
 }
+
+/* ====================================================================
+   NEXRAD point cloud (src/nexrad/, src/ui/nexradpanel.js)
+   ==================================================================== */
+.nexrad-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.nexrad-row .select {
+    flex: 1;
+    min-width: 0;
+}
+
+.nexrad-step {
+    flex: 0 0 34px;
+    font-size: 18px;
+    line-height: 1;
+}
+
+#nexradStatus {
+    margin-top: 10px;
+}
+
+#nexradControls {
+    margin-top: var(--space-md);
+}
+
+#nexradDate {
+    color-scheme: dark;
+}

@@ -108,3 +108,24 @@ export async function listS3Level(prefix, bucket) {
   }));
   return { folders: foldersOf(xml), files };
 }
+
+// Every folder name and object key under `prefix`, following continuation
+// tokens (a NEXRAD station-day can run past one 1000-key page).
+export async function listS3All(prefix, bucket) {
+  const folders = [];
+  const keys = [];
+  let token = null;
+  do {
+    const extra = "&delimiter=/" + (token ? `&continuation-token=${encodeURIComponent(token)}` : "");
+    const xml = await listXml(prefix, extra, bucket);
+    folders.push(...foldersOf(xml).map((f) => f.name));
+    keys.push(...Array.from(xml.querySelectorAll("Contents > Key"), (k) => k.textContent));
+    token = xml.querySelector("NextContinuationToken")?.textContent;
+  } while (token);
+  return { folders, keys };
+}
+
+// Download URL for one object.
+export function objectUrl(bucket, key) {
+  return `${objectBase(bucket)}/${key}`;
+}

@@ -47,6 +47,7 @@ import { forcingTileLoaded, invalidateForcingView } from "../forcing/paint.js";
 import { setupForcingPanel, onForcingHover, onForcingLeave } from "../ui/forcingpanel.js";
 import { setupForcingPlot } from "../ui/forcingplot.js";
 import { setupContextMenu } from "../ui/contextmenu.js";
+import { setupNexradPanel } from "../ui/nexradpanel.js";
 
 
 // maplibregl and pmtiles are globals provided by CDN <script>s in index.html.
@@ -166,6 +167,7 @@ export function init() {
   setupForcingPanel();
   setupForcingPlot();
   setupContextMenu();
+  setupNexradPanel();
   setupSimPanel();
   setupBrush();
 }
