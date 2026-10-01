@@ -15,7 +15,7 @@ export const NEXRAD_BUCKET = "unidata-nexrad-level2";
 
 // Cuts closer than this (degrees) are the same tilt scanned twice: the split
 // cuts of the low tilts (surveillance + Doppler) and SAILS re-scans of 0.5°.
-const SAME_TILT_DEG = 0.25;
+export const SAME_TILT_DEG = 0.25;
 
 const datePrefix = (date) => `${date.replaceAll("-", "/")}/`;
 
@@ -138,15 +138,26 @@ function mergeCuts(parts) {
   return kept.sort((a, b) => a.angle - b.angle);
 }
 
-// The last download, so switching moments re-decodes without re-fetching.
-let cached = { url: null, bytes: null };
+// The last download per station, so switching moments re-decodes without
+// re-fetching. Several radars can be on screen, so it's keyed by ICAO (the
+// file name's first four letters); a new scan of a station replaces its old one.
+const cache = new Map(); // icao → { url, bytes }
+const icaoOf = (url) => url.split("/").pop().slice(0, 4);
+
+// Let go of a station's cached download (its radar was removed).
+export function forgetStation(icao) {
+  cache.delete(icao);
+}
 
 // Load one scan's `moment` (REF, VEL, ZDR, RHO, …). Returns
 // { icao, site: { lat, lon, height, vcp }, time, moment, cuts }.
 export async function loadVolume(url, moment, onProgress) {
-  if (cached.url !== url) {
-    cached = { url: null, bytes: null }; // let the old scan go before downloading
+  const key = icaoOf(url);
+  let cached = cache.get(key);
+  if (cached?.url !== url) {
+    cache.delete(key); // let the old scan go before downloading
     cached = { url, bytes: await download(url, onProgress) };
+    cache.set(key, cached);
   }
   const { icao, records } = splitRecords(cached.bytes);
   const n = Math.min(records.length, Math.max(2, (navigator.hardwareConcurrency || 4) - 1));

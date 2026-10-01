@@ -1,11 +1,12 @@
 // ====================================================================
-// The NEXRAD point cloud: a deck.gl PointCloudLayer in a MapboxOverlay.
+// The NEXRAD point clouds: one deck.gl PointCloudLayer per radar in a
+// MapboxOverlay.
 //
 // deck.gl is only fetched the first time a scan is shown. Gate positions are
 // metres east/north of the radar (METER_OFFSETS around the site), z metres
 // above sea level; vertical exaggeration is a model-matrix scale on z, so
-// changing it doesn't rebuild anything. The display arrays are rebuilt only
-// when the volume, product, threshold or tilt changes.
+// changing it doesn't rebuild anything. A radar's display arrays are rebuilt
+// only when its volume, the product, the threshold or the tilt changes.
 // ====================================================================
 import { map, nexradState } from "../state.js";
 import { PRODUCTS, LUT_SIZE, colorLut } from "./products.js";
@@ -14,7 +15,6 @@ const DECK_URL = "https://unpkg.com/deck.gl@9.4.0/dist.min.js";
 
 let deckPromise = null;
 let overlay = null;
-let points = null; // { count, positions, colors, values, cutOf }
 
 function loadDeck() {
   deckPromise ??= new Promise((resolve, reject) => {
@@ -68,27 +68,44 @@ export function buildPoints(volume, { threshold, cut }) {
   return { count, positions, colors, values, cutOf };
 }
 
+// The cut of `volume` nearest `tilt` (degrees), or -1 (every cut) for null.
+// Radars on different VCPs don't scan the same angles, so each one draws its
+// own closest tilt.
+function cutFor(volume, tilt) {
+  if (tilt == null) return -1;
+  let best = 0;
+  volume.cuts.forEach((c, i) => {
+    if (Math.abs(c.angle - tilt) < Math.abs(volume.cuts[best].angle - tilt)) best = i;
+  });
+  return best;
+}
+
+const layerId = (radar) => `nexrad-${radar.key}`;
+
 function tooltip({ index, layer }) {
-  if (!layer || index < 0 || !points || !nexradState.volume) return null;
-  const { units } = PRODUCTS[nexradState.volume.moment];
+  if (!layer || index < 0) return null;
+  const radar = nexradState.radars.find((r) => layerId(r) === layer.id);
+  if (!radar?.points) return null;
+  const { volume, points } = radar;
+  const { units } = PRODUCTS[volume.moment];
   const v = points.values[index];
-  const tilt = nexradState.volume.cuts[points.cutOf[index]].angle;
+  const tilt = volume.cuts[points.cutOf[index]].angle;
   const km = (points.positions[index * 3 + 2] / 1000).toFixed(1);
   return {
-    text: `${v.toFixed(nexradState.volume.moment === "RHO" ? 3 : 1)} ${units}\n${km} km MSL · ${tilt.toFixed(1)}° tilt`,
+    text: `${volume.icao}: ${v.toFixed(volume.moment === "RHO" ? 3 : 1)} ${units}\n${km} km MSL · ${tilt.toFixed(1)}° tilt`,
   };
 }
 
-function layerOf(deck) {
-  const { site } = nexradState.volume;
+function layerOf(deck, radar) {
+  const { site } = radar.volume;
   const k = nexradState.exaggeration;
   return new deck.PointCloudLayer({
-    id: "nexrad",
+    id: layerId(radar),
     data: {
-      length: points.count,
+      length: radar.points.count,
       attributes: {
-        getPosition: { value: points.positions, size: 3 },
-        getColor: { value: points.colors, size: 4, normalized: true },
+        getPosition: { value: radar.points.positions, size: 3 },
+        getColor: { value: radar.points.colors, size: 4, normalized: true },
       },
     },
     coordinateSystem: deck.COORDINATE_SYSTEM.METER_OFFSETS,
@@ -102,22 +119,30 @@ function layerOf(deck) {
   });
 }
 
-// Redraw with the current display settings (size, opacity, exaggeration).
+// Redraw every radar that has points, with the current display settings
+// (size, opacity, exaggeration). Also how a removed radar disappears.
 export async function renderNexrad() {
-  if (!nexradState.volume || !points) return;
+  const shown = nexradState.radars.filter((r) => r.points);
+  if (!shown.length) {
+    overlay?.setProps({ layers: [] });
+    return;
+  }
   const deck = await loadDeck();
   if (!overlay) {
     overlay = new deck.MapboxOverlay({ interleaved: false, getTooltip: tooltip });
     map.addControl(overlay);
   }
-  overlay.setProps({ layers: [layerOf(deck)] });
+  // Re-read: a radar can be removed while deck.gl is loading.
+  overlay.setProps({ layers: nexradState.radars.filter((r) => r.points).map((r) => layerOf(deck, r)) });
 }
 
-// Rebuild the points from nexradState (volume, threshold, tilt) and redraw.
-// Returns the number of points drawn.
-export async function rebuildNexrad() {
-  points = nexradState.volume ? buildPoints(nexradState.volume, nexradState) : null;
-  if (points) await renderNexrad();
-  else overlay?.setProps({ layers: [] });
-  return points?.count ?? 0;
+// Rebuild the points of `radars` (default: all of them) from their volumes
+// and the shared threshold/tilt, then redraw.
+export async function rebuildNexrad(radars = nexradState.radars) {
+  for (const r of radars) {
+    r.points = r.volume
+      ? buildPoints(r.volume, { threshold: nexradState.threshold, cut: cutFor(r.volume, nexradState.tilt) })
+      : null;
+  }
+  await renderNexrad();
 }

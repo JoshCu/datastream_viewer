@@ -362,8 +362,9 @@
             </div>
           </div>
 
-          <!-- NEXRAD Level II (src/nexrad/, src/ui/nexradpanel.js): one volume
-               scan from the public Unidata bucket as a deck.gl 3D point cloud. -->
+          <!-- NEXRAD Level II (src/nexrad/, src/ui/nexradpanel.js): volume scans
+               from the public Unidata bucket as deck.gl 3D point clouds, one per
+               chosen station. -->
           <div class="panel collapsed" id="nexradPanel" data-url-key="nexrad">
             <h3 class="panel-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -384,25 +385,29 @@
             <div class="panel-body">
               <div class="nexrad-row">
                 <input type="date" id="nexradDate" class="select" title="Date (UTC)" />
-                <select id="nexradStation" class="select" title="Radar station">
-                  <option value="">Station…</option>
-                </select>
+                <button
+                  class="play-btn nexrad-step"
+                  id="nexradLockBtn"
+                  aria-pressed="false"
+                  title="Unlocked: each station steps on its own"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                    <path id="nexradLockShackle" d="M8 11V7a4 4 0 0 1 7.75-1.4" />
+                  </svg>
+                </button>
               </div>
-              <div class="nexrad-row">
-                <button class="play-btn nexrad-step" id="nexradPrevBtn" title="Previous scan">‹</button>
-                <select id="nexradScan" class="select" title="Volume scan (UTC)">
-                  <option value="">Scan time…</option>
-                </select>
-                <button class="play-btn nexrad-step" id="nexradNextBtn" title="Next scan">›</button>
-              </div>
+              <!-- One row per station (station, ‹ scan ›, remove), built by nexradpanel.js. -->
+              <div id="nexradRadars"></div>
               <div class="forcing-actions">
-                <button class="btn secondary" id="nexradLatestBtn" title="Today's most recent scan">Latest</button>
+                <button class="btn secondary" id="nexradAddBtn" title="Show another radar (or click a station dot)">Add station</button>
+                <button class="btn secondary" id="nexradLatestBtn" title="Today's most recent scans">Latest</button>
                 <button class="btn secondary" id="nexradClearBtn" disabled>Clear</button>
               </div>
 
               <div class="status" id="nexradStatus">
                 <span class="status-dot" id="nexradStatusDot"></span>
-                <span id="nexradStatusText">Pick a date and station</span>
+                <span id="nexradStatusText">Pick a date and a station</span>
               </div>
 
               <div id="nexradControls" style="display: none">
@@ -453,7 +458,8 @@
                 Volume scans from the public NOAA NEXRAD Level II archive
                 (unidata-nexrad-level2). Each gate is drawn at its beam height; tilt
                 the map (right-drag) to see the storm structure. Hover a point for
-                its value.
+                its value. Add stations to show several radars at once; with the
+                lock on, stepping one snaps the others to their nearest scan.
               </p>
             </div>
           </div>

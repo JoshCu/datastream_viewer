@@ -58,12 +58,18 @@ export const forcingState = {
 
 // NEXRAD Level II point cloud (src/nexrad/). Drawn by a deck.gl overlay,
 // independent of both the t-route run and the forcings.
+// Several radars can be shown at once; product, tilt and display settings are
+// shared by all of them.
 export const nexradState = {
-  volume: null, // { icao, site, time, moment, cuts: [{ angle, x, y, z, v }] }
-  url: null, // the scan the volume came from
+  // One per station row: { key, icao, scans: [{ key, url, time }], index,
+  // volume, url, points, … }. `index` is the scan picked in the row, `url`
+  // the one `volume` ({ icao, site, time, moment, cuts: [{ angle, x, y, z, v }] })
+  // came from; `points` is its built point cloud (nexrad/layer.js).
+  radars: [],
+  locked: false, // stepping one radar snaps the others to its time
   product: "REF",
   threshold: 20,
-  cut: -1, // index into volume.cuts, or -1 for every tilt
+  tilt: null, // elevation angle (each radar draws its nearest cut), or null for every tilt
   exaggeration: 4,
   pointSize: 2,
   opacity: 0.8,

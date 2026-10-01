@@ -180,8 +180,9 @@ document event.
 
 ### NEXRAD radar (`src/nexrad/`)
 
-A third independent mode: one Level II volume scan from the public
-`unidata-nexrad-level2` bucket, drawn as a deck.gl `PointCloudLayer` in a
+A third independent mode: Level II volume scans from the public
+`unidata-nexrad-level2` bucket, one per chosen station (`nexradState.radars`),
+each drawn as a deck.gl `PointCloudLayer` in one
 `MapboxOverlay` (deck.gl is injected from unpkg on first use — it's not in
 `index.html`). `source.js` downloads the file and splits it into LDM records
 on the main thread (`splitRecords`), then fans byte-balanced batches across the

@@ -2,7 +2,7 @@
 // NEXRAD station dots + labels (WSR-88D and TDWR), from stations.json.
 //
 // Shown while the NEXRAD panel is open. Stations with scans on the picked
-// date are bright, the rest grey; the chosen one is white. Clicking a dot
+// date are bright, the rest grey; the chosen ones are white. Clicking a dot
 // hands its ICAO to `onPick`.
 // ====================================================================
 import { map } from "../state.js";
@@ -18,7 +18,7 @@ const coords = new Map(stations.features.map((f) => [f.properties.id, f.geometry
 export const stationCoords = (id) => coords.get(id);
 
 let added = false;
-let look = { available: [], selected: "" };
+let look = { available: [], selected: [] };
 
 function addLayers(onPick) {
   map.addSource(SOURCE, { type: "geojson", data: stations });
@@ -59,19 +59,20 @@ function addLayers(onPick) {
 function applyLook() {
   const id = ["get", "id"];
   const available = ["in", id, ["literal", look.available]];
+  const selected = ["in", id, ["literal", look.selected]];
   map.setPaintProperty(NEXRAD_SITE_LAYER, "circle-color", [
     "case",
-    ["==", id, look.selected],
+    selected,
     "#ffffff",
     available,
     "#00d4ff",
     "#556677",
   ]);
   map.setPaintProperty(LABEL_LAYER, "text-opacity", ["case", available, 1, 0.5]);
-  // Lower keys win label collisions: the chosen station, then WSR-88Ds.
+  // Lower keys win label collisions: the chosen stations, then WSR-88Ds.
   map.setLayoutProperty(LABEL_LAYER, "symbol-sort-key", [
     "case",
-    ["==", id, look.selected],
+    selected,
     0,
     ["==", ["get", "kind"], "WSR-88D"],
     1,
@@ -100,7 +101,8 @@ export function showSites(on, onPick) {
   }
 }
 
-// Highlight the stations with data on the picked date and the chosen one.
+// Highlight the stations with data on the picked date and the chosen ones
+// (an array of ICAOs).
 export function styleSites(available, selected) {
   look = { available, selected };
   if (added) applyLook();

@@ -2070,8 +2070,37 @@ body.hydro-open .sim-map-controls {
     line-height: 1;
 }
 
+/* A station row: station, ‹ scan ›, remove. The left edge marks the row
+   used last, which locked stepping follows. */
+.nexrad-radar {
+    gap: 4px;
+    padding-left: 4px;
+    border-left: 2px solid transparent;
+}
+
+.nexrad-radar .nexrad-step {
+    flex-basis: 28px;
+}
+
+.nexrad-radar.active {
+    border-left-color: var(--accent-primary);
+}
+
+.nexrad-radar .nexrad-station {
+    flex: 0 0 70px;
+}
+
+.nexrad-remove {
+    font-size: 16px;
+}
+
 #nexradStatus {
     margin-top: 10px;
+}
+
+/* One line per radar in the summary. */
+#nexradStatusText {
+    white-space: pre-line;
 }
 
 #nexradControls {
