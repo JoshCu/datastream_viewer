@@ -20,23 +20,20 @@ import { showFeatureInfo } from "../ui/infopanel.js";
 import { showGageInfo } from "../ui/gagepanel.js";
 import { openForcingPlot } from "../ui/forcingplot.js";
 import { hasForcingSource } from "../forcing/loader.js";
+import { invalidateResultsView } from "./paint.js";
 // maplibregl is a global provided by the CDN <script> in index.html.
 
 
-// toggle hill shade and highlight the button icon
-function toggleHillshade() {
-  const visible =  this._map.getLayoutProperty("hills", "visibility") === "visible";
-  this._map.setLayoutProperty("hills", "visibility", visible ? "none" : "visible");
-  this._button.classList.toggle("active", !visible);
-}
-
-// hillshade toggle control
-export class HillshadeControl {
-  // onclick make it toggle the visibility of the hillshade layer
+// Terrain + hillshade, grouped in one box: wraps MapLibre's TerrainControl
+// and appends the hillshade toggle to its container.
+export class TerrainControl {
   onAdd(map) {
     this._map = map;
-    this._container = document.createElement("div");
-    this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    this._terrain = new maplibregl.TerrainControl({
+      source: "terrainSource",
+      exaggeration: 1,
+    });
+    this._container = this._terrain.onAdd(map);
     this._button = iconButton(
       "maplibregl-ctrl-hillshade",
       "Enable hillshade",
@@ -46,53 +43,90 @@ export class HillshadeControl {
           "fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1px",
       },
     );
-    this._button.onclick = toggleHillshade.bind(this);
+    this._button.onclick = () => {
+      const visible = map.getLayoutProperty("hills", "visibility") === "visible";
+      map.setLayoutProperty("hills", "visibility", visible ? "none" : "visible");
+      this._button.classList.toggle("active", !visible);
+      this._button.title = visible ? "Enable hillshade" : "Disable hillshade";
+    };
     this._container.appendChild(this._button);
     return this._container;
   }
   onRemove() {
-    this._container.remove();
+    this._terrain.onRemove();
     this._map = undefined;
   }
 }
 
-// Catchment toggle: the divide outlines plus the selected/upstream highlight
+// Flowpaths + catchments toggles, grouped in one box.
+//
+// Flowpaths are shown by default. Hiding them hides the hover overlay too, so
+// a hidden reach can't be hovered or clicked.
+//
+// Catchments: the divide outlines plus the selected/upstream highlight
 // layers, hidden by default. Choosing "Highlight upstream" from the context
 // menu turns them on (setCatchmentsVisible), since the highlight is drawn by
 // those layers.
+const FLOWPATH_LAYERS = ["flowpaths", "flowpaths-hover"];
 const CATCHMENT_LAYERS = ["divides", "selected-divides", "upstream-divides"];
+let flowpathsVisible = true;
 let catchmentsVisible = false;
+let flowpathButton = null;
 let catchmentButton = null;
 
-export function setCatchmentsVisible(visible) {
-  catchmentsVisible = visible;
-  for (const layer of CATCHMENT_LAYERS) {
+function setLayersVisible(layers, visible) {
+  for (const layer of layers) {
     if (!map.getLayer(layer)) continue;
     map.setLayoutProperty(layer, "visibility", visible ? "visible" : "none");
   }
+}
+
+export function setFlowpathsVisible(visible) {
+  flowpathsVisible = visible;
+  setLayersVisible(FLOWPATH_LAYERS, visible);
+  if (!visible) onFlowpathLeave();
+  // queryRenderedFeatures sees nothing while the layer is hidden, so the
+  // painter's on-screen set is stale: requery once it's back.
+  else if (state.data) invalidateResultsView();
+  if (flowpathButton) {
+    flowpathButton.classList.toggle("active", visible);
+    flowpathButton.title = visible ? "Hide flowpaths" : "Show flowpaths";
+  }
+}
+
+export function setCatchmentsVisible(visible) {
+  catchmentsVisible = visible;
+  setLayersVisible(CATCHMENT_LAYERS, visible);
   if (catchmentButton) {
     catchmentButton.classList.toggle("active", visible);
     catchmentButton.title = visible ? "Hide catchments" : "Show catchments";
   }
 }
 
-export class CatchmentControl {
+export class HydrofabricControl {
   onAdd() {
     this._container = document.createElement("div");
     this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    // Branching line: a river network.
+    flowpathButton = iconButton(
+      "maplibregl-ctrl-flowpaths active",
+      "Hide flowpaths",
+      "M4,20C8,17,9,13,12,11s5-5,6-7M12,11c2,1,5,1,7,3M9,15C7,14,5,11,5,8",
+    );
+    flowpathButton.onclick = () => setFlowpathsVisible(!flowpathsVisible);
     // Irregular polygon: a catchment outline.
-    this._button = iconButton(
+    catchmentButton = iconButton(
       "maplibregl-ctrl-catchments",
       "Show catchments",
       "M4,8,10,4l8,3,2,8-7,5L5,17Z",
     );
-    this._button.onclick = () => setCatchmentsVisible(!catchmentsVisible);
-    catchmentButton = this._button;
-    this._container.appendChild(this._button);
+    catchmentButton.onclick = () => setCatchmentsVisible(!catchmentsVisible);
+    this._container.append(flowpathButton, catchmentButton);
     return this._container;
   }
   onRemove() {
     this._container.remove();
+    flowpathButton = null;
     catchmentButton = null;
   }
 }

@@ -436,6 +436,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .maplibregl-ctrl-gage span svg path,
+.maplibregl-ctrl-flowpaths span svg path,
 .maplibregl-ctrl-catchments span svg path {
   fill: none;
   stroke: #000;
@@ -445,6 +446,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .maplibregl-ctrl-gage.active span svg path,
+.maplibregl-ctrl-flowpaths.active span svg path,
 .maplibregl-ctrl-catchments.active span svg path {
   stroke: #00d4ff;
 }

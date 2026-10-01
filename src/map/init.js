@@ -20,8 +20,8 @@ import {
   onGageHover,
   onGageLeave,
   invalidateCanvasBox,
-  HillshadeControl,
-  CatchmentControl,
+  TerrainControl,
+  HydrofabricControl,
 } from "./interactions.js";
 import { GageControl, updateGageFilter } from "./gages.js";
 import { setupS3Browser } from "../s3/browser.js";
@@ -92,17 +92,9 @@ export function init() {
       })
   );
 
-  map.addControl(
-      new maplibregl.TerrainControl({
-          source: 'terrainSource',
-          exaggeration: 1
-      })
-  );
-  // add a control to enable and disable the hill shade
-  map.addControl(
-      new HillshadeControl()
-  );
-  map.addControl(new CatchmentControl());
+  // Terrain + hillshade share one group, as do flowpaths + catchments.
+  map.addControl(new TerrainControl());
+  map.addControl(new HydrofabricControl());
   map.addControl(new GageControl());
 
   // Catchment click -> forcing plot; the forcing hover readout. The upstream
