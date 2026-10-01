@@ -24,6 +24,13 @@ velocity / depth on the hydrofabric flowpaths over time.
   the catchments in view ("Load viewport"), a whole VPU ("Load VPU") or a
   clicked catchment are fetched with HTTP range requests, then cached. Clicking
   a catchment plots all its forcing variables.
+- **NEXRAD radar (3D)** — pick a date, station and scan time from the public
+  NOAA NEXRAD Level II archive (`unidata-nexrad-level2`) and see the whole
+  volume scan as a deck.gl point cloud, each gate at its beam height. Choose
+  reflectivity / velocity / ZDR / CC, one tilt or all, a minimum value, and the
+  vertical exaggeration, point size and opacity. Station dots (WSR-88D and
+  TDWR) show on the map while the panel is open; click one to pick it. The file
+  is bzip2-decoded in the worker pool.
 - **Hydrograph** — clicking a reach or USGS gage opens a D3 hydrograph of that
   reach from every loaded run (each uploaded file plus the latest S3 load),
   with the gage's observed discharge when there is one. Toggle/isolate lines
@@ -101,6 +108,8 @@ src/
       merge.js                mergeDatasets + bounds (worker-side, pure)
       hdf5layout.js           async HDF5 layout reader for forcing files (pure)
       forcing.js              forcing row fetch/decode over range requests (pure)
+      nexrad.js               NEXRAD Level II records → per-tilt gate positions (pure)
+      bzip2.js                bzip2 decoder for the Level II records (pure)
       parsers/
         netcdf.js             NetCDF4/HDF5 parser (worker-side, pure)
         parquet.js            Parquet parser (worker-side, pure)
@@ -116,12 +125,19 @@ src/
     forcingpanel.js           forcings sidebar panel: source, load buttons, controls
     forcingplot.js            per-catchment forcing small multiples (dock)
     contextmenu.js            map right-click menu
+    nexradpanel.js            NEXRAD panel: date/station/scan pickers, display controls
   forcing/
     store.js                  sparse, growable catchment store + change events
     layout.js                 per-file layout scan + IndexedDB cache
     loader.js                 load planning/orchestration (viewport, VPU, catchment)
     viewport.js               VPUs and catchments in view
     paint.js                  catchment fill expression + feature-state, forcing clock
+  nexrad/
+    source.js                 bucket listings, scan download, worker fan-out + tilt merge
+    layer.js                  deck.gl PointCloudLayer overlay (lazy-loads deck.gl)
+    products.js               moment labels, ranges, colour ramps
+    sites.js                  station dots/labels, click to pick
+    stations.json             station table (GeoJSON), see its `source` field
   sim/
     network.js                live routing: reach collection, step loop, paint + panel
     sim.worker.js             owns the wasm Network; steps it off the main thread

@@ -14,6 +14,8 @@
 //     -> result { ids, variables, skipped, stats }        (data/workers/forcing.js)
 //   in  { id, type: "forcingRows", source, variables, rows, withTime }
 //     -> result { rows, nTimes, blocks, time, stats }
+//   in  { id, type: "nexrad", buffer, ranges, moment }
+//     -> result { site, cuts }                         (data/workers/nexrad.js)
 //   out { id, ok: true,  result }
 //   out { id, ok: false, error }
 // Matrix buffers are transferred, not copied.
@@ -23,6 +25,7 @@ import { parseNetCDF, parseNetCDFBuffer } from "./parsers/netcdf.js";
 import { parseParquet, parseParquetBuffer } from "./parsers/parquet.js";
 import { mergeDatasets, computeAllBounds } from "./merge.js";
 import { scanForcingLayout, fetchForcingRows } from "./forcing.js";
+import { decodeRecords } from "./nexrad.js";
 
 let hdf5Promise = null;
 let parquetWasmPromise = null;
@@ -103,6 +106,12 @@ self.onmessage = async (e) => {
     if (type === "forcingRows") {
       const result = await fetchForcingRows(e.data);
       const transfer = Object.values(result.blocks).map((b) => b.buffer);
+      self.postMessage({ id, ok: true, result }, transfer);
+      return;
+    }
+    if (type === "nexrad") {
+      const result = decodeRecords(e.data.buffer, e.data.ranges, e.data.moment);
+      const transfer = result.cuts.flatMap((c) => [c.x.buffer, c.y.buffer, c.z.buffer, c.v.buffer]);
       self.postMessage({ id, ok: true, result }, transfer);
       return;
     }

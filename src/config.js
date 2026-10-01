@@ -77,6 +77,9 @@ export const RESULT_IS_FILL = ["<=", RESULT_VALUE, FILL_THRESHOLD];
 // expression, so its length has to come from here rather than a counted literal.
 export const GAGE_URI_PREFIX = "gages-";
 export const GAGE_LAYER = "conus_gages";
+// NEXRAD station dots (nexrad/sites.js); a click there picks the station, so
+// it shouldn't also open a reach or forcing panel.
+export const NEXRAD_SITE_LAYER = "nexrad-sites-dot";
 export const GAGE_GLOW_LAYER = "conus_gages_glow";
 export const GAGE_LABEL_LAYER = "conus_gages_label";
 export const GAGE_FEATURE = { source: "gages", sourceLayer: "gages" };

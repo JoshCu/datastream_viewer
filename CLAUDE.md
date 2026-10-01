@@ -178,6 +178,24 @@ didn't drag, since right-drag rotates the map. The forcing plot and the
 hydrograph share the dock's spot and close each other via a `dockopen`
 document event.
 
+### NEXRAD radar (`src/nexrad/`)
+
+A third independent mode: one Level II volume scan from the public
+`unidata-nexrad-level2` bucket, drawn as a deck.gl `PointCloudLayer` in a
+`MapboxOverlay` (deck.gl is injected from unpkg on first use — it's not in
+`index.html`). `source.js` downloads the file and splits it into LDM records
+on the main thread (`splitRecords`), then fans byte-balanced batches across the
+shared parse pool (`runTask({ type: "nexrad" })`); `data/workers/nexrad.js` +
+`bzip2.js` decode them into per-cut x/y (metres from the radar) / z (metres
+MSL) / value columns, and `mergeCuts` joins cuts split across batches and drops
+repeated tilts (split cuts, SAILS). The display arrays are rebuilt only for
+product/threshold/tilt changes; vertical exaggeration is a model-matrix scale,
+so it only re-renders. State is `nexradState` (`state.js`).
+`stations.json` is a static GeoJSON of the sites, imported with
+`with { type: "json" }` so the single-file build inlines it. Its coordinates
+come from each radar's own Level II header rather than HOMR, because the point
+cloud is placed by that header and HOMR is kilometres off for most TDWRs.
+
 ### Changing the timestep, and the active dataset
 
 Two rules that keep the wiring from sprawling:

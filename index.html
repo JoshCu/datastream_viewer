@@ -362,6 +362,102 @@
             </div>
           </div>
 
+          <!-- NEXRAD Level II (src/nexrad/, src/ui/nexradpanel.js): one volume
+               scan from the public Unidata bucket as a deck.gl 3D point cloud. -->
+          <div class="panel collapsed" id="nexradPanel" data-url-key="nexrad">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="2" />
+                <path d="M16.24 7.76a6 6 0 0 1 0 8.49" />
+                <path d="M7.76 16.24a6 6 0 0 1 0-8.49" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                <path d="M4.93 19.07a10 10 0 0 1 0-14.14" />
+              </svg>
+              NEXRAD Radar (3D)
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <div class="nexrad-row">
+                <input type="date" id="nexradDate" class="select" title="Date (UTC)" />
+                <select id="nexradStation" class="select" title="Radar station">
+                  <option value="">Station…</option>
+                </select>
+              </div>
+              <div class="nexrad-row">
+                <button class="play-btn nexrad-step" id="nexradPrevBtn" title="Previous scan">‹</button>
+                <select id="nexradScan" class="select" title="Volume scan (UTC)">
+                  <option value="">Scan time…</option>
+                </select>
+                <button class="play-btn nexrad-step" id="nexradNextBtn" title="Next scan">›</button>
+              </div>
+              <div class="forcing-actions">
+                <button class="btn secondary" id="nexradLatestBtn" title="Today's most recent scan">Latest</button>
+                <button class="btn secondary" id="nexradClearBtn" disabled>Clear</button>
+              </div>
+
+              <div class="status" id="nexradStatus">
+                <span class="status-dot" id="nexradStatusDot"></span>
+                <span id="nexradStatusText">Pick a date and station</span>
+              </div>
+
+              <div id="nexradControls" style="display: none">
+                <div class="scale-select-wrap">
+                  <label class="scale-label" for="nexradProduct">Product</label>
+                  <select id="nexradProduct" class="select scale-select">
+                    <option value="REF">Reflectivity</option>
+                    <option value="VEL">Radial velocity</option>
+                    <option value="ZDR">Differential reflectivity</option>
+                    <option value="RHO">Correlation coefficient</option>
+                  </select>
+                </div>
+                <div class="scale-select-wrap">
+                  <label class="scale-label" for="nexradTilt">Tilt</label>
+                  <select id="nexradTilt" class="select scale-select"></select>
+                </div>
+                <div class="speed-control">
+                  <label for="nexradThreshold">Min</label>
+                  <input type="range" id="nexradThreshold" />
+                  <span class="speed-value" id="nexradThresholdValue">-</span>
+                </div>
+                <div class="speed-control">
+                  <label for="nexradExaggeration">Height</label>
+                  <input type="range" id="nexradExaggeration" min="1" max="20" value="4" />
+                  <span class="speed-value" id="nexradExaggerationValue">4×</span>
+                </div>
+                <div class="speed-control">
+                  <label for="nexradPointSize">Size</label>
+                  <input type="range" id="nexradPointSize" min="1" max="8" step="0.5" value="2" />
+                  <span class="speed-value" id="nexradPointSizeValue">2px</span>
+                </div>
+                <div class="speed-control">
+                  <label for="nexradOpacity">Opacity</label>
+                  <input type="range" id="nexradOpacity" min="0.1" max="1" step="0.05" value="0.8" />
+                  <span class="speed-value" id="nexradOpacityValue">0.80</span>
+                </div>
+                <div class="legend">
+                  <div class="legend-title" id="nexradLegendTitle">-</div>
+                  <div class="legend-gradient" id="nexradLegendGradient"></div>
+                  <div class="legend-labels">
+                    <span id="nexradLegendMin">-</span>
+                    <span id="nexradLegendMax">-</span>
+                  </div>
+                </div>
+              </div>
+
+              <p class="info-text">
+                Volume scans from the public NOAA NEXRAD Level II archive
+                (unidata-nexrad-level2). Each gate is drawn at its beam height; tilt
+                the map (right-drag) to see the storm structure. Hover a point for
+                its value.
+              </p>
+            </div>
+          </div>
+
           <!-- Live routing sim (src/sim/): Muskingum-Cunge in wasm over the
                reaches on screen, fed by a lateral-inflow brush. -->
           <div class="panel collapsed" id="simPanel" data-url-key="sim">

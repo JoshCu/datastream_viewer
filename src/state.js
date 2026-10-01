@@ -56,6 +56,19 @@ export const forcingState = {
   busy: false,
 };
 
+// NEXRAD Level II point cloud (src/nexrad/). Drawn by a deck.gl overlay,
+// independent of both the t-route run and the forcings.
+export const nexradState = {
+  volume: null, // { icao, site, time, moment, cuts: [{ angle, x, y, z, v }] }
+  url: null, // the scan the volume came from
+  product: "REF",
+  threshold: 20,
+  cut: -1, // index into volume.cuts, or -1 for every tilt
+  exaggeration: 4,
+  pointSize: 2,
+  opacity: 0.8,
+};
+
 // The MapLibre map instance. It's created asynchronously in map/init.js;
 // `map` is a live binding, so importers see the value once setMap() runs.
 export let map = null;
