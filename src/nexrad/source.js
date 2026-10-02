@@ -149,8 +149,17 @@ export function forgetStation(icao) {
   cache.delete(icao);
 }
 
-// Load one scan's `moment` (REF, VEL, ZDR, RHO, …). Returns
-// { icao, site: { lat, lon, height, vcp }, time, moment, cuts }.
+// Add up the batches' bird-profile sums (null unless the moment is BIRD).
+function mergeProfiles(parts) {
+  const profiles = parts.map((p) => p.profile).filter(Boolean);
+  if (!profiles.length) return null;
+  const out = new Float64Array(profiles[0].length);
+  for (const p of profiles) for (let i = 0; i < p.length; i++) out[i] += p[i];
+  return out;
+}
+
+// Load one scan's `moment` (REF, VEL, ZDR, RHO, …, or BIRD). Returns
+// { icao, site: { lat, lon, height, vcp }, time, moment, cuts, profile }.
 export async function loadVolume(url, moment, onProgress) {
   const key = icaoOf(url);
   let cached = cache.get(key);
@@ -169,7 +178,8 @@ export async function loadVolume(url, moment, onProgress) {
   const site = parts.find((p) => p.site)?.site;
   const cuts = mergeCuts(parts);
   if (!site || !cuts.length) {
+    if (moment === "BIRD") throw new Error("No dual-pol data in this scan (needed for bird mode)");
     throw new Error(`No ${moment} data in this scan (pre-2008 files aren't supported)`);
   }
-  return { icao, site, time: scanTime(url), moment, cuts };
+  return { icao, site, time: scanTime(url), moment, cuts, profile: mergeProfiles(parts) };
 }

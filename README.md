@@ -32,7 +32,12 @@ velocity / depth on the hydrofabric flowpaths over time.
   velocity / ZDR / CC, one tilt or all, a minimum value, and the vertical
   exaggeration, point size and opacity. Station dots (WSR-88D and TDWR) show on
   the map while the panel is open; click one to add it. The files are
-  bzip2-decoded in the worker pool.
+  bzip2-decoded in the worker pool. **Birds** mode keeps reflectivity gates
+  5–40 km out whose ρHV < 0.95 (not rain), converts them to birds/km³
+  (η = 10^((dBZ + 13.37)/10) cm²/km³ over 11 cm² per bird), and lists a
+  per-radar vertical profile of mean density with a VAD fit of ground speed
+  and heading per 200 m bin, flagging daytime scans. No wind subtraction, so
+  insects aren't separated.
 - **Hydrograph** — clicking a reach or USGS gage opens a D3 hydrograph of that
   reach from every loaded run (each uploaded file plus the latest S3 load),
   with the gage's observed discharge when there is one. Toggle/isolate lines
@@ -110,7 +115,7 @@ src/
       merge.js                mergeDatasets + bounds (worker-side, pure)
       hdf5layout.js           async HDF5 layout reader for forcing files (pure)
       forcing.js              forcing row fetch/decode over range requests (pure)
-      nexrad.js               NEXRAD Level II records → per-tilt gate positions (pure)
+      nexrad.js               NEXRAD Level II records → per-tilt gate positions + bird profile sums (pure)
       bzip2.js                bzip2 decoder for the Level II records (pure)
       parsers/
         netcdf.js             NetCDF4/HDF5 parser (worker-side, pure)
@@ -138,6 +143,7 @@ src/
     source.js                 bucket listings, scan download, worker fan-out + tilt merge
     layer.js                  deck.gl PointCloudLayer per radar (lazy-loads deck.gl)
     products.js               moment labels, ranges, colour ramps
+    birds.js                  bird-mode profile: density + VAD solve, sun elevation
     sites.js                  station dots/labels, click to pick
     stations.json             station table (GeoJSON), see its `source` field
   sim/

@@ -2110,3 +2110,31 @@ body.hydro-open .sim-map-controls {
 #nexradDate {
     color-scheme: dark;
 }
+
+/* Bird mode profiles: one small table per radar, highest bin first. */
+.nexrad-profile {
+    margin-top: var(--space-md);
+    font-size: 11px;
+}
+
+.nexrad-profile-title {
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.nexrad-profile table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+.nexrad-profile th,
+.nexrad-profile td {
+    padding: 1px 4px;
+    text-align: right;
+}
+
+.nexrad-profile th {
+    font-weight: 500;
+    opacity: 0.7;
+}
