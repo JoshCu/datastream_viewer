@@ -5,6 +5,9 @@
 // stop (the familiar NWS reflectivity bands), the rest interpolate. The
 // threshold hides weak gates: value ≥ threshold, or |value| ≥ threshold for a
 // signed moment like velocity.
+//
+// BIRD isn't a radar moment but bird mode: reflectivity of non-precipitation
+// gates 5–40 km out, as birds/km³ (data/workers/nexrad.js).
 // ====================================================================
 
 export const PRODUCTS = {
@@ -82,6 +85,22 @@ export const PRODUCTS = {
       [0.98, "#ff8000"],
       [1.0, "#ff0000"],
       [1.05, "#ff80ff"],
+    ],
+  },
+  BIRD: {
+    label: "Bird density",
+    units: "birds/km³",
+    min: 0,
+    max: 500,
+    threshold: 5,
+    stops: [
+      [0, "#1b1040"],
+      [25, "#3b2f9e"],
+      [75, "#1f8fd0"],
+      [150, "#2fd08a"],
+      [250, "#e8e040"],
+      [350, "#ff8a20"],
+      [500, "#ff2060"],
     ],
   },
 };

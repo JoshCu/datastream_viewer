@@ -418,6 +418,7 @@
                     <option value="VEL">Radial velocity</option>
                     <option value="ZDR">Differential reflectivity</option>
                     <option value="RHO">Correlation coefficient</option>
+                    <option value="BIRD">Birds (density)</option>
                   </select>
                 </div>
                 <div class="scale-select-wrap">
@@ -457,6 +458,8 @@
                     <span id="nexradLegendMax">-</span>
                   </div>
                 </div>
+                <!-- Bird mode: per-radar vertical profiles (density + VAD), built by nexradpanel.js. -->
+                <div id="nexradBirdProfiles"></div>
               </div>
 
               <p class="info-text">
@@ -465,6 +468,10 @@
                 the map (right-drag) to see the storm structure. Hover a point for
                 its value. Add stations to show several radars at once; with the
                 lock on, stepping one snaps the others to their nearest scan.
+                Birds mode keeps reflectivity 5–40 km from the radar where ρHV &lt; 0.95
+                (not rain), as birds/km³ (11 cm² per bird), with a per-height VAD
+                ground speed and heading. Use night scans, 2–4 h after sunset;
+                without winds aloft, insects can't be told apart.
               </p>
             </div>
           </div>

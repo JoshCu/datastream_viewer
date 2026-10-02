@@ -15,7 +15,7 @@
 //   in  { id, type: "forcingRows", source, variables, rows, withTime }
 //     -> result { rows, nTimes, blocks, time, stats }
 //   in  { id, type: "nexrad", buffer, ranges, moment }
-//     -> result { site, cuts }                         (data/workers/nexrad.js)
+//     -> result { site, cuts, profile }                (data/workers/nexrad.js)
 //   out { id, ok: true,  result }
 //   out { id, ok: false, error }
 // Matrix buffers are transferred, not copied.
@@ -112,6 +112,7 @@ self.onmessage = async (e) => {
     if (type === "nexrad") {
       const result = decodeRecords(e.data.buffer, e.data.ranges, e.data.moment);
       const transfer = result.cuts.flatMap((c) => [c.x.buffer, c.y.buffer, c.z.buffer, c.v.buffer]);
+      if (result.profile) transfer.push(result.profile.buffer);
       self.postMessage({ id, ok: true, result }, transfer);
       return;
     }

@@ -14,6 +14,7 @@ import { PRODUCTS, legendCss } from "../nexrad/products.js";
 import { listStations, listScans, loadVolume, forgetStation, SAME_TILT_DEG } from "../nexrad/source.js";
 import { rebuildNexrad, renderNexrad, refadeNexrad } from "../nexrad/layer.js";
 import { showSites, styleSites, stationCoords } from "../nexrad/sites.js";
+import { birdProfile, compass, sunElevation } from "../nexrad/birds.js";
 
 const $ = (id) => document.getElementById(id);
 const STATIONS_KEY = "nexradStations";
@@ -83,6 +84,45 @@ function closest(scans, t) {
   return best;
 }
 
+// ---- Bird profiles -------------------------------------------------------
+
+function cell(tag, text) {
+  const el = document.createElement(tag);
+  el.textContent = text;
+  return el;
+}
+
+// One table per radar in bird mode: density and VAD per height bin, highest
+// first, under a title flagging daytime scans.
+function profileTable({ icao, site, time, profile }) {
+  const root = document.createElement("div");
+  root.className = "nexrad-profile";
+  const sun = sunElevation(time, site.lat, site.lon);
+  const title = `${icao} ${clock(time)} · sun ${sun.toFixed(0)}°${sun > -6 ? " (daytime: likely insects)" : ""}`;
+  const table = document.createElement("table");
+  const head = table.createTHead().insertRow();
+  for (const h of ["km AGL", "birds/km³", "m/s", "toward"]) head.append(cell("th", h));
+  const body = table.createTBody();
+  for (const r of birdProfile(profile).reverse()) {
+    const row = body.insertRow();
+    row.append(
+      cell("td", `${(r.bottom / 1000).toFixed(1)}–${(r.top / 1000).toFixed(1)}`),
+      cell("td", r.density.toFixed(1)),
+      cell("td", r.speed == null ? "–" : r.speed.toFixed(1)),
+      cell("td", r.heading == null ? "–" : `${compass(r.heading)} ${r.heading.toFixed(0)}°`),
+    );
+  }
+  root.append(cell("div", title), table);
+  root.firstChild.className = "nexrad-profile-title";
+  return root;
+}
+
+function renderProfiles() {
+  $("nexradBirdProfiles").replaceChildren(
+    ...radars.filter((r) => r.volume?.profile).map((r) => profileTable(r.volume)),
+  );
+}
+
 // ---- Status --------------------------------------------------------------
 
 function summary() {
@@ -99,6 +139,7 @@ function summary() {
 }
 
 function renderStatus() {
+  renderProfiles();
   if (progress.size) status("loading", [...progress.values()].join("\n"));
   else if (errors.size) status("error", [...errors.values()].join("\n"));
   else summary();
