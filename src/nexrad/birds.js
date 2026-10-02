@@ -4,8 +4,8 @@
 //
 // The VAD fits v_r / cos(el) = u·sin(az) + v·cos(az) + c over the bird gates
 // in each height bin, giving the ground velocity (u east, v north) of what
-// the radar sees. Without winds aloft this is ground speed, not airspeed, so
-// it can't tell birds from insects drifting on the wind (airspeed < ~5 m/s).
+// the radar sees. Subtracting the wind at that height (winds/openmeteo.js)
+// gives airspeed: below ~5 m/s it's insects drifting on the wind, not birds.
 // ====================================================================
 import { PF, PROFILE_BIN_M, PROFILE_BINS, PROFILE_FIELDS, PROFILE_SECTORS } from "../data/workers/nexrad.js";
 
@@ -13,6 +13,8 @@ import { PF, PROFILE_BIN_M, PROFILE_BINS, PROFILE_FIELDS, PROFILE_SECTORS } from
 const MIN_VAD_SAMPLES = 50;
 const MIN_SECTOR_SAMPLES = 5;
 const MIN_SECTORS = 6;
+// Self-powered flight: slower than this through the air is likely insects.
+export const INSECT_AIRSPEED = 5;
 
 // Solve the 3×3 system A·x = b by Cramer's rule; null if singular.
 function solve3(A, b) {
@@ -39,23 +41,33 @@ function vad(f) {
   const x = solve3(A, [f[PF.sv], f[PF.cv], f[PF.v]]);
   if (!x) return null;
   const [u, v] = x;
-  return { speed: Math.hypot(u, v), heading: ((Math.atan2(u, v) / (Math.PI / 180)) + 360) % 360 };
+  return { u, v, speed: Math.hypot(u, v), heading: towardDeg(u, v) };
 }
+
+// Direction (°) a u/v vector points toward.
+export const towardDeg = (u, v) => ((Math.atan2(u, v) * 180) / Math.PI + 360) % 360;
 
 // One row per height bin with any gates: { bottom, top } metres above the
 // radar, density (mean birds/km³, empty gates counted as 0), and speed (m/s)
 // / heading (degrees, the direction flown toward) or null when the VAD
-// can't be fit.
-export function birdProfile(sums) {
+// can't be fit. With `windAt(heightAboveRadar)` → { u, v } | null, also
+// airspeed (null without a fit or wind) and `insects` (airspeed too low).
+export function birdProfile(sums, windAt = null) {
   const rows = [];
   for (let b = 0; b < PROFILE_BINS; b++) {
     const f = sums.subarray(b * PROFILE_FIELDS, (b + 1) * PROFILE_FIELDS);
     if (!f[PF.densN]) continue;
+    const fit = vad(f);
+    const wind = fit && windAt ? windAt((b + 0.5) * PROFILE_BIN_M) : null;
+    const airspeed = wind ? Math.hypot(fit.u - wind.u, fit.v - wind.v) : null;
     rows.push({
       bottom: b * PROFILE_BIN_M,
       top: (b + 1) * PROFILE_BIN_M,
       density: f[PF.densSum] / f[PF.densN],
-      ...(vad(f) ?? { speed: null, heading: null }),
+      speed: fit?.speed ?? null,
+      heading: fit?.heading ?? null,
+      airspeed,
+      insects: airspeed != null && airspeed < INSECT_AIRSPEED,
     });
   }
   return rows;

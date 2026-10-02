@@ -79,14 +79,17 @@ function writeAlpha(colors, points, product, threshold, fade) {
 }
 
 // Flatten the selected tilt(s) of `volume` into deck attribute arrays,
-// keeping only gates past the threshold.
-export function buildPoints(volume, { threshold, cut, fade = 0 }) {
+// keeping only gates past the threshold (and, for a ranged product like
+// BIRD, within `range` metres of the radar along the ground).
+export function buildPoints(volume, { threshold, cut, fade = 0, range = Infinity }) {
   const product = PRODUCTS[volume.moment];
-  const keep = product.signed ? (v) => Math.abs(v) >= threshold : (v) => v >= threshold;
+  const pass = product.signed ? (v) => Math.abs(v) >= threshold : (v) => v >= threshold;
+  const r2 = product.ranged ? range * range : Infinity;
+  const keep = (c, i) => pass(c.v[i]) && c.x[i] * c.x[i] + c.y[i] * c.y[i] <= r2;
   const cuts = cut < 0 ? volume.cuts.map((c, i) => [c, i]) : [[volume.cuts[cut], cut]];
 
   let count = 0;
-  for (const [c] of cuts) for (let i = 0; i < c.v.length; i++) if (keep(c.v[i])) count++;
+  for (const [c] of cuts) for (let i = 0; i < c.v.length; i++) if (keep(c, i)) count++;
 
   const lut = colorLut(product);
   const span = product.max - product.min;
@@ -97,8 +100,8 @@ export function buildPoints(volume, { threshold, cut, fade = 0 }) {
   let n = 0;
   for (const [c, ci] of cuts) {
     for (let i = 0; i < c.v.length; i++) {
+      if (!keep(c, i)) continue;
       const v = c.v[i];
-      if (!keep(v)) continue;
       positions[n * 3] = c.x[i];
       positions[n * 3 + 1] = c.y[i];
       positions[n * 3 + 2] = c.z[i];
@@ -204,6 +207,7 @@ export async function rebuildNexrad(radars = nexradState.radars) {
           threshold: nexradState.threshold,
           cut: cutFor(r.volume, nexradState.tilt),
           fade: nexradState.fade,
+          range: nexradState.birdRange * 1000,
         })
       : null;
   }

@@ -173,7 +173,7 @@ once — their feature-state lives on different sources.
 **Clicks:** left-click on a catchment opens the forcing plot
 (`ui/forcingplot.js`) unless a reach (with a run loaded) or a gage is under the
 cursor. The right-click menu (`ui/contextmenu.js`) offers forcings, the
-hydrograph and the upstream highlight; it only opens for a right click that
+hydrograph, the upstream highlight and winds aloft; it only opens for a right click that
 didn't drag, since right-drag rotates the map. The forcing plot and the
 hydrograph share the dock's spot and close each other via a `dockopen`
 document event.
@@ -198,6 +198,20 @@ so it only re-renders. State is `nexradState` (`state.js`).
 `with { type: "json" }` so the single-file build inlines it. Its coordinates
 come from each radar's own Level II header rather than HOMR, because the point
 cloud is placed by that header and HOMR is kilometres off for most TDWRs.
+
+Bird mode (`BIRD`, a pseudo-moment) decodes REF gated by RHO in the worker,
+plus additive per-height sums (`PF` in `data/workers/nexrad.js`) that
+`nexrad/birds.js` solves into a density + VAD profile. Points decode to 150 km
+and `buildPoints` trims them by `nexradState.birdRange` (so the slider never
+re-decodes); the profile only uses 5–40 km.
+
+### Winds aloft (`src/winds/`, `ui/windspanel.js`)
+
+Open-Meteo hourly pressure-level winds for one point, fetched straight from
+the browser (forecast API for recent days, historical-forecast API back to
+2021) and cached per point and days. `windAt()` interpolates in time and
+height; bird mode subtracts it from the VAD for airspeed. The panel is opened
+at a point by `showWindsAt()` (right-click menu, bird profiles).
 
 ### Changing the timestep, and the active dataset
 
