@@ -362,6 +362,52 @@
             </div>
           </div>
 
+          <!-- Winds aloft (src/winds/, src/ui/windspanel.js): Open-Meteo hourly
+               pressure-level winds for one point, as a time–height arrow grid. -->
+          <div class="panel collapsed" id="windsPanel" data-url-key="winds">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 8h11a3 3 0 1 0-3-3" />
+                <path d="M3 12h16a3 3 0 1 1-3 3" />
+                <path d="M3 16h7" />
+              </svg>
+              Winds Aloft
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <div class="nexrad-row">
+                <input type="date" id="windsDate" class="select" title="Date (UTC)" />
+                <button class="btn secondary" id="windsCentreBtn" title="Winds over the map centre">Map centre</button>
+              </div>
+              <div class="status" id="windsStatus">
+                <span class="status-dot" id="windsStatusDot"></span>
+                <span id="windsStatusText">Pick a point: map centre, or right-click the map</span>
+              </div>
+              <div id="windsResult" style="display: none">
+                <div class="winds-meta">Point <span id="windsPoint">-</span></div>
+                <svg id="windsChart" role="img" aria-label="Wind by hour and pressure level"></svg>
+                <div class="winds-meta" id="windsReadout">Hover for values · click for an hour's table</div>
+                <div class="legend">
+                  <div class="legend-title">Wind speed (m/s)</div>
+                  <div class="legend-gradient" id="windsLegendGradient"></div>
+                  <div class="legend-labels"><span>0</span><span>40+</span></div>
+                </div>
+                <div class="winds-meta" id="windsHour">-</div>
+                <table id="windsTable" class="winds-table"></table>
+              </div>
+              <p class="info-text">
+                Hourly winds on pressure levels from Open-Meteo (forecast models;
+                archived back to 2021-03-23). Arrows point where the air is going.
+                Bird mode in the NEXRAD panel uses these for airspeed.
+              </p>
+            </div>
+          </div>
+
           <!-- NEXRAD Level II (src/nexrad/, src/ui/nexradpanel.js): volume scans
                from the public Unidata bucket as deck.gl 3D point clouds, one per
                chosen station. -->

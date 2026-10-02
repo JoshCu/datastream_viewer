@@ -38,8 +38,13 @@ velocity / depth on the hydrofabric flowpaths over time.
   to a chosen range (up to 150 km). It lists a per-radar vertical profile from
   the gates 5–40 km out: mean density with a VAD fit of ground speed and
   heading per 200 m bin, flagging daytime scans, plus the rain and 10 m wind
-  at the radar when forcings covering it are loaded. No wind subtraction
-  aloft, so insects aren't separated.
+  at the radar when forcings covering it are loaded. Subtracting the
+  Open-Meteo wind at each bin's height gives airspeed; bins under 5 m/s are
+  marked as likely insects.
+- **Winds aloft** — Open-Meteo's hourly pressure-level winds (1000–250 hPa)
+  for the map centre or a right-clicked point, as a time–height grid of
+  arrows coloured by speed, with an hour's table of height, speed, direction
+  and temperature.
 - **Hydrograph** — clicking a reach or USGS gage opens a D3 hydrograph of that
   reach from every loaded run (each uploaded file plus the latest S3 load),
   with the gage's observed discharge when there is one. Toggle/isolate lines
@@ -135,6 +140,7 @@ src/
     forcingplot.js            per-catchment forcing small multiples (dock)
     contextmenu.js            map right-click menu
     nexradpanel.js            NEXRAD panel: date, per-station scan rows + lock, display controls
+    windspanel.js             winds aloft panel: time–height arrow grid + hour table
   forcing/
     store.js                  sparse, growable catchment store + change events
     layout.js                 per-file layout scan + IndexedDB cache
@@ -147,6 +153,8 @@ src/
     products.js               moment labels, ranges, colour ramps
     birds.js                  bird-mode profile: density + VAD solve, sun elevation
     surface.js                bird-mode surface context (rain, 10 m wind) from loaded forcings
+  winds/
+    openmeteo.js              Open-Meteo pressure-level fetch + cache, wind interpolation
     sites.js                  station dots/labels, click to pick
     stations.json             station table (GeoJSON), see its `source` field
   sim/

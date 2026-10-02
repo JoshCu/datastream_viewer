@@ -14,7 +14,9 @@ import { PRODUCTS, legendCss } from "../nexrad/products.js";
 import { listStations, listScans, loadVolume, forgetStation, SAME_TILT_DEG } from "../nexrad/source.js";
 import { rebuildNexrad, renderNexrad, refadeNexrad } from "../nexrad/layer.js";
 import { showSites, styleSites, stationCoords } from "../nexrad/sites.js";
-import { birdProfile, compass, sunElevation } from "../nexrad/birds.js";
+import { birdProfile, compass, sunElevation, towardDeg, INSECT_AIRSPEED } from "../nexrad/birds.js";
+import { fetchWinds, windAt, daysAround } from "../winds/openmeteo.js";
+import { showWindsAt } from "./windspanel.js";
 import { surfaceAt } from "../nexrad/surface.js";
 import { onForcingChange } from "../forcing/store.js";
 
@@ -99,8 +101,7 @@ function surfaceLine({ precip, u, v }) {
   const parts = [];
   if (precip != null) parts.push(`rain ${precip.toFixed(1)} mm/h${precip >= 0.1 ? " (may contaminate)" : ""}`);
   if (u != null && v != null) {
-    const toward = ((Math.atan2(u, v) * 180) / Math.PI + 360) % 360;
-    parts.push(`10 m wind ${Math.hypot(u, v).toFixed(1)} m/s toward ${compass(toward)}`);
+    parts.push(`10 m wind ${Math.hypot(u, v).toFixed(1)} m/s toward ${compass(towardDeg(u, v))}`);
   }
   return parts.length ? `Surface: ${parts.join(" · ")}` : null;
 }
@@ -116,24 +117,46 @@ async function refreshSurface(radar) {
   renderProfiles();
 }
 
+// Fetch the winds aloft over a radar for its scan (Open-Meteo), then redraw
+// the profiles with airspeeds. A failure is shown under its profile.
+async function refreshWinds(radar) {
+  const volume = radar.volume;
+  if (!volume?.profile || volume.winds !== undefined) return;
+  volume.winds = null; // in flight
+  const { lat, lon } = volume.site;
+  try {
+    volume.winds = await fetchWinds(lat, lon, ...daysAround(volume.time));
+  } catch (err) {
+    volume.windsError = err.message;
+  }
+  if (radar.volume === volume) renderProfiles();
+}
+
 // One table per radar in bird mode: density and VAD per height bin, highest
-// first, under a title flagging daytime scans and the surface context.
-function profileTable({ icao, site, time, profile, surface }) {
+// first, under a title flagging daytime scans and the surface context. With
+// winds aloft, airspeed too; rows flying too slowly to be birds are dimmed.
+function profileTable({ icao, site, time, profile, surface, winds, windsError }) {
   const root = document.createElement("div");
   root.className = "nexrad-profile";
   const sun = sunElevation(time, site.lat, site.lon);
   const title = `${icao} ${clock(time)} · sun ${sun.toFixed(0)}°${sun > -6 ? " (daytime: likely insects)" : ""}`;
   const table = document.createElement("table");
   const head = table.createTHead().insertRow();
-  for (const h of ["km AGL", "birds/km³", "m/s", "toward"]) head.append(cell("th", h));
+  for (const h of ["km AGL", "birds/km³", "ground m/s", "toward", "air m/s"]) head.append(cell("th", h));
   const body = table.createTBody();
-  for (const r of birdProfile(profile).reverse()) {
+  const wind = winds ? (agl) => windAt(winds, time, site.height + agl) : null;
+  for (const r of birdProfile(profile, wind).reverse()) {
     const row = body.insertRow();
+    if (r.insects) {
+      row.className = "insects";
+      row.title = `Airspeed under ${INSECT_AIRSPEED} m/s: likely insects drifting on the wind`;
+    }
     row.append(
       cell("td", `${(r.bottom / 1000).toFixed(1)}–${(r.top / 1000).toFixed(1)}`),
       cell("td", r.density.toFixed(1)),
       cell("td", r.speed == null ? "–" : r.speed.toFixed(1)),
       cell("td", r.heading == null ? "–" : `${compass(r.heading)} ${r.heading.toFixed(0)}°`),
+      cell("td", r.airspeed == null ? "–" : `${r.airspeed.toFixed(1)}${r.insects ? " ins." : ""}`),
     );
   }
   root.append(cell("div", title), table);
@@ -322,6 +345,7 @@ async function showScan(radar, url) {
     await rebuildNexrad(syncTilts() ? radars : [radar]);
     if (seq !== radar.seq) return;
     refreshSurface(radar);
+    refreshWinds(radar);
     $("nexradControls").style.display = "";
     if (first) map.flyTo({ center: [volume.site.lon, volume.site.lat], zoom: 7, pitch: 60 });
   } catch (err) {

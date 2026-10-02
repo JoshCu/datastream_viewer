@@ -2138,3 +2138,69 @@ body.hydro-open .sim-map-controls {
     font-weight: 500;
     opacity: 0.7;
 }
+
+.nexrad-profile tr.insects td {
+    color: var(--text-muted);
+}
+
+/* ====================================================================
+   Winds aloft (src/winds/, src/ui/windspanel.js)
+   ==================================================================== */
+#windsResult {
+    margin-top: var(--space-md);
+}
+
+#windsChart {
+    display: block;
+    width: 100%;
+}
+
+.winds-axis {
+    fill: var(--text-secondary);
+    font-size: 9px;
+    font-family: var(--font-mono);
+}
+
+.winds-arrow {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.winds-selected {
+    fill: var(--selected-fill);
+}
+
+.winds-meta {
+    margin: 4px 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.winds-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.winds-table th,
+.winds-table td {
+    padding: 1px 4px;
+    text-align: right;
+}
+
+.winds-table th {
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.nexrad-profile .link-btn {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent-primary);
+    font: inherit;
+    cursor: pointer;
+}

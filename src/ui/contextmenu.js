@@ -1,6 +1,6 @@
 // ====================================================================
 // Map right-click menu: forcings, hydrograph and upstream highlight for
-// whatever is under the cursor.
+// whatever is under the cursor, and the winds aloft at that point.
 //
 // A right-drag rotates/pitches the map, so the menu only opens for a right
 // click that didn't move. Where the browser fires `contextmenu` on mousedown
@@ -14,6 +14,7 @@ import { hasForcingSource } from "../forcing/loader.js";
 import { isUpstreamHighlighted, reachAt, toggleUpstreamHighlight } from "../map/interactions.js";
 import { showFeatureInfo } from "./infopanel.js";
 import { openForcingPlot } from "./forcingplot.js";
+import { showWindsAt } from "./windspanel.js";
 // maplibregl is a global provided by the CDN <script> in index.html.
 
 const CLICK_SLOP_PX = 4;
@@ -96,6 +97,7 @@ function itemsAt(point, lngLat) {
       action: () => toggleUpstreamHighlight(catchment, lngLat),
     });
   }
+  items.push({ label: "Winds aloft here", action: () => showWindsAt(lngLat.lat, lngLat.lng) });
   return items;
 }
 
