@@ -430,6 +430,11 @@
                   <input type="range" id="nexradThreshold" />
                   <span class="speed-value" id="nexradThresholdValue">-</span>
                 </div>
+                <div class="speed-control" id="nexradBirdRangeRow" title="Bird mode: hide points farther than this from the radar. The profile always uses 5–40 km.">
+                  <label for="nexradBirdRange">Range</label>
+                  <input type="range" id="nexradBirdRange" min="10" max="150" step="5" value="80" />
+                  <span class="speed-value" id="nexradBirdRangeValue">80 km</span>
+                </div>
                 <div class="speed-control">
                   <label for="nexradExaggeration">Height</label>
                   <input type="range" id="nexradExaggeration" min="1" max="20" value="4" />
@@ -468,10 +473,14 @@
                 the map (right-drag) to see the storm structure. Hover a point for
                 its value. Add stations to show several radars at once; with the
                 lock on, stepping one snaps the others to their nearest scan.
-                Birds mode keeps reflectivity 5–40 km from the radar where ρHV &lt; 0.95
-                (not rain), as birds/km³ (11 cm² per bird), with a per-height VAD
-                ground speed and heading. Use night scans, 2–4 h after sunset;
-                without winds aloft, insects can't be told apart.
+                Birds mode keeps reflectivity where ρHV &lt; 0.95 (not rain), as
+                birds/km³ (11 cm² per bird), out to the chosen range, with a
+                per-height profile and VAD ground speed and heading from gates
+                5–40 km out. Far gates are drawn but undercount: the beam
+                overshoots and outgrows the migration layer. With forcings loaded,
+                the profile shows the rain and 10 m wind at the radar. Use night
+                scans, 2–4 h after sunset; without winds aloft, insects can't be
+                told apart.
               </p>
             </div>
           </div>

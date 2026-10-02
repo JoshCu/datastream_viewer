@@ -15,6 +15,8 @@ import { listStations, listScans, loadVolume, forgetStation, SAME_TILT_DEG } fro
 import { rebuildNexrad, renderNexrad, refadeNexrad } from "../nexrad/layer.js";
 import { showSites, styleSites, stationCoords } from "../nexrad/sites.js";
 import { birdProfile, compass, sunElevation } from "../nexrad/birds.js";
+import { surfaceAt } from "../nexrad/surface.js";
+import { onForcingChange } from "../forcing/store.js";
 
 const $ = (id) => document.getElementById(id);
 const STATIONS_KEY = "nexradStations";
@@ -92,9 +94,31 @@ function cell(tag, text) {
   return el;
 }
 
+// "rain 0.4 mm/h · 10 m wind 3.2 m/s toward NE", from the forcings.
+function surfaceLine({ precip, u, v }) {
+  const parts = [];
+  if (precip != null) parts.push(`rain ${precip.toFixed(1)} mm/h${precip >= 0.1 ? " (may contaminate)" : ""}`);
+  if (u != null && v != null) {
+    const toward = ((Math.atan2(u, v) * 180) / Math.PI + 360) % 360;
+    parts.push(`10 m wind ${Math.hypot(u, v).toFixed(1)} m/s toward ${compass(toward)}`);
+  }
+  return parts.length ? `Surface: ${parts.join(" · ")}` : null;
+}
+
+// Look up a radar's surface context in the forcings, then redraw the
+// profiles. Quietly does nothing without forcings for its place and time.
+async function refreshSurface(radar) {
+  const volume = radar.volume;
+  if (!volume?.profile) return;
+  const surface = await surfaceAt(volume.site, volume.time).catch(() => null);
+  if (radar.volume !== volume || !surface) return;
+  volume.surface = surface;
+  renderProfiles();
+}
+
 // One table per radar in bird mode: density and VAD per height bin, highest
-// first, under a title flagging daytime scans.
-function profileTable({ icao, site, time, profile }) {
+// first, under a title flagging daytime scans and the surface context.
+function profileTable({ icao, site, time, profile, surface }) {
   const root = document.createElement("div");
   root.className = "nexrad-profile";
   const sun = sunElevation(time, site.lat, site.lon);
@@ -264,6 +288,7 @@ function syncProduct() {
   $("nexradLegendGradient").style.background = legendCss(p);
   $("nexradLegendMin").textContent = p.min;
   $("nexradLegendMax").textContent = p.max;
+  $("nexradBirdRangeRow").style.display = p.ranged ? "" : "none";
 }
 
 // Load `url` (one of the radar's scans) for the current product and draw
@@ -296,6 +321,7 @@ async function showScan(radar, url) {
     errors.delete(radar.key);
     await rebuildNexrad(syncTilts() ? radars : [radar]);
     if (seq !== radar.seq) return;
+    refreshSurface(radar);
     $("nexradControls").style.display = "";
     if (first) map.flyTo({ center: [volume.site.lon, volume.site.lat], zoom: 7, pitch: 60 });
   } catch (err) {
@@ -572,10 +598,23 @@ export function setupNexradPanel() {
   });
 
   bindSlider("nexradThreshold", "threshold", (v) => `${v}`, scheduleRebuild);
+  bindSlider("nexradBirdRange", "birdRange", (v) => `${v} km`, scheduleRebuild);
   bindSlider("nexradExaggeration", "exaggeration", (v) => `${v}×`, renderNexrad);
   bindSlider("nexradPointSize", "pointSize", (v) => `${v}px`, renderNexrad);
   bindSlider("nexradOpacity", "opacity", (v) => v.toFixed(2), renderNexrad);
   bindSlider("nexradFade", "fade", (v) => (v ? v.toFixed(2) : "off"), refadeNexrad);
+
+  // Surface context needs the radar's catchment on screen and its forcings
+  // loaded, so retry whenever either may have changed.
+  const retrySurfaces = () => {
+    for (const r of radars) if (r.volume?.profile && !r.volume.surface) refreshSurface(r);
+  };
+  map.on("moveend", retrySurfaces);
+  onForcingChange(({ kind }) => {
+    if (kind === "time") return;
+    for (const r of radars) if (r.volume) r.volume.surface = null;
+    retrySurfaces();
+  });
 
   syncProduct();
 }

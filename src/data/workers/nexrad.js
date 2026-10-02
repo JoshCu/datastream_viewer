@@ -13,9 +13,9 @@
 // records can be fanned across the worker pool; decodeRecords() turns one
 // group of records into per-cut point arrays.
 //
-// "BIRD" is a pseudo-moment (bird mode): reflectivity gates 5–40 km out whose
+// "BIRD" is a pseudo-moment (bird mode): reflectivity gates 5–150 km out whose
 // correlation coefficient says they aren't precipitation, as birds/km³, plus
-// per-height sums for a vertical profile of density and a VAD fit of
+// (from the gates within 40 km) per-height sums for a vertical profile of density and a VAD fit of
 // radial velocity (see nexrad/birds.js for the solve).
 // ====================================================================
 import { bunzip2 } from "./bzip2.js";
@@ -63,10 +63,13 @@ const MOMENT_NAMES = ["REF", "VEL", "SW ", "ZDR", "PHI", "RHO", "CFP"];
 
 // ---- Bird mode -----------------------------------------------------------
 
-// Gates nearer than this are ground clutter, farther ones overshoot the
-// migration layer.
+// Gates nearer than this are ground clutter. Points are decoded out to
+// BIRD_MAX_RANGE_M (the panel trims them further); only gates within
+// PROFILE_MAX_RANGE_M feed the profile, since farther out the beam is too high
+// and wide to resolve the migration layer.
 const BIRD_MIN_RANGE_M = 5000;
-const BIRD_MAX_RANGE_M = 40000;
+export const BIRD_MAX_RANGE_M = 150000;
+const PROFILE_MAX_RANGE_M = 40000;
 // Rain is ρHV above about 0.95; biology is lower and noisier.
 const BIRD_MAX_RHO = 0.95;
 // Standard songbird radar cross-section at S-band, cm².
@@ -119,7 +122,7 @@ function addBirdGates(cut, profile, view, radial, siteHeight) {
     const bin = Math.floor(h / PROFILE_BIN_M);
     const raw = ref.wordBits === 16 ? view.getUint16(ref.start + g * 2) : view.getUint8(ref.start + g);
     if (raw === 1) continue; // range folded: unknown
-    const p = bin >= 0 && bin < PROFILE_BINS ? bin * PROFILE_FIELDS : -1;
+    const p = bin >= 0 && bin < PROFILE_BINS && r <= PROFILE_MAX_RANGE_M ? bin * PROFILE_FIELDS : -1;
     if (raw === 0) {
       // Below the noise floor: no birds here.
       if (p >= 0) profile[p + PF.densN]++;

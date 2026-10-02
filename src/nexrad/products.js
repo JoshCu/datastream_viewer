@@ -7,7 +7,8 @@
 // signed moment like velocity.
 //
 // BIRD isn't a radar moment but bird mode: reflectivity of non-precipitation
-// gates 5–40 km out, as birds/km³ (data/workers/nexrad.js).
+// gates 5–150 km out, as birds/km³ (data/workers/nexrad.js). `ranged`
+// products are trimmed to nexradState.birdRange.
 // ====================================================================
 
 export const PRODUCTS = {
@@ -93,6 +94,7 @@ export const PRODUCTS = {
     min: 0,
     max: 500,
     threshold: 5,
+    ranged: true,
     stops: [
       [0, "#1b1040"],
       [25, "#3b2f9e"],

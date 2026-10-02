@@ -74,6 +74,7 @@ export const nexradState = {
   pointSize: 2,
   opacity: 0.8,
   fade: 0, // alpha = t^fade, t = value's position from threshold to max; 0 = off
+  birdRange: 80, // km: bird mode's points stop this far from the radar
 };
 
 // The MapLibre map instance. It's created asynchronously in map/init.js;

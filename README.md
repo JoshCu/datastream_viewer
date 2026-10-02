@@ -33,11 +33,13 @@ velocity / depth on the hydrofabric flowpaths over time.
   exaggeration, point size and opacity. Station dots (WSR-88D and TDWR) show on
   the map while the panel is open; click one to add it. The files are
   bzip2-decoded in the worker pool. **Birds** mode keeps reflectivity gates
-  5–40 km out whose ρHV < 0.95 (not rain), converts them to birds/km³
-  (η = 10^((dBZ + 13.37)/10) cm²/km³ over 11 cm² per bird), and lists a
-  per-radar vertical profile of mean density with a VAD fit of ground speed
-  and heading per 200 m bin, flagging daytime scans. No wind subtraction, so
-  insects aren't separated.
+  whose ρHV < 0.95 (not rain), converts them to birds/km³
+  (η = 10^((dBZ + 13.37)/10) cm²/km³ over 11 cm² per bird) and draws them out
+  to a chosen range (up to 150 km). It lists a per-radar vertical profile from
+  the gates 5–40 km out: mean density with a VAD fit of ground speed and
+  heading per 200 m bin, flagging daytime scans, plus the rain and 10 m wind
+  at the radar when forcings covering it are loaded. No wind subtraction
+  aloft, so insects aren't separated.
 - **Hydrograph** — clicking a reach or USGS gage opens a D3 hydrograph of that
   reach from every loaded run (each uploaded file plus the latest S3 load),
   with the gage's observed discharge when there is one. Toggle/isolate lines
@@ -144,6 +146,7 @@ src/
     layer.js                  deck.gl PointCloudLayer per radar (lazy-loads deck.gl)
     products.js               moment labels, ranges, colour ramps
     birds.js                  bird-mode profile: density + VAD solve, sun elevation
+    surface.js                bird-mode surface context (rain, 10 m wind) from loaded forcings
     sites.js                  station dots/labels, click to pick
     stations.json             station table (GeoJSON), see its `source` field
   sim/
