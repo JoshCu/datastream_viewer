@@ -197,19 +197,58 @@ function s3Label(path) {
   return i >= 0 ? segs.slice(i, i + 4).join("/") : segs.at(-1) || path;
 }
 
-// Load a single selected file.
-export async function loadFile(url) {
+// Parse every url across the pool and, when there's more than one, merge them
+// in a worker (the merge unions both feature ids and timestamps, so it covers
+// a VPU's time-chunked files as well as CONUS's per-VPU ones). Failed files
+// are skipped rather than aborting the whole load. `noun` labels the progress
+// text. Resolves with the parsed { dataset, bounds } and how many files made
+// it in.
+async function parseAndMerge(urls, noun) {
+  if (urls.length === 1) {
+    return { ...(await runTask({ type: "parse", url: urls[0] })), count: 1 };
+  }
+
+  // Dispatch every file to the pool at once; the pool bounds concurrency.
+  let done = 0;
+  const results = await Promise.all(
+    urls.map((url) =>
+      runTask({ type: "parse", url })
+        .catch((error) => {
+          console.warn("Skipping file (parse failed):", url, error);
+          return null;
+        })
+        .finally(() => {
+          setStatus("loading", `Loading ${noun} files ${++done} / ${urls.length}...`);
+        }),
+    ),
+  );
+  const datasets = results.filter(Boolean).map((r) => r.dataset);
+  if (datasets.length === 0) throw new Error(`Failed to parse any ${noun} files`);
+
+  setStatus("loading", `Merging ${datasets.length} ${noun} files...`);
+  const transfer = datasets.flatMap((d) =>
+    VARIABLE_KEYS.map((v) => d.matrices[v]?.buffer).filter(Boolean),
+  );
+  const merged = await runTask({ type: "merge", datasets }, transfer);
+  return { ...merged, count: datasets.length };
+}
+
+// Load the selected VPU's files (one or many) as a single run.
+export async function loadFiles(urls) {
   const btn = document.getElementById("loadBtn");
 
   btn.disabled = true;
-  setStatus("loading", `Loading ${formatLabel(url)}...`);
+  setStatus("loading", `Loading ${urls.length} ${formatLabel(urls[0])} file${urls.length === 1 ? "" : "s"}...`);
 
   try {
-    const { dataset, bounds } = await runTask({ type: "parse", url });
-    registerSource(S3_SOURCE, s3Label(new URL(url).pathname), finalizeData(dataset, bounds));
+    const { dataset, bounds, count } = await parseAndMerge(urls, "VPU");
+    const label =
+      urls.length === 1 ? s3Label(new URL(urls[0]).pathname) : s3Label(s3State.currentPath);
+    registerSource(S3_SOURCE, label, finalizeData(dataset, bounds));
     setStatus(
       "success",
-      `Loaded ${state.data.featureIds.length} features × ${state.data.nTimes} steps`,
+      `Loaded ${state.data.featureIds.length} features × ${state.data.nTimes} steps` +
+        (urls.length > 1 ? ` (${count} files)` : ""),
     );
   } catch (error) {
     setStatus("error", `Error: ${error.message}`);
@@ -255,32 +294,7 @@ export async function loadConus() {
     if (fileUrls.length === 0)
       throw new Error("No t-route output files found under any VPU");
 
-    // Dispatch every file to the pool at once; the pool bounds concurrency.
-    // Failed files are skipped rather than aborting the whole load.
-    let done = 0;
-    const results = await Promise.all(
-      fileUrls.map((url) =>
-        runTask({ type: "parse", url })
-          .catch((error) => {
-            console.warn("Skipping file (parse failed):", url, error);
-            return null;
-          })
-          .finally(() => {
-            setStatus("loading", `Loading VPU files ${++done} / ${fileUrls.length}...`);
-          }),
-      ),
-    );
-    const datasets = results.filter(Boolean).map((r) => r.dataset);
-    if (datasets.length === 0) throw new Error("Failed to parse any VPU files");
-
-    setStatus("loading", `Merging ${datasets.length} VPUs...`);
-    const transfer = datasets.flatMap((d) =>
-      VARIABLE_KEYS.map((v) => d.matrices[v]?.buffer).filter(Boolean),
-    );
-    const { dataset, bounds } = await runTask(
-      { type: "merge", datasets },
-      transfer,
-    );
+    const { dataset, bounds, count } = await parseAndMerge(fileUrls, "VPU");
     registerSource(
       S3_SOURCE,
       `CONUS · ${s3Label(s3State.currentPath)}`,
@@ -289,13 +303,13 @@ export async function loadConus() {
 
     setStatus(
       "success",
-      `Loaded CONUS: ${state.data.featureIds.length} features × ${state.data.nTimes} steps (${datasets.length} VPUs)`,
+      `Loaded CONUS: ${state.data.featureIds.length} features × ${state.data.nTimes} steps (${count} files)`,
     );
   } catch (error) {
     setStatus("error", `Error: ${error.message}`);
     console.error("CONUS load error:", error);
   } finally {
     conusBtn.disabled = false;
-    loadBtn.disabled = !s3State.selectedFile;
+    loadBtn.disabled = s3State.vpuFiles.length === 0;
   }
 }

@@ -109,9 +109,7 @@
                   <span class="file-list-title">T-Route Output Files</span>
                   <span class="file-count" id="fileCount">0 files</span>
                 </div>
-                <select class="select file-select" id="fileSelect">
-                  <option value="">Select a file...</option>
-                </select>
+                <select class="select file-select" id="fileSelect"></select>
               </div>
 
               <!-- Load latest: jump straight to the most recent run's cycle for
@@ -149,7 +147,7 @@
                   <circle cx="12" cy="12" r="10" />
                   <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
                 </svg>
-                Load Selected File
+                Load Files
               </button>
 
               <div class="status" id="status" style="margin-top: 12px">
@@ -157,7 +155,7 @@
                 <span id="statusText">Ready to browse</span>
               </div>
               <p class="info-text">
-                Browse the S3 bucket to select a T-Route output file, then pan/zoom the map to
+                Browse the S3 bucket to a VPU and load its T-Route output files, then pan/zoom the map to
                 visualize.
               </p>
             </div>

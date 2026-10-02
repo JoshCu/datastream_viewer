@@ -10,7 +10,9 @@ export const s3State = {
   currentBucket: "ciroh-community-ngen-datastream",
   pathSegments: ["outputs"],
   currentPath: "outputs/",
-  selectedFile: null,
+  // URLs of the t-route files listed for the selected VPU (the "Load Files"
+  // button loads every parquet one among them).
+  vpuFiles: [],
   isLoading: false,
   maxNavigationDepth: 6,
   // The VPU_* folders currently listed, if any (drives the CONUS button).

@@ -169,12 +169,12 @@ wasm/
 
 ### How data flows
 
-1. `s3/browser.js` lists folders (`s3/client.js`) and hands a selected file URL
-   to `data/loader.js`.
+1. `s3/browser.js` lists folders (`s3/client.js`) and hands a VPU's parquet file
+   URLs to `data/loader.js`.
 2. `loader.js` dispatches parsing to a bounded pool of module workers
    (`parse.worker.js`). Each worker fetches and decodes a file into
-   feature-major `Float32Array` matrices; a CONUS load fans many files across
-   the pool and merges them in a worker.
+   feature-major `Float32Array` matrices; a multi-file VPU or CONUS load fans
+   the files across the pool and merges them in a worker.
 3. The parsed matrices are **transferred** (not copied) back to the main thread,
    which owns them from then on — so recoloring per timestep reads them
    synchronously without touching the worker again.

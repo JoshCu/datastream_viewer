@@ -3,18 +3,26 @@
 // ====================================================================
 import { s3State } from "../state.js";
 import { fetchS3Folders, listTrouteFileUrls } from "./client.js";
-import { loadFile } from "../data/loader.js";
+import { loadFiles } from "../data/loader.js";
 import { setStatus } from "../ui/panels.js";
 import { escapeHtml } from "../ui/dom.js";
 import { syncUrl } from "../ui/url.js";
 
-// Reset the file picker back to "nothing chosen". Four call sites used to
+// Reset the file list back to "no VPU chosen". Four call sites used to
 // inline these three steps, and one of them had already drifted (it left the
 // Load button enabled).
 function clearFileSelection() {
   document.getElementById("fileSection").style.display = "none";
   document.getElementById("loadBtn").disabled = true;
-  s3State.selectedFile = null;
+  s3State.vpuFiles = [];
+}
+
+// What "Load Files" loads: every parquet file the VPU lists. A VPU with no
+// parquet output (NetCDF-only runs) falls back to all of its files, so the
+// button is never dead while files are listed.
+function filesToLoad() {
+  const parquet = s3State.vpuFiles.filter((u) => u.toLowerCase().endsWith(".parquet"));
+  return parquet.length ? parquet : s3State.vpuFiles;
 }
 
 // "Load latest" needs a model subfolder selected (outputs/<model>/…) to anchor
@@ -46,13 +54,9 @@ export function setupS3Browser() {
       }
     });
 
-  document.getElementById("fileSelect").addEventListener("change", (e) => {
-    s3State.selectedFile = e.target.value;
-    document.getElementById("loadBtn").disabled = !s3State.selectedFile;
-  });
-
   document.getElementById("loadBtn").addEventListener("click", () => {
-    if (s3State.selectedFile) loadFile(s3State.selectedFile);
+    const urls = filesToLoad();
+    if (urls.length) loadFiles(urls);
   });
 
   document
@@ -116,7 +120,7 @@ async function listTrouteFiles(vpuPath) {
     const fileSelect = document.getElementById("fileSelect");
     const fileCount = document.getElementById("fileCount");
 
-    fileSelect.innerHTML = '<option value="">Select a file...</option>';
+    fileSelect.innerHTML = "";
     files.forEach((f) => {
       const option = document.createElement("option");
       option.value = f.url;
@@ -124,11 +128,8 @@ async function listTrouteFiles(vpuPath) {
       fileSelect.appendChild(option);
     });
 
-    if (files.length === 1) {
-      fileSelect.value = files[0].url;
-      document.getElementById("loadBtn").disabled = false;
-      s3State.selectedFile = files[0].url;
-    }
+    s3State.vpuFiles = urls;
+    document.getElementById("loadBtn").disabled = urls.length === 0;
 
     fileCount.textContent = `${files.length} files`;
     fileSection.style.display = "block";
@@ -190,7 +191,7 @@ function handleFolderClick(path, name) {
     // VPU level: list its t-route files.
     listTrouteFiles(path);
     document.getElementById("folderList").innerHTML =
-      '<div class="folder-empty">VPU selected - choose a file above</div>';
+      '<div class="folder-empty">VPU selected - load its files below</div>';
     s3State.currentPath = path;
     updateBreadcrumb();
   } else {
