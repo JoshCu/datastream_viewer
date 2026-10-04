@@ -43,6 +43,7 @@ import { setupHydrograph, closeHydrograph } from "../ui/hydrograph.js";
 import { togglePlay, stepForward, stepBackward } from "../ui/playback.js";
 import { setupSimPanel, scheduleSimRebuild, stopSimForDataset } from "../sim/network.js";
 import { setupBrush } from "../sim/brush.js";
+import { setupSimRain } from "../sim/rain.js";
 import { forcingTileLoaded, invalidateForcingView } from "../forcing/paint.js";
 import { setupForcingPanel, onForcingHover, onForcingLeave } from "../ui/forcingpanel.js";
 import { setupForcingPlot } from "../ui/forcingplot.js";
@@ -164,6 +165,7 @@ export function init() {
   setupWindsPanel();
   setupSimPanel();
   setupBrush();
+  setupSimRain();
 }
 
 function setupEventListeners() {

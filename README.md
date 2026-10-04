@@ -161,6 +161,7 @@ src/
     network.js                live routing: reach collection, step loop, paint + panel
     sim.worker.js             owns the wasm Network; steps it off the main thread
     brush.js                  lateral-inflow brush cursor, sliders, deposits
+    rain.js                   forcing precipitation → per-reach qlat table, looped
   vendor/
     mc_route/                 wasm-pack output of wasm/mc_route (committed)
 wasm/

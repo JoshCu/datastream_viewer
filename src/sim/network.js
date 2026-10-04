@@ -43,6 +43,7 @@ let inFlight = false; // a step batch is out at the worker
 let pendingReply = null;
 let reachCount = 0;
 let latestStats = null; // { wet, maxQ } from the worker's last report
+let forcingPos = null; // { index, loop } of the rain forcing, from the last reply
 // The hovered reach: its id, and { id, state } as last reported by the worker.
 let hoverId = null;
 let hover = null;
@@ -140,6 +141,7 @@ function applyReply(data) {
   }
   paintDirty(data.ids, data.q);
   reachCount = data.len;
+  forcingPos = data.forcing;
   setHover(data.hover);
   if (data.stats) {
     latestStats = data.stats;
@@ -360,6 +362,24 @@ export function depositQlat(reachIds, qlat) {
   post({ type: "deposit", ids, qlat }, [ids.buffer]);
 }
 
+// Feed rain from forcings (sim/rain.js): `table` is { ids, qlat, nTimes, dt }
+// — per-reach lateral inflow in m³/s for each of nTimes intervals of dt
+// seconds, looped — or null to stop. `restart` starts the series over from
+// its first interval; otherwise a refreshed table keeps its place.
+export function setSimForcing(table, restart = false) {
+  if (!state.simActive) return;
+  if (!table) {
+    post({ type: "forcing", ids: null });
+    return;
+  }
+  post({ type: "forcing", ...table, restart }, [table.ids.buffer, table.qlat.buffer]);
+}
+
+// { index, loop } of the forcing interval being routed, or null.
+export function simForcingPosition() {
+  return state.simActive ? forcingPos : null;
+}
+
 // { q, velocity, depth, qlat } for one reach, or null if it isn't routed.
 // The state lives in the worker, so a reach not hovered before returns
 // undefined while it's fetched; onSimUpdate fires once the answer is in.
@@ -431,6 +451,7 @@ function resetSession() {
   pendingReply = null;
   reachCount = 0;
   latestStats = null;
+  forcingPos = null;
   hoverId = hover = probing = null;
 }
 

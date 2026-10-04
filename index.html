@@ -558,6 +558,19 @@
                   </button>
                   <button class="play-btn" id="simPauseBtn">Pause</button>
                   <button class="play-btn" id="simResetBtn" title="Drain all water">Reset</button>
+                  <button class="play-btn" id="simRainBtn"
+                          title="Rain from the latest forcings on the catchments in view (src/sim/rain.js)">
+                    Rain
+                  </button>
+                </div>
+
+                <div id="simRainControls" style="display: none">
+                  <div class="speed-control">
+                    <label for="simRunoff">Runoff</label>
+                    <input type="range" id="simRunoff" min="1" max="100" value="30" />
+                    <span class="speed-value" id="simRunoffValue">30%</span>
+                  </div>
+                  <p class="info-text sim-hover" id="simRainInfo"></p>
                 </div>
 
                 <div class="speed-control">
@@ -618,7 +631,11 @@
               <p class="info-text">
                 Routes water down the reaches loaded on screen. Turn on the brush and hold
                 the left mouse button (or drag a finger) over rivers to add lateral inflow;
-                it fades once released. Pinch to zoom while the brush is on. Channel shapes are guessed from stream order, and flow leaving
+                it fades once released. Pinch to zoom while the brush is on. Rain fetches the
+                forcings for the catchments in view (the latest short-range cycle unless one is
+                picked in the Forcings panel) and feeds that share of each catchment's
+                precipitation into its reach, looping the forcing hours once they run out.
+                Channel shapes are guessed from stream order, and flow leaving
                 the loaded area is lost.
               </p>
             </div>

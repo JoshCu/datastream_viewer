@@ -14,6 +14,7 @@
 //   in  { type: "deposit", ids, qlat }
 //   in  { type: "reset", hover }
 //   in  { type: "probe", hover }
+//   in  { type: "forcing", ids, qlat, nTimes, dt, restart }   or ids: null to stop
 //   in  { type: "free" }
 //   out { type: "ready" } | { type: "error", error }   once, after wasm loads
 //   out { type: "result", kind, epoch, steps, stepMs, ids, q, orphans,
@@ -22,6 +23,8 @@
 // `hover` in is a wb id (or null); out it is { id, state } with state
 // { q, velocity, depth, qlat }, or null when the reach isn't routed.
 // `stats` out is { wet, maxQ }, or null when not asked for.
+// `forcing` out (on every result) is { index, loop } — the forcing interval
+// the last step used and how many times the series has wrapped — or null.
 // ====================================================================
 import init, { Network } from "../vendor/mc_route/mc_route.js";
 import {
@@ -37,6 +40,16 @@ let net = null;
 // Zero-copy views onto the network's columns, plus wb id -> local index.
 // Rebuilt after every Network.build(): growing wasm memory detaches them.
 let views = null;
+// Sim seconds since the start (or the last reset), advanced per step here so
+// the forcing clock never depends on main-thread timing.
+let clock = 0;
+// Rain from forcings (sim/rain.js): per-reach lateral inflow (m³/s), one row
+// of nTimes intervals of `dt` seconds per wb id, held as a floor on the
+// reach's qlat before every step — the same "at least" rule as a brush
+// deposit, so the brush still adds on top and qlat decays once rain stops.
+// The series loops from `start` (a clock value). `local` maps the network's
+// local index to its table row (or -1), rebuilt with every network.
+let forcing = null;
 
 const ready = init().then(
   (exports) => {
@@ -75,6 +88,7 @@ function build({ ids, toids, ups, cols: c }) {
   );
   net.set_qlat_decay(SIM_QLAT_DECAY);
   refreshViews();
+  mapForcing();
   return new Uint32Array(net.take_orphans());
 }
 
@@ -84,11 +98,53 @@ function step(steps) {
   const t0 = performance.now();
   let done = 0;
   while (done < steps) {
+    applyForcing();
     net.step(1);
+    clock += SIM_DT;
     done++;
     if (performance.now() - t0 > SIM_FRAME_BUDGET_MS) break;
   }
   return { steps: done, stepMs: (performance.now() - t0) / done };
+}
+
+function setForcing({ ids, qlat, nTimes, dt, restart }) {
+  if (!ids) {
+    forcing = null;
+    return;
+  }
+  const rowOf = new Map();
+  for (let r = 0; r < ids.length; r++) rowOf.set(ids[r], r);
+  const start = restart || !forcing ? clock : forcing.start;
+  forcing = { rowOf, qlat, nTimes, dt, start, local: null };
+  mapForcing();
+}
+
+function mapForcing() {
+  if (!forcing || !net) return;
+  const { ids } = liveViews();
+  const local = new Int32Array(ids.length);
+  for (let i = 0; i < ids.length; i++) local[i] = forcing.rowOf.get(ids[i]) ?? -1;
+  forcing.local = local;
+}
+
+// Which forcing interval the next step falls in, and how many loops so far.
+function forcingPosition() {
+  if (!forcing) return null;
+  const k = Math.floor((clock - forcing.start) / forcing.dt);
+  return { index: k % forcing.nTimes, loop: Math.floor(k / forcing.nTimes) };
+}
+
+function applyForcing() {
+  if (!forcing?.local) return;
+  const { index } = forcingPosition();
+  const { local, nTimes, qlat: table } = forcing;
+  const { qlat } = liveViews();
+  for (let i = 0; i < local.length; i++) {
+    const r = local[i];
+    if (r < 0) continue;
+    const v = table[r * nTimes + index];
+    if (qlat[i] < v) qlat[i] = v;
+  }
 }
 
 function deposit(ids, qlat) {
@@ -154,6 +210,7 @@ function reply(msg, { steps = 0, stepMs = 0, orphans = null, withStats = true } 
       len: net.len(),
       stats: withStats ? stats() : null,
       hover: hoverState(msg.hover),
+      forcing: forcingPosition(),
     },
     transfer,
   );
@@ -175,6 +232,8 @@ onmessage = async ({ data: msg }) => {
       if (net) deposit(msg.ids, msg.qlat);
       break;
     case "reset":
+      clock = 0;
+      if (forcing) forcing.start = 0;
       if (net) {
         net.reset();
         reply(msg);
@@ -185,10 +244,15 @@ onmessage = async ({ data: msg }) => {
         postMessage({ type: "probe", epoch: msg.epoch, hover: hoverState(msg.hover) });
       }
       break;
+    case "forcing":
+      setForcing(msg);
+      break;
     case "free":
       net?.free();
       net = null;
       views = null;
+      forcing = null;
+      clock = 0;
       break;
   }
 };

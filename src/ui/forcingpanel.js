@@ -250,6 +250,7 @@ async function resolveLatest(range) {
   throw new Error(`No recent forcing_${range} cycle found`);
 }
 
+// Resolves true once the cycle is selected as the forcing source.
 async function loadLatest(range, label) {
   status("loading", `Finding the latest ${label} forcing cycle…`);
   try {
@@ -258,7 +259,13 @@ async function loadLatest(range, label) {
     console.error("Latest forcing error:", err);
     status("error", `Error: ${err.message}`);
   }
+  return hasForcingSource();
 }
+
+// For the live sim's rain mode (sim/rain.js), which loads through this panel
+// so its status line and buttons stay in step with the load.
+export const loadLatestShortRange = () => loadLatest("short_range", "Short");
+export const loadViewportForcings = (opts) => runLoad(planViewportLoad, "catchments in view", opts);
 
 function renderSource() {
   const el = $("forcingSource");
@@ -295,22 +302,29 @@ function fmtBytes(b) {
 const NOTHING = { rows: 0, requests: 0, bytes: 0 };
 
 // Plan a load, check its size with the user when it's big, then run it.
-async function runLoad(makePlan, what) {
-  if (forcingState.busy) return;
+// With `ask: false` a big load is skipped instead of asked about. Resolves
+// true when the load ran (even if there was nothing new to fetch).
+async function runLoad(makePlan, what, { ask = true } = {}) {
+  if (forcingState.busy) return false;
   forcingState.busy = true;
   syncButtons();
   status("loading", `Planning ${what}…`);
   try {
     const plan = await makePlan();
+    const big = plan.bytes > FORCING_CONFIRM_BYTES || plan.requests > FORCING_CONFIRM_REQUESTS;
+    if (big && !ask) {
+      status("idle", `Skipped loading ${what}: ${fmtBytes(plan.bytes)} is too much to fetch unasked`);
+      return false;
+    }
     if (
-      (plan.bytes > FORCING_CONFIRM_BYTES || plan.requests > FORCING_CONFIRM_REQUESTS) &&
+      big &&
       !confirm(
         `Loading ${what} means downloading about ${fmtBytes(plan.bytes)} in ` +
           `${plan.requests.toLocaleString()} requests. Continue?`,
       )
     ) {
       status("idle", "Load cancelled");
-      return;
+      return false;
     }
     status(
       "loading",
@@ -325,9 +339,11 @@ async function runLoad(makePlan, what) {
       s.bytes ? fmtBytes(s.bytes) : null,
     ].filter(Boolean);
     status("success", `Loaded ${parts.join(" · ")}` + (s.unmatched ? ` (${s.unmatched} not in any file)` : ""));
+    return true;
   } catch (err) {
     console.error("Forcing load error:", err);
     status("error", `Error: ${err.message}`);
+    return false;
   } finally {
     forcingState.busy = false;
     syncButtons();

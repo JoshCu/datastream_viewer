@@ -134,8 +134,12 @@ calls `clearData()`, and it subscribes to the active-dataset event (registered
 *before* `syncPaintToDataset`) to stop when a run loads. It rebuilds on
 `moveend`/`sourcedata`, never `idle` — a running sim keeps the map from idling.
 In the worker, the typed-array views onto wasm memory detach whenever memory
-grows, so go through `liveViews()` rather than caching them. `sim/brush.js` imports
-`network.js`, never the reverse (it listens through `onSimUpdate`).
+grows, so go through `liveViews()` rather than caching them. `sim/brush.js` and
+`sim/rain.js` import `network.js`, never the reverse (they listen through
+`onSimUpdate`). Rain mode loads forcings through the Forcings panel and sends
+the worker a per-catchment (cat-N → wb-N) qlat table per forcing hour; the
+worker floors each reach's qlat at that value before every 5-min step on its
+own clock and loops the series when it runs out.
 
 ### Forcings (`src/forcing/`)
 
