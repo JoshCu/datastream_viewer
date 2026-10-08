@@ -53,7 +53,8 @@ const SERIES_PROPS = [
 // record of every continuous ("Points") time series it publishes. Two requests,
 // memoised per site and Cache-API backed, so a gage is only ever looked up once.
 // Resolves to { site, name, siteType, drainageArea (mi2), altitude (ft),
-// verticalDatum, series: [{ code, name, units, beginMs, endMs }], flow }.
+// verticalDatum, lonLat ([lon, lat] or null), series: [{ code, name, units,
+// beginMs, endMs }], flow }.
 export function fetchGageMeta(site) {
   return memo(metaMemo, site, () => loadMeta(site));
 }
@@ -66,7 +67,8 @@ export function peekGageMeta(site) {
 
 async function loadMeta(site) {
   const locUrl = `${USGS_API}/collections/monitoring-locations/items?${new URLSearchParams(
-    { id: `USGS-${site}`, properties: SITE_PROPS, skipGeometry: "true", f: "json" },
+    // With its geometry (a point): the catchment search locates gages by it.
+    { id: `USGS-${site}`, properties: SITE_PROPS, f: "json" },
   )}`;
   // Only continuous series: those are what the hydrograph compares against, and
   // dropping the daily/statistical variants keeps the response a few KB.
@@ -84,7 +86,7 @@ async function loadMeta(site) {
   // Either half is worth showing on its own; only a total failure is an error.
   const [loc, features] = await Promise.all([
     fetchJsonCached(locUrl)
-      .then(({ json }) => json.features?.[0]?.properties ?? null)
+      .then(({ json }) => json.features?.[0] ?? null)
       .catch(() => null),
     fetchJsonCached(seriesUrl)
       .then(({ json }) => json.features ?? [])
@@ -93,13 +95,18 @@ async function loadMeta(site) {
   if (!loc && !features) throw new Error("USGS metadata unavailable");
 
   const series = summarizeSeries(features || []);
+  const props = loc?.properties;
+  const xy = loc?.geometry?.coordinates;
   return {
     site,
-    name: loc?.monitoring_location_name ?? null,
-    siteType: loc?.site_type ?? null,
-    drainageArea: numberOrNull(loc?.drainage_area),
-    altitude: numberOrNull(loc?.altitude),
-    verticalDatum: loc?.vertical_datum ?? null,
+    name: props?.monitoring_location_name ?? null,
+    siteType: props?.site_type ?? null,
+    drainageArea: numberOrNull(props?.drainage_area),
+    altitude: numberOrNull(props?.altitude),
+    verticalDatum: props?.vertical_datum ?? null,
+    lonLat: xy && numberOrNull(xy[0]) != null && numberOrNull(xy[1]) != null
+      ? [xy[0], xy[1]]
+      : null,
     series,
     flow: series.find((s) => s.code === USGS_FLOW_PARAM) ?? null,
   };

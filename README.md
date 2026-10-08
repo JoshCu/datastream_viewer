@@ -18,6 +18,12 @@ velocity / depth on the hydrofabric flowpaths over time.
 - **Inspection** — hover tooltip, per-reach click panel, a basin-total
   sparkline, and a right-click menu (forcings, hydrograph, highlight upstream
   catchments).
+- **Search** — the magnifier at the top right pops out a search box. Type
+  `cat-123` (or `wb-123`, or `123`) to fly to that catchment and outline it;
+  locations come from the hydrofabric index parquet over range requests
+  (~10 MB on the first search of a session, ~2 MB after). Type a USGS site
+  number (`01013500` or `USGS-01013500`) to fly to that gage and ring it; its
+  panel and hydrograph open if its reach is in the loaded run.
 - **Forcings** — pick an ngen forcing cycle from S3 (or drop forcing `.nc`
   files) and paint any forcing variable on the catchments over time. Nothing is
   downloaded whole: the file layout is read in-browser and only the rows for
@@ -103,6 +109,7 @@ src/
     paint.js                  results paint expression + per-reach feature-state
     statepainter.js           on-screen feature-state painter (reaches + catchments)
     interactions.js           hover tooltip, click info, catchment click, upstream highlight
+    search.js                 search box: find cat-N or a USGS gage, fly to it, mark it
   color/
     scales.js                 continuous transforms (log, sqrt, symlog, …)
     breaks.js                 quantile / Jenks class breaks
@@ -122,6 +129,7 @@ src/
       merge.js                mergeDatasets + bounds (worker-side, pure)
       hdf5layout.js           async HDF5 layout reader for forcing files (pure)
       forcing.js              forcing row fetch/decode over range requests (pure)
+      hfindex.js              hydrofabric index lookups: catchment id → lon/lat (pure)
       nexrad.js               NEXRAD Level II records → per-tilt gate positions + bird profile sums (pure)
       bzip2.js                bzip2 decoder for the Level II records (pure)
       parsers/

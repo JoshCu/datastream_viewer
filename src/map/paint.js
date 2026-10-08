@@ -113,7 +113,7 @@ const FIT_OVERVIEW_ZOOM = 4;
 // camera right by half of whatever the sidebar currently covers. Measured
 // rather than hardcoded: the width lives in CSS (--sidebar-w) and the sidebar
 // can be hidden entirely.
-function sidebarFitOffset() {
+export function sidebarFitOffset() {
   const sidebar = document.querySelector(".sidebar");
   const width = sidebar && sidebar.classList.contains("hide")
     ? 0

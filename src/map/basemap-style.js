@@ -6,6 +6,9 @@ import {
   HIDDEN_FILTER,
   FORCING_LAYER,
   VPU_LAYER,
+  SEARCH_LAYER,
+  SEARCH_POINT_SOURCE,
+  SEARCH_POINT_LAYER,
   FORCING_FILL_OPACITY,
   NO_DATA_COLOR,
 } from "../config.js";
@@ -43,6 +46,11 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         // Gage points carry no feature id in the tiles; promote hl_uri
         // ("gages-<site>") so hover feature-state can target one gage.
         promoteId: "hl_uri",
+      },
+      // Where the searched-for gage is (map/search.js); empty until then.
+      [SEARCH_POINT_SOURCE]: {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
       },
 
     },
@@ -158,6 +166,15 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         paint: { "line-color": "#00d4ff", "line-width": 2.5 },
       },
       {
+        // The catchment found by the search box (map/search.js).
+        id: SEARCH_LAYER,
+        type: "line",
+        source: "divides",
+        "source-layer": "divides",
+        filter: HIDDEN_FILTER,
+        paint: { "line-color": "#ffaa00", "line-width": 3, "line-dasharray": [2, 1] },
+      },
+      {
         id: "hills",
         type: "hillshade",
         source: "hillshadeSource",
@@ -251,6 +268,18 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
           "text-color": "#1a1a2e",
           "text-halo-color": "#ffffff",
           "text-halo-width": 1.5,
+        },
+      },
+      {
+        // Ring around the gage found by the search box (map/search.js).
+        id: SEARCH_POINT_LAYER,
+        type: "circle",
+        source: SEARCH_POINT_SOURCE,
+        paint: {
+          "circle-radius": 11,
+          "circle-color": "rgba(0, 0, 0, 0)",
+          "circle-stroke-color": "#ffaa00",
+          "circle-stroke-width": 3,
         },
       },
     ],

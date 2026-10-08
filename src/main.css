@@ -455,6 +455,67 @@ input[type="range"]::-webkit-slider-thumb {
   stroke: #aaa;
 }
 
+/* Map search (map/search.js): a magnifier button at the top of the right
+   control column; the box pops out to its left. */
+.map-search {
+  position: relative;
+  margin-bottom: 4px;
+}
+
+.maplibregl-ctrl-search span svg path {
+  fill: none;
+  stroke: #000;
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.maplibregl-ctrl-search.active span svg path {
+  stroke: #00d4ff;
+}
+
+.map-search-panel {
+  display: none;
+  position: absolute;
+  top: 0;
+  right: calc(100% + 6px);
+  width: 220px;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.map-search.open .map-search-panel {
+  display: block;
+}
+
+.map-search-panel input {
+  width: 100%;
+  height: 29px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: 12px "IBM Plex Mono", monospace;
+  color: #111;
+  background: transparent;
+  outline: none;
+}
+
+.map-search-panel input:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
+}
+
+.map-search-status {
+  padding: 4px 8px 6px;
+  font: 11px "IBM Plex Mono", monospace;
+  color: #445;
+  border-top: 1px solid #ddd;
+}
+
+.map-search-status.error {
+  color: #c0102e;
+}
+
 /* Tooltip */
 .tooltip {
     position: absolute;

@@ -182,6 +182,26 @@ didn't drag, since right-drag rotates the map. The forcing plot and the
 hydrograph share the dock's spot and close each other via a `dockopen`
 document event.
 
+### Search (`map/search.js`)
+
+The magnifier button at the top right pops out a box that takes `cat-N` /
+`wb-N` / `N`, or a USGS site number (`USGS-N`, or any bare 8–15 digit number —
+catchment ids stay under 8 digits). A catchment already in
+loaded divides tiles is framed from its geometry. Anything else is looked up in
+`hydrofabric_index.parquet` on the hydrofabric bucket through hyparquet (CDN,
+lazy in the parse worker; parquet-wasm can't do Range reads). That file isn't
+sorted by id, so the first search scans its whole `id` column (~10 MB) into a
+sorted `cat-N → row` table cached in `search.js` for the session; each search
+then reads one row's lon/lat (~2 MB, one row group). Found catchments are
+outlined by `SEARCH_LAYER`, and their forcing plot opens if a forcing source is
+set.
+
+A gage is placed from loaded gage tiles, else from the USGS station metadata
+(`fetchGageMeta(site).lonLat`), so gages the hydrofabric doesn't carry are
+found too. It's ringed by `SEARCH_POINT_LAYER` (a one-point GeoJSON source);
+once the map idles there the ring snaps to the hydrofabric's gage point, and
+if that gage's reach is in the loaded run its panel opens as if clicked.
+
 ### NEXRAD radar (`src/nexrad/`)
 
 A third independent mode: Level II volume scans from the public

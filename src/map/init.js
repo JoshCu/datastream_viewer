@@ -24,6 +24,7 @@ import {
   HydrofabricControl,
 } from "./interactions.js";
 import { GageControl, updateGageFilter } from "./gages.js";
+import { SearchControl } from "./search.js";
 import { setupS3Browser } from "../s3/browser.js";
 import { setupUploadPanel } from "../ui/upload.js";
 import { loadConus, preloadParquetWasm } from "../data/loader.js";
@@ -86,6 +87,8 @@ export function init() {
     transformStyle: updateIncomingStyle,
   });
 
+  // First, so it sits at the top of the control column.
+  map.addControl(new SearchControl());
   map.addControl(
       new maplibregl.NavigationControl({
           visualizePitch: true,

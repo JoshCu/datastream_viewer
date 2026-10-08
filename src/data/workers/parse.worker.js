@@ -16,6 +16,10 @@
 //     -> result { rows, nTimes, blocks, time, stats }
 //   in  { id, type: "nexrad", buffer, ranges, moment }
 //     -> result { site, cuts, profile }                (data/workers/nexrad.js)
+//   in  { id, type: "hfIndex" }
+//     -> result { nums, rows }                          (data/workers/hfindex.js)
+//   in  { id, type: "hfIndexRow", row }
+//     -> result { lon, lat, vpuid }
 //   out { id, ok: true,  result }
 //   out { id, ok: false, error }
 // Matrix buffers are transferred, not copied.
@@ -26,9 +30,11 @@ import { parseParquet, parseParquetBuffer } from "./parsers/parquet.js";
 import { mergeDatasets, computeAllBounds } from "./merge.js";
 import { scanForcingLayout, fetchForcingRows } from "./forcing.js";
 import { decodeRecords } from "./nexrad.js";
+import { scanCatchmentIndex, readIndexRow } from "./hfindex.js";
 
 let hdf5Promise = null;
 let parquetWasmPromise = null;
+let hyparquetPromise = null;
 
 // The main thread compiles the 6.5MB parquet-wasm binary once and ships the
 // resulting WebAssembly.Module to every worker (structured-clone shares the
@@ -68,6 +74,18 @@ function loadParquetWasm() {
     });
   }
   return parquetWasmPromise;
+}
+
+// hyparquet does the hydrofabric index lookups: unlike parquet-wasm it reads
+// single columns and row ranges through HTTP Range requests.
+function loadHyparquet() {
+  if (!hyparquetPromise) {
+    hyparquetPromise = import("https://cdn.jsdelivr.net/npm/hyparquet@1.31.2/+esm");
+    hyparquetPromise.catch(() => {
+      hyparquetPromise = null;
+    });
+  }
+  return hyparquetPromise;
 }
 
 async function parse(url) {
@@ -114,6 +132,15 @@ self.onmessage = async (e) => {
       const transfer = result.cuts.flatMap((c) => [c.x.buffer, c.y.buffer, c.z.buffer, c.v.buffer]);
       if (result.profile) transfer.push(result.profile.buffer);
       self.postMessage({ id, ok: true, result }, transfer);
+      return;
+    }
+    if (type === "hfIndex") {
+      const result = await scanCatchmentIndex(await loadHyparquet());
+      self.postMessage({ id, ok: true, result }, [result.nums.buffer, result.rows.buffer]);
+      return;
+    }
+    if (type === "hfIndexRow") {
+      self.postMessage({ id, ok: true, result: await readIndexRow(await loadHyparquet(), e.data.row) });
       return;
     }
     let dataset;

@@ -178,6 +178,12 @@ export const DIVIDE_FEATURE = { source: "divides", sourceLayer: "divides" };
 export const FORCING_LAYER = "forcing-divides";
 // Invisible VPU polygons: which forcing file(s) cover the view.
 export const VPU_LAYER = "forcing-vpus";
+// Outline of the catchment found by the search box (map/search.js).
+export const SEARCH_LAYER = "catchment-search";
+// Ring around the gage found by the search box: a one-point GeoJSON source,
+// since the gage may sit off the hydrofabric (or outside loaded tiles).
+export const SEARCH_POINT_SOURCE = "search-point";
+export const SEARCH_POINT_LAYER = "search-point";
 export const FORCING_FILL_OPACITY = 0.75;
 // What one extra range request is worth in transferred bytes, when deciding
 // whether to merge nearby rows into one request (data/workers/forcing.js).
