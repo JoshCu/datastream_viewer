@@ -82,25 +82,39 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         type: "line",
         source: "flowpaths",
         "source-layer": "flowpaths",
-        layout: { "line-cap": "round" },
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
+          // draw big rivers on top of small tributaries
+          "line-sort-key": ["get", "order"],
+        },
         paint: {
-          "line-width": [
-            "interpolate",
-            ["exponential", 1.6],
-            ["get", "order"],
-            1,
-            1,
-            8,
-            6,
+          "line-color": "rgb(0, 119, 187)",
+      
+          // Fade orders in progressively instead of popping
+          "line-opacity": [
+            "interpolate", ["linear"], ["zoom"],
+            1.3, 0,
+            3,   ["step", ["get", "order"], 0, 6, 1],   // order 6+
+            5,   ["step", ["get", "order"], 0, 4, 1],   // order 4+ (3 starts fading in)
+            6,   ["step", ["get", "order"], 0, 3, 1],   // order 3+; order 2 held at 0 as it appears
+            7,   ["step", ["get", "order"], 0, 2, 1],   // order 2 faded in; order 1 held at 0 as it appears
+            8,   1,                                      // order 1 faded in
           ],
-          "line-color": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            1.3,
-            "rgba(0, 119, 187, 0)",
-            5,
-            "rgba(0, 119, 187, 1)",
+      
+          "line-width": [
+            "interpolate", ["exponential", 2], ["zoom"],
+            // low zoom: purely cartographic, by order
+            4, ["interpolate", ["exponential", 1.6], ["get", "order"], 1, 0.3, 8, 3],
+            8, ["max",
+                 ["interpolate", ["exponential", 1.6], ["get", "order"], 1, 0.6, 8, 5],
+                 ["*", ["coalesce", ["get", "widthcm"], 0], 0.0000327]],
+            12, ["max",
+                 ["interpolate", ["exponential", 1.6], ["get", "order"], 1, 1, 8, 7],
+                 ["*", ["coalesce", ["get", "widthcm"], 0], 0.000523]],
+            // high zoom: true ground width, with a 1px floor
+            16, ["max", 1, ["*", ["coalesce", ["get", "widthcm"], 0], 0.00837]],
+            22, ["max", 1, ["*", ["coalesce", ["get", "widthcm"], 0], 0.536]],
           ],
         },
       },
