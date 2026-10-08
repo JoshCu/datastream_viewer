@@ -360,6 +360,49 @@
             </div>
           </div>
 
+          <!-- USGS gages (src/data/usgscatalog.js, src/map/usgssites.js,
+               src/ui/usgspanel.js): every site with a continuous record,
+               coloured and filtered by what it observes. -->
+          <div class="panel collapsed" id="usgsPanel" data-url-key="gages">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3" />
+                <circle cx="12" cy="12" r="8" />
+              </svg>
+              USGS Gages
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <div class="status" id="usgsStatus">
+                <span class="status-dot" id="usgsStatusDot"></span>
+                <span id="usgsStatusText">Waiting for the map…</span>
+              </div>
+              <label class="usgs-type usgs-active">
+                <input type="checkbox" id="usgsActiveOnly" />
+                <span id="usgsActiveOnlyText">Only sites reporting recently</span>
+              </label>
+              <!-- One row per observation type, built by usgspanel.js. -->
+              <div class="usgs-types" id="usgsTypes"></div>
+              <div class="nexrad-row">
+                <button class="btn secondary" id="usgsAllBtn">Show all</button>
+                <button class="btn secondary" id="usgsNoneBtn">Hide all</button>
+                <button class="btn secondary" id="usgsRefreshBtn" title="Fetch a fresh site list from USGS">Refresh</button>
+              </div>
+              <p class="info-text">
+                Every USGS site with a continuous record, from the Water Data API
+                (cached in the browser, refreshed daily). A dot takes the colour of
+                the first shown type it observes; white dots are gages on the
+                loaded run's reaches. Search names, rivers or site numbers with the
+                magnifier at the top right.
+              </p>
+            </div>
+          </div>
+
           <!-- Winds aloft (src/winds/, src/ui/windspanel.js): Open-Meteo hourly
                pressure-level winds for one point, as a time–height arrow grid. -->
           <div class="panel collapsed" id="windsPanel" data-url-key="winds">

@@ -478,7 +478,7 @@ input[type="range"]::-webkit-slider-thumb {
   position: absolute;
   top: 0;
   right: calc(100% + 6px);
-  width: 220px;
+  width: 340px;
   background: #fff;
   border-radius: 4px;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
@@ -505,6 +505,86 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: inset 0 0 0 2px var(--accent-primary);
 }
 
+/* Suggestions: river groups (with their gages indented under the best
+   one), sites, catchments. */
+.map-search-list {
+  display: none;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  border-top: 1px solid #ddd;
+  font: 12px "Space Grotesk", sans-serif;
+}
+
+.map-search-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  color: #111;
+}
+
+.map-search-option.active {
+  background: #e6f8fd;
+}
+
+.map-search-option.group {
+  font-weight: 600;
+}
+
+.map-search-option.group + .map-search-option.member,
+.map-search-option.member + .map-search-option:not(.member) {
+  border-top: 1px solid #eee;
+}
+
+.map-search-option.member {
+  padding-left: 22px;
+}
+
+.map-search-option.inactive .map-search-main {
+  color: #778;
+}
+
+.map-search-option.disabled {
+  cursor: default;
+  color: #778;
+}
+
+.map-search-main {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-search-sub {
+  flex: none;
+  font: 11px "IBM Plex Mono", monospace;
+  color: #667;
+}
+
+.map-search-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+/* A river group: a short wavy-line glyph instead of a type dot. */
+.map-search-dot.river {
+  width: 10px;
+  height: 6px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: none !important;
+  border-top: 2px solid #3987e5;
+  border-bottom: 2px solid #3987e5;
+}
+
 .map-search-status {
   padding: 4px 8px 6px;
   font: 11px "IBM Plex Mono", monospace;
@@ -514,6 +594,50 @@ input[type="range"]::-webkit-slider-thumb {
 
 .map-search-status.error {
   color: #c0102e;
+}
+
+/* USGS Gages panel (ui/usgspanel.js): one row per observation type */
+.usgs-types {
+  margin: 6px 0 10px;
+}
+
+.usgs-type {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.usgs-type.usgs-active {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.usgs-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  flex: none;
+}
+
+.usgs-type-name {
+  flex: 1;
+}
+
+.usgs-type-count {
+  font: 11px "IBM Plex Mono", monospace;
+  color: var(--text-secondary);
+}
+
+.info-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--accent-primary);
 }
 
 /* Tooltip */

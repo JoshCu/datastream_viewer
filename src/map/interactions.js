@@ -9,15 +9,19 @@ import {
   NEXRAD_SITE_LAYER,
   GAGE_FEATURE,
   USGS_FLOW_PARAM,
+  USGS_OBS_TYPES,
+  USGS_SITES_SOURCE,
+  USGS_SITES_LAYER,
   VARIABLES,
   isValid,
 } from "../config.js";
 import { valueAt, dataTimeRangeMs } from "../data/access.js";
 import { fetchGageMeta, peekGageMeta } from "../data/usgs.js";
+import { catalogMeta } from "../data/usgscatalog.js";
 import { siteFromGageFeature } from "./gages.js";
 import { iconButton, labeledRow, fmtDay } from "../ui/dom.js";
 import { showFeatureInfo } from "../ui/infopanel.js";
-import { showGageInfo } from "../ui/gagepanel.js";
+import { showGageInfo, showSiteInfo } from "../ui/gagepanel.js";
 import { openForcingPlot } from "../ui/forcingplot.js";
 import { hasForcingSource } from "../forcing/loader.js";
 import { invalidateResultsView } from "./paint.js";
@@ -136,7 +140,7 @@ export class HydrofabricControl {
 export function onFlowpathHover(e) {
   if (!state.data || !e.features?.length) return;
   // A hovered gage owns the cursor: keep the reach tooltip out of its way.
-  if (hoveredGageId != null) {
+  if (hovered) {
     onFlowpathLeave();
     return;
   }
@@ -189,14 +193,24 @@ export function onFlowpathClick(e) {
 // MapLibre runs every layer's click handler for one click, so the gage
 // handler can't stop the flowpath/divide ones; those layers bail out when a
 // gage dot is under the cursor instead.
-// Gages and NEXRAD station dots own their clicks.
+// Gages (the run's and the catalog's) and NEXRAD station dots own their clicks.
 function clickHitsGage(e) {
   const layers = [GAGE_LAYER];
+  if (map.getLayer(USGS_SITES_LAYER)) layers.push(USGS_SITES_LAYER);
   if (map.getLayer(NEXRAD_SITE_LAYER)) layers.push(NEXRAD_SITE_LAYER);
   return map.queryRenderedFeatures(e.point, { layers }).length > 0;
 }
 
-let hoveredGageId = null;
+// The run's gage dot at a point. It's drawn over the catalog dots and owns
+// the hover and click where they overlap.
+function runGageAt(point) {
+  return map.queryRenderedFeatures(point, { layers: [GAGE_LAYER] })[0] ?? null;
+}
+
+const USGS_SITE_FEATURE = { source: USGS_SITES_SOURCE };
+
+let hovered = null; // { target: feature-state target, id }
+let hoverToken = 0; // bumped per newly hovered gage, to drop late metadata
 let hoveredGagePoint = null;
 let metaTimer = null;
 
@@ -205,31 +219,50 @@ let metaTimer = null;
 const META_HOVER_DELAY_MS = 180;
 
 export function onGageHover(e) {
-  if (!e.features?.length) return;
-  const feature = e.features[0];
-  const id = feature.id;
-  if (id !== hoveredGageId) {
-    setGageHover(hoveredGageId, false);
-    setGageHover(id, true);
-    hoveredGageId = id;
-    showGageTooltip(feature);
+  const feature = e.features?.[0];
+  if (!feature) return;
+  hoverGage(
+    { target: GAGE_FEATURE, id: feature.id },
+    `USGS-${siteFromGageFeature(feature)}`,
+    feature.properties.id,
+    e.point,
+  );
+}
+
+export function onUsgsSiteHover(e) {
+  const feature = e.features?.[0];
+  if (!feature || runGageAt(e.point)) return;
+  hoverGage({ target: USGS_SITE_FEATURE, id: feature.id }, feature.properties.id, null, e.point);
+}
+
+function hoverGage(next, locationId, reachId, point) {
+  if (next.target !== hovered?.target || next.id !== hovered?.id) {
+    setGageHover(hovered, false);
+    setGageHover(next, true);
+    hovered = next;
+    showGageTooltip(locationId, reachId);
   }
-  hoveredGagePoint = e.point;
+  hoveredGagePoint = point;
   positionGageTooltip();
 }
 
 export function onGageLeave() {
-  setGageHover(hoveredGageId, false);
-  hoveredGageId = null;
+  setGageHover(hovered, false);
+  hovered = null;
   hoveredGagePoint = null;
   clearTimeout(metaTimer);
   document.getElementById("gageTooltip").classList.remove("visible");
   map.getCanvas().style.cursor = "";
 }
 
-function setGageHover(id, hover) {
-  if (id == null) return;
-  map.setFeatureState({ ...GAGE_FEATURE, id }, { hover });
+// Leaving a catalog dot only ends a hover that's on one: the run's gage dot
+// over it may have taken the hover over.
+export function onUsgsSiteLeave() {
+  if (hovered?.target === USGS_SITE_FEATURE) onGageLeave();
+}
+
+function setGageHover(h, hover) {
+  if (h) map.setFeatureState({ ...h.target, id: h.id }, { hover });
 }
 
 // The gage tooltip grows once its metadata lands, so unlike the reach tooltip
@@ -267,44 +300,50 @@ function positionGageTooltip() {
   tooltip.style.top = `${y}px`;
 }
 
-// Site number and reach show immediately; the station name and USGS metadata
-// fill in once the (cached) lookup resolves, provided this gage is still the
-// hovered one.
-function showGageTooltip(feature) {
-  const site = siteFromGageFeature(feature);
-  const reachId = feature.properties.id;
+// The site's catalog entry renders at once. A gage the catalog doesn't have
+// (or before it loads) shows its id and reach immediately; the station name
+// and USGS metadata fill in once the (cached) lookup resolves, provided this
+// gage is still the hovered one. `reachId` is null for a catalog dot.
+function showGageTooltip(locationId, reachId) {
   const tooltip = document.getElementById("gageTooltip");
-  document.getElementById("gageTooltipTitle").textContent = `USGS-${site}`;
-  document.getElementById("gageTooltipName").textContent = `wb-${reachId}`;
-  document.getElementById("gageTooltipMeta").innerHTML =
-    '<div class="tooltip-loading"><span class="spinner"></span>Loading info…</div>';
+  const reachText = reachId != null ? `wb-${reachId}` : "";
+  document.getElementById("gageTooltipTitle").textContent = locationId;
+  document.getElementById("gageTooltipName").textContent = reachText;
   tooltip.classList.add("visible");
   map.getCanvas().style.cursor = "pointer";
 
-  // A gage looked up earlier in the session renders without the debounce.
-  const id = feature.id;
+  const token = ++hoverToken;
   clearTimeout(metaTimer);
+  const fromCatalog = catalogMeta(locationId);
+  if (fromCatalog) {
+    applyGageMeta(Promise.resolve(fromCatalog), token, reachId);
+    return;
+  }
+  document.getElementById("gageTooltipMeta").innerHTML =
+    '<div class="tooltip-loading"><span class="spinner"></span>Loading info…</div>';
+  const site = locationId.replace(/^USGS-/, "");
+  // A gage looked up earlier in the session renders without the debounce.
   const known = peekGageMeta(site);
   if (known) {
-    applyGageMeta(known, id, reachId);
+    applyGageMeta(known, token, reachId);
   } else {
     metaTimer = setTimeout(
-      () => applyGageMeta(fetchGageMeta(site), id, reachId),
+      () => applyGageMeta(fetchGageMeta(site), token, reachId),
       META_HOVER_DELAY_MS,
     );
   }
 }
 
-function applyGageMeta(promise, id, reachId) {
+function applyGageMeta(promise, token, reachId) {
   promise
     .then((meta) => {
-      if (hoveredGageId !== id) return;
+      if (token !== hoverToken || !hovered) return;
       document.getElementById("gageTooltipName").textContent =
-        meta.name || `wb-${reachId}`;
+        meta.name || (reachId != null ? `wb-${reachId}` : "");
       renderGageMeta(meta, reachId);
     })
     .catch(() => {
-      if (hoveredGageId !== id) return;
+      if (token !== hoverToken || !hovered) return;
       document.getElementById("gageTooltipMeta").innerHTML =
         '<div class="tooltip-sub">No USGS metadata</div>';
       positionGageTooltip();
@@ -312,10 +351,12 @@ function applyGageMeta(promise, id, reachId) {
 }
 
 function renderGageMeta(meta, reachId) {
-  const rows = [["Reach", `wb-${reachId}`]];
+  const rows = [];
+  if (reachId != null) rows.push(["Reach", `wb-${reachId}`]);
   // Stream is the norm; anything else (reservoir, canal, tidal) changes how
   // comparable the observations are to routed flow, so call it out.
   if (meta.siteType && meta.siteType !== "Stream") rows.push(["Type", meta.siteType]);
+  if (meta.active === false) rows.push(["Status", "not reporting", "warn"]);
   rows.push(
     meta.flow
       ? ["Discharge", prettyUnits(meta.flow.units)]
@@ -333,8 +374,14 @@ function renderGageMeta(meta, reachId) {
     const datum = meta.verticalDatum ? ` ${meta.verticalDatum}` : "";
     rows.push(["Altitude", `${Math.round(meta.altitude)} ft${datum}`]);
   }
-  const others = meta.series.filter((s) => s.code !== USGS_FLOW_PARAM);
-  if (others.length) rows.push(["Also", otherParamsLabel(others)]);
+  // The catalog knows the observation types; a direct lookup only has the
+  // parameter list.
+  if (meta.types) {
+    rows.push(["Observes", meta.types.map((i) => USGS_OBS_TYPES[i].label).join(", ")]);
+  } else {
+    const others = meta.series.filter((s) => s.code !== USGS_FLOW_PARAM);
+    if (others.length) rows.push(["Also", otherParamsLabel(others)]);
+  }
 
   document
     .getElementById("gageTooltipMeta")
@@ -392,6 +439,13 @@ function fmtArea(mi2) {
 export function onGageClick(e) {
   if (!state.data || !e.features?.length) return;
   showGageInfo(e.features[0]);
+}
+
+// A catalog dot: its station panel. The run's gage dot over it (if any)
+// wins, as that one can open the hydrograph.
+export function onUsgsSiteClick(e) {
+  if (!e.features?.length || runGageAt(e.point)) return;
+  showSiteInfo(e.features[0].properties.id);
 }
 
 // ---- Catchment click -> forcing plot ---------------------------------

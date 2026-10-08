@@ -9,6 +9,9 @@ import {
   SEARCH_LAYER,
   SEARCH_POINT_SOURCE,
   SEARCH_POINT_LAYER,
+  USGS_SITES_SOURCE,
+  USGS_SITES_LAYER,
+  USGS_SITES_LABEL_LAYER,
   FORCING_FILL_OPACITY,
   NO_DATA_COLOR,
 } from "../config.js";
@@ -46,6 +49,14 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         // Gage points carry no feature id in the tiles; promote hl_uri
         // ("gages-<site>") so hover feature-state can target one gage.
         promoteId: "hl_uri",
+      },
+      // Every USGS site with a continuous record (map/usgssites.js); empty
+      // until the catalog loads. promoteId so hover feature-state can target
+      // one site by its monitoring-location id.
+      [USGS_SITES_SOURCE]: {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+        promoteId: "id",
       },
       // Where the searched-for gage is (map/search.js); empty until then.
       [SEARCH_POINT_SOURCE]: {
@@ -207,6 +218,36 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         },
       },
       {
+        // USGS catalog sites, coloured by observation type. Filter and colour
+        // are set by map/usgssites.js from the panel's type toggles.
+        id: USGS_SITES_LAYER,
+        type: "circle",
+        source: USGS_SITES_SOURCE,
+        filter: HIDDEN_FILTER,
+        paint: {
+          "circle-radius": {
+            stops: [
+              [3, 2.5],
+              [8, 4],
+              [12, 6],
+            ],
+          },
+          "circle-color": "#888888",
+          "circle-stroke-color": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            "#00d4ff",
+            "#ffffff",
+          ],
+          "circle-stroke-width": [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            3,
+            0.75,
+          ],
+        },
+      },
+      {
         // Soft halo drawn beneath the hovered gage dot; invisible otherwise.
         id: "conus_gages_glow",
         type: "circle",
@@ -237,7 +278,8 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         "source-layer": "gages",
         // Hidden until a run loads; map/gages.js then filters to the gages
         // on that run's reaches, so the layer is sparse enough to draw at
-        // every zoom rather than fading in only when zoomed close.
+        // every zoom rather than fading in only when zoomed close. Drawn over
+        // the catalog dots (usgs-sites), white so the run's gages stand out.
         filter: HIDDEN_FILTER,
         paint: {
           "circle-radius": {
@@ -260,6 +302,29 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
     // Drawn above the basemap's own labels (see the return below) so place
     // names don't win symbol collisions against gage ids.
     overlayLayers: [
+      {
+        // Site number beside each catalog dot, close in. Toggled with the
+        // run's gage labels (map/gages.js); filtered with the dots.
+        id: USGS_SITES_LABEL_LAYER,
+        type: "symbol",
+        source: USGS_SITES_SOURCE,
+        minzoom: 8,
+        filter: HIDDEN_FILTER,
+        layout: {
+          visibility: "none",
+          "text-field": ["get", "no"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 11,
+          "text-variable-anchor": ["left", "right", "top", "bottom"],
+          "text-radial-offset": 0.8,
+          "text-justify": "auto",
+        },
+        paint: {
+          "text-color": "#1a1a2e",
+          "text-halo-color": "#ffffff",
+          "text-halo-width": 1.5,
+        },
+      },
       {
         // USGS site number beside each gage dot. Off until toggled on from
         // the gage control; filtered alongside the dots by map/gages.js.

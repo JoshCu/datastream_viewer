@@ -89,6 +89,47 @@ export const USGS_API = "https://api.waterdata.usgs.gov/ogcapi/v1";
 export const USGS_FLOW_PARAM = "00060"; // discharge, ft³/s
 export const CFS_TO_CMS = 0.028316846592;
 
+// The USGS site catalog (data/usgscatalog.js): every monitoring location with
+// a continuous time series, from combined-metadata, cached in IndexedDB and
+// refreshed in the background once it's older than this.
+export const USGS_CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
+// A series that reported within this long of the catalog fetch is "active".
+export const USGS_ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+// Catalog gage dots (map/usgssites.js), drawn under the run's gage dots.
+export const USGS_SITES_SOURCE = "usgs-sites";
+export const USGS_SITES_LAYER = "usgs-sites";
+export const USGS_SITES_LABEL_LAYER = "usgs-sites-label";
+// What a site observes, in priority order: a dot takes the colour of the
+// first shown type it has. A parameter belongs to the first type whose
+// `match` its name hits ("other" catches the rest), so order matters there
+// too — e.g. "Elevation, GW" must not reach the stage pattern's elevations.
+export const USGS_OBS_TYPES = [
+  { key: "flow", label: "Discharge", color: "#e8175d", match: /^discharge|^stream ?flow/i },
+  {
+    key: "stage",
+    label: "Stage / water level",
+    color: "#3987e5",
+    match: /gage height|stream level|lake\/res|ocean\/est|reservoir|tidal elev|^elevation, (ngvd|navd)/i,
+  },
+  { key: "groundwater", label: "Groundwater", color: "#8c564b", match: /, gw\b|depth lsd|groundwater|bpcorr|well/i },
+  {
+    key: "quality",
+    label: "Water quality",
+    color: "#199e70",
+    match: /cond|oxygen|^ph\b|turbidity|salinity|no3|nitrate|chl|fdom|fpc|fpe|sediment|sedmnt|ssc|po4|e coli|fluoresc|diss gases/i,
+  },
+  { key: "temp", label: "Water temperature", color: "#f28e2b", match: /^temperature, water/i },
+  { key: "velocity", label: "Velocity", color: "#17becf", match: /velocity/i },
+  { key: "precip", label: "Precipitation", color: "#7b4fc9", match: /precipitation/i },
+  {
+    key: "weather",
+    label: "Weather / soil",
+    color: "#b39b00",
+    match: /\bair\b|wind|humidity|solar|soil|snow|evapotrans|heat flux|illumination|radiation|cosmic|pavement|\bPAR\b/i,
+  },
+  { key: "other", label: "Other", color: "#8a8f98", match: /./ },
+];
+
 // Hydrograph line colors: a fixed categorical order (never cycled), checked
 // for color-blind separation between neighbours on the dark panel surface.
 // Each loaded run holds one slot for as long as it's loaded; runs past the

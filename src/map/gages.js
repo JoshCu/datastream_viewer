@@ -1,5 +1,7 @@
 // ====================================================================
-// Gage layer visibility: only gages sitting on a reach in the loaded run
+// Gage layer visibility: the run's gages (only those sitting on a reach in
+// the loaded run) plus the always-on USGS catalog dots (map/usgssites.js),
+// which share the show/hide and label toggles.
 // ====================================================================
 import { state, map } from "../state.js";
 import {
@@ -9,6 +11,8 @@ import {
   GAGE_GLOW_LAYER,
   GAGE_LABEL_LAYER,
   GAGE_FEATURE,
+  USGS_SITES_LAYER,
+  USGS_SITES_LABEL_LAYER,
 } from "../config.js";
 import { iconButton } from "../ui/dom.js";
 
@@ -31,11 +35,10 @@ function applyGageVisibility() {
   const vis = (on) => (on ? "visible" : "none");
   map.setLayoutProperty(GAGE_LAYER, "visibility", vis(gagesVisible));
   map.setLayoutProperty(GAGE_GLOW_LAYER, "visibility", vis(gagesVisible));
-  map.setLayoutProperty(
-    GAGE_LABEL_LAYER,
-    "visibility",
-    vis(gagesVisible && labelsVisible),
-  );
+  map.setLayoutProperty(USGS_SITES_LAYER, "visibility", vis(gagesVisible));
+  for (const layer of [GAGE_LABEL_LAYER, USGS_SITES_LABEL_LAYER]) {
+    map.setLayoutProperty(layer, "visibility", vis(gagesVisible && labelsVisible));
+  }
 }
 
 export function setGagesVisible(on) {

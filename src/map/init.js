@@ -2,7 +2,7 @@
 // App bootstrap: create the map, bind map + DOM event listeners.
 // ====================================================================
 import { state, forcingState, setMap } from "../state.js";
-import { GAGE_LAYER, FORCING_LAYER } from "../config.js";
+import { GAGE_LAYER, FORCING_LAYER, USGS_SITES_LAYER } from "../config.js";
 import { updateIncomingStyle } from "./basemap-style.js";
 import {
   applyResultsPaint,
@@ -19,12 +19,18 @@ import {
   onGageClick,
   onGageHover,
   onGageLeave,
+  onUsgsSiteClick,
+  onUsgsSiteHover,
+  onUsgsSiteLeave,
   invalidateCanvasBox,
   TerrainControl,
   HydrofabricControl,
 } from "./interactions.js";
 import { GageControl, updateGageFilter } from "./gages.js";
 import { SearchControl } from "./search.js";
+import { setupUsgsSites } from "./usgssites.js";
+import { loadUsgsCatalog } from "../data/usgscatalog.js";
+import { setupUsgsPanel } from "../ui/usgspanel.js";
 import { setupS3Browser } from "../s3/browser.js";
 import { setupUploadPanel } from "../ui/upload.js";
 import { loadConus, preloadParquetWasm } from "../data/loader.js";
@@ -117,6 +123,10 @@ export function init() {
   map.on("click", GAGE_LAYER, onGageClick);
   map.on("mousemove", GAGE_LAYER, onGageHover);
   map.on("mouseleave", GAGE_LAYER, onGageLeave);
+  // Every USGS site with a continuous record (map/usgssites.js).
+  map.on("click", USGS_SITES_LAYER, onUsgsSiteClick);
+  map.on("mousemove", USGS_SITES_LAYER, onUsgsSiteHover);
+  map.on("mouseleave", USGS_SITES_LAYER, onUsgsSiteLeave);
 
   // A camera move only marks cameraMoved; the full-viewport requery of each
   // painter is deferred to idle so it happens once when the pan settles, not
@@ -154,6 +164,10 @@ export function init() {
   // fetch doesn't contend with the basemap style, glyphs and first tiles. It
   // still lands long before any Parquet/CONUS load can be requested.
   map.once("idle", preloadParquetWasm);
+  // Likewise the USGS site catalog: instant from IndexedDB after the first
+  // visit, ~6 MB from the API (in a worker) when missing or a day old.
+  setupUsgsSites();
+  map.once("idle", () => loadUsgsCatalog());
 
   setupEventListeners();
   // Before the S3 browser: a deep link's first URL sync must see its panel open.
@@ -166,6 +180,7 @@ export function init() {
   setupContextMenu();
   setupNexradPanel();
   setupWindsPanel();
+  setupUsgsPanel();
   setupSimPanel();
   setupBrush();
   setupSimRain();

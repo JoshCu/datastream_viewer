@@ -182,25 +182,57 @@ didn't drag, since right-drag rotates the map. The forcing plot and the
 hydrograph share the dock's spot and close each other via a `dockopen`
 document event.
 
+### USGS site catalog (`data/usgscatalog.js`, `map/usgssites.js`)
+
+Every USGS site with a continuous time series (~27k sites, ~70k series) is
+on the map regardless of any run. It comes from the Water Data API's
+`combined-metadata` collection — the only one that joins series (parameter,
+begin/end) to location (name, point, site type) — filtered to
+`data_type = 'Continuous values'`. Its pages are cursor-chained, so
+`data/workers/usgscatalog.js` splits it into six `monitoring_location_id`
+ranges fetched in parallel (~6 MB gzipped, ~5 s; one chain is ~12 s). Only GET
+with `filter-lang=cql-text` works; POST/CQL-JSON is blocked. The worker
+merges series per (site, parameter) and assigns each parameter an
+observation type by name (`USGS_OBS_TYPES` in `config.js`: ordered regexes,
+also the colour priority).
+
+The main thread caches the worker's output in IndexedDB (its own DB, not
+the forcing-layout one) and serves it from there, refreshing in the
+background after `USGS_CATALOG_TTL_MS`. `install()` derives per-site type
+bitmasks (all-time and active within `USGS_ACTIVE_WINDOW_MS`), normalized
+names, and **river groups**: sites whose name before the first locator word
+("AT", "NR", "BLW", …) names the same waterbody, split by single-linkage
+distance that grows with drainage area (so the lower Mississippi stays one
+group and the many "Mill Creek"s don't merge). The GeoJSON layer carries only
+`{ id, no, m, a }`; type toggles and "active only" rebuild just the filter and
+colour expressions (bit tests via `%`/`floor`, since expressions have no
+bitwise ops) and persist in localStorage. The run's own gages
+(`map/gages.js`, hydrofabric tiles) stay a separate layer drawn on top and
+own the hover/click where they overlap, since only they know the reach for
+the hydrograph. Gage tooltips use `catalogMeta()` when the site is in the
+catalog and fall back to `fetchGageMeta()`.
+
 ### Search (`map/search.js`)
 
-The magnifier button at the top right pops out a box that takes `cat-N` /
-`wb-N` / `N`, or a USGS site number (`USGS-N`, or any bare 8–15 digit number —
-catchment ids stay under 8 digits). A catchment already in
-loaded divides tiles is framed from its geometry. Anything else is looked up in
-`hydrofabric_index.parquet` on the hydrofabric bucket through hyparquet (CDN,
-lazy in the parse worker; parquet-wasm can't do Range reads). That file isn't
-sorted by id, so the first search scans its whole `id` column (~10 MB) into a
-sorted `cat-N → row` table cached in `search.js` for the session; each search
-then reads one row's lon/lat (~2 MB, one row group). Found catchments are
-outlined by `SEARCH_LAYER`, and their forcing plot opens if a forcing source is
-set.
+The magnifier button at the top right pops out a box with a suggestion
+dropdown: the best-matching river group with its gages listed under it,
+other groups, then sites (fuzzy on normalized names — abbreviations expanded,
+spaces ignored, trigram fallback for typos — or by site-number prefix), and
+the catchment for `cat-N` / `wb-N` / a short bare number. Enter takes the
+highlighted row, else the first; a group frames and rings all its gages.
+A gage is placed from the catalog, else loaded gage tiles, else the USGS
+station metadata (`fetchGageMeta(site).lonLat`), and ringed by
+`SEARCH_POINT_LAYER` (a GeoJSON source of any number of points). Catalog
+coordinates win over the hydrofabric's gage point, which can sit ~1 km off.
 
-A gage is placed from loaded gage tiles, else from the USGS station metadata
-(`fetchGageMeta(site).lonLat`), so gages the hydrofabric doesn't carry are
-found too. It's ringed by `SEARCH_POINT_LAYER` (a one-point GeoJSON source);
-once the map idles there the ring snaps to the hydrofabric's gage point, and
-if that gage's reach is in the loaded run its panel opens as if clicked.
+A catchment already in loaded divides tiles is framed from its geometry.
+Anything else is looked up in `hydrofabric_index.parquet` on the hydrofabric
+bucket through hyparquet (CDN, lazy in the parse worker; parquet-wasm can't do
+Range reads). That file isn't sorted by id, so the first search scans its
+whole `id` column (~10 MB) into a sorted `cat-N → row` table cached in
+`search.js` for the session; each search then reads one row's lon/lat (~2 MB,
+one row group). Found catchments are outlined by `SEARCH_LAYER`, and their
+forcing plot opens if a forcing source is set.
 
 ### NEXRAD radar (`src/nexrad/`)
 

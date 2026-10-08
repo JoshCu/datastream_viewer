@@ -18,12 +18,22 @@ velocity / depth on the hydrofabric flowpaths over time.
 - **Inspection** — hover tooltip, per-reach click panel, a basin-total
   sparkline, and a right-click menu (forcings, hydrograph, highlight upstream
   catchments).
-- **Search** — the magnifier at the top right pops out a search box. Type
-  `cat-123` (or `wb-123`, or `123`) to fly to that catchment and outline it;
+- **USGS gages** — every USGS site with a continuous record (~27k) is always
+  on the map, coloured by what it observes (discharge, stage, groundwater,
+  water quality, …). The USGS Gages panel shows/hides each type and can limit
+  the map to sites reporting in the last 30 days. Hover for station details,
+  click for its record per type. The site list comes from the USGS Water Data
+  API (~6 MB, ~5 s) on the first visit and is cached in the browser,
+  refreshed daily in the background.
+- **Search** — the magnifier at the top right pops out a search box with
+  suggestions as you type. Gage names match fuzzily (`fish river fort kent`,
+  typos too), site numbers by prefix, and rivers as groups: `tom bigbee`
+  offers the Tombigbee River with all its gages listed (upstream to
+  downstream), and Enter frames and rings them all. Picking a gage flies to
+  it and opens its panel (with the hydrograph if its reach is in the loaded
+  run). `cat-123` / `wb-123` flies to that catchment and outlines it;
   locations come from the hydrofabric index parquet over range requests
-  (~10 MB on the first search of a session, ~2 MB after). Type a USGS site
-  number (`01013500` or `USGS-01013500`) to fly to that gage and ring it; its
-  panel and hydrograph open if its reach is in the loaded run.
+  (~10 MB on the first search of a session, ~2 MB after).
 - **Forcings** — pick an ngen forcing cycle from S3 (or drop forcing `.nc`
   files) and paint any forcing variable on the catchments over time. Nothing is
   downloaded whole: the file layout is read in-browser and only the rows for
@@ -109,7 +119,8 @@ src/
     paint.js                  results paint expression + per-reach feature-state
     statepainter.js           on-screen feature-state painter (reaches + catchments)
     interactions.js           hover tooltip, click info, catchment click, upstream highlight
-    search.js                 search box: find cat-N or a USGS gage, fly to it, mark it
+    search.js                 search box + suggestions: gages, river groups, catchments
+    usgssites.js              always-on USGS catalog gage layer, filtered/coloured by type
   color/
     scales.js                 continuous transforms (log, sqrt, symlog, …)
     breaks.js                 quantile / Jenks class breaks
@@ -122,6 +133,7 @@ src/
     sources.js                registry of loaded runs + active-dataset events
     metrics.js                series alignment + KGE / NSE / PBIAS / … (pure)
     usgs.js                   USGS gage metadata + observed discharge client
+    usgscatalog.js            USGS site catalog: IndexedDB cache, river groups, fuzzy search
     diff.js                   A − B diff of two loaded runs
     loader.js                 load orchestration + the parse/merge worker pool
     workers/
@@ -130,6 +142,7 @@ src/
       hdf5layout.js           async HDF5 layout reader for forcing files (pure)
       forcing.js              forcing row fetch/decode over range requests (pure)
       hfindex.js              hydrofabric index lookups: catchment id → lon/lat (pure)
+      usgscatalog.js          USGS site catalog fetch + station-name normalization (pure)
       nexrad.js               NEXRAD Level II records → per-tilt gate positions + bird profile sums (pure)
       bzip2.js                bzip2 decoder for the Level II records (pure)
       parsers/
@@ -143,6 +156,7 @@ src/
     overview.js               basin-total sparkline + click-to-seek
     infopanel.js              reach click info panel
     gagepanel.js              gage click info panel (USGS station details)
+    usgspanel.js              USGS Gages panel: catalog status, per-type show/hide
     hydrograph.js             D3 hydrograph dock: runs vs obs, zoom, metrics
     forcingpanel.js           forcings sidebar panel: source, load buttons, controls
     forcingplot.js            per-catchment forcing small multiples (dock)
