@@ -616,6 +616,50 @@ input[type="range"]::-webkit-slider-thumb {
   font-size: 12px;
 }
 
+.usgs-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--text-secondary);
+}
+
+.usgs-range .select {
+  flex: 1;
+  min-width: 0;
+}
+
+.usgs-range.usgs-area {
+  flex: 1;
+  margin-top: 0;
+  min-width: 0;
+}
+
+.usgs-list-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 8px;
+}
+
+.usgs-shown {
+  flex: 1;
+  font: 11px "IBM Plex Mono", monospace;
+  color: var(--text-secondary);
+}
+
+.usgs-icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  flex: none;
+}
+
+.usgs-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 .usgs-swatch {
   width: 10px;
   height: 10px;

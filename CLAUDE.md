@@ -204,9 +204,14 @@ names, and **river groups**: sites whose name before the first locator word
 ("AT", "NR", "BLW", …) names the same waterbody, split by single-linkage
 distance that grows with drainage area (so the lower Mississippi stays one
 group and the many "Mill Creek"s don't merge). The GeoJSON layer carries only
-`{ id, no, m, a }`; type toggles and "active only" rebuild just the filter and
-colour expressions (bit tests via `%`/`floor`, since expressions have no
-bitwise ops) and persist in localStorage. The run's own gages
+`{ id, no, f }`, where `f` is the type bitmask of the site's series that pass
+the panel's period (recent / any / date range) and min-record-length settings,
+zeroed for sites outside its drainage-area range (`filteredMasks()` in
+`map/usgssites.js`, cached per catalog + settings; the panel's counts and its
+copy/save-as-CSV list, via `shownSites()`, read it too). Changing those resets the source data; type
+toggles rebuild just the filter and colour expressions (bit tests via
+`%`/`floor`, since expressions have no bitwise ops). Both persist in
+localStorage. The run's own gages
 (`map/gages.js`, hydrofabric tiles) stay a separate layer drawn on top and
 own the hover/click where they overlap, since only they know the reach for
 the hydrograph. Gage tooltips use `catalogMeta()` when the site is in the

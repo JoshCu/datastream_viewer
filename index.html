@@ -382,10 +382,6 @@
                 <span class="status-dot" id="usgsStatusDot"></span>
                 <span id="usgsStatusText">Waiting for the map…</span>
               </div>
-              <label class="usgs-type usgs-active">
-                <input type="checkbox" id="usgsActiveOnly" />
-                <span id="usgsActiveOnlyText">Only sites reporting recently</span>
-              </label>
               <!-- One row per observation type, built by usgspanel.js. -->
               <div class="usgs-types" id="usgsTypes"></div>
               <div class="nexrad-row">
@@ -393,9 +389,63 @@
                 <button class="btn secondary" id="usgsNoneBtn">Hide all</button>
                 <button class="btn secondary" id="usgsRefreshBtn" title="Fetch a fresh site list from USGS">Refresh</button>
               </div>
+              <!-- Which series count (a period and a minimum record length),
+                   and which sites (drainage area). -->
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="usgsPeriod">Period</label>
+                <select id="usgsPeriod" class="select scale-select">
+                  <option value="recent" id="usgsRecentOption">Reporting recently</option>
+                  <option value="all">Any time</option>
+                  <option value="range">Between dates</option>
+                </select>
+              </div>
+              <div id="usgsRange" hidden>
+                <div class="usgs-range">
+                  <input type="date" id="usgsFrom" class="select" title="From (blank = no start)" />
+                  <span>–</span>
+                  <input type="date" id="usgsTo" class="select" title="To (blank = no end)" />
+                </div>
+                <label class="usgs-type usgs-active">
+                  <input type="checkbox" id="usgsCover" />
+                  <span>Record spans the whole range</span>
+                </label>
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="usgsMinYears">Min record</label>
+                <input type="number" id="usgsMinYears" class="select scale-select" min="0" step="1" placeholder="any" />
+                <span class="scale-label">years</span>
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="usgsMinArea">Drainage</label>
+                <div class="usgs-range usgs-area">
+                  <input type="number" id="usgsMinArea" class="select" min="0" placeholder="min" title="Minimum drainage area (mi²)" />
+                  <span>–</span>
+                  <input type="number" id="usgsMaxArea" class="select" min="0" placeholder="max" title="Maximum drainage area (mi²)" />
+                </div>
+                <span class="scale-label">mi²</span>
+              </div>
+              <div class="usgs-list-row">
+                <span class="usgs-shown" id="usgsShown"></span>
+                <button class="btn secondary usgs-icon-btn" id="usgsCopyBtn" title="Copy the shown sites to the clipboard (tab-separated)" aria-label="Copy site list">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="12" height="12" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                </button>
+                <button class="btn secondary usgs-icon-btn" id="usgsSaveBtn" title="Save the shown sites as CSV" aria-label="Save site list">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                </button>
+              </div>
               <p class="info-text">
                 Every USGS site with a continuous record, from the Water Data API
-                (cached in the browser, refreshed daily). A dot takes the colour of
+                (cached in the browser, refreshed daily). Period and record length
+                apply per parameter, from its first to last value (gaps aren't
+                known); sites with no drainage area drop out once a bound is set.
+                The counts and the copied/saved list follow the filters. A dot takes the colour of
                 the first shown type it observes; white dots are gages on the
                 loaded run's reaches. Search names, rivers or site numbers with the
                 magnifier at the top right.

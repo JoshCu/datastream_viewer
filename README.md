@@ -20,8 +20,10 @@ velocity / depth on the hydrofabric flowpaths over time.
   catchments).
 - **USGS gages** — every USGS site with a continuous record (~27k) is always
   on the map, coloured by what it observes (discharge, stage, groundwater,
-  water quality, …). The USGS Gages panel shows/hides each type and can limit
-  the map to sites reporting in the last 30 days. Hover for station details,
+  water quality, …). The USGS Gages panel shows/hides each type and limits
+  the map by period (reporting in the last 30 days, any time, or active
+  during / spanning a date range), minimum record length and drainage area,
+  and copies or saves the shown sites as a table. Hover for station details,
   click for its record per type. The site list comes from the USGS Water Data
   API (~6 MB, ~5 s) on the first visit and is cached in the browser,
   refreshed daily in the background.
