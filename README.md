@@ -22,11 +22,15 @@ velocity / depth on the hydrofabric flowpaths over time.
   on the map, coloured by what it observes (discharge, stage, groundwater,
   water quality, …). The USGS Gages panel shows/hides each type and limits
   the map by period (reporting in the last 30 days, any time, or active
-  during / spanning a date range), minimum record length and drainage area,
-  and copies or saves the shown sites as a table. Hover for station details,
+  during / spanning a date range), minimum record length, drainage area and
+  dams (stream gages just below a dam, within a chosen distance, or with no
+  dams anywhere upstream), and copies or saves the shown sites as a table. Hover for station details,
   click for its record per type. The site list comes from the USGS Water Data
   API (~6 MB, ~5 s) on the first visit and is cached in the browser,
-  refreshed daily in the background.
+  refreshed daily in the background. The dam data isn't in that API; it's
+  built offline by `bun scripts/usgs-dams.js` from the USGS station
+  descriptions ("500 ft downstream of powerhouse (dam)") and GAGES-II's count
+  of NID dams per watershed, into `src/data/usgsdams.json`.
 - **Search** — the magnifier at the top right pops out a search box with
   suggestions as you type. Gage names match fuzzily (`fish river fort kent`,
   typos too), site numbers by prefix, and rivers as groups: `tom bigbee`
@@ -111,6 +115,8 @@ split into focused ES modules.
 
 ```
 index.html                    markup + CDN <script>s; loads src/main.js as a module
+scripts/
+  usgs-dams.js                builds src/data/usgsdams.json (gages below dams / with none upstream)
 src/
   main.js                     entry point — calls init() once the DOM is ready
   config.js                   shared constants (palette, variables, sentinels)
@@ -136,6 +142,7 @@ src/
     metrics.js                series alignment + KGE / NSE / PBIAS / … (pure)
     usgs.js                   USGS gage metadata + observed discharge client
     usgscatalog.js            USGS site catalog: IndexedDB cache, river groups, fuzzy search
+    usgsdams.js               gages just below a dam / with no dams upstream (usgsdams.json)
     diff.js                   A − B diff of two loaded runs
     loader.js                 load orchestration + the parse/merge worker pool
     workers/

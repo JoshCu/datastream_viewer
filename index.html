@@ -424,6 +424,24 @@
                 </div>
                 <span class="scale-label">mi²</span>
               </div>
+              <!-- From the USGS station descriptions and GAGES-II
+                   (src/data/usgsdams.json, scripts/usgs-dams.js). -->
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="usgsDams">Dams</label>
+                <select id="usgsDams" class="select scale-select" title="Below a dam: from each site's USGS station description. No dams upstream: no National Inventory of Dams dams in the watershed (GAGES-II, 2009), or the description says there's no regulation">
+                  <option value="any">Any</option>
+                  <option value="below">Just below a dam</option>
+                  <option value="notBelow">Not just below a dam</option>
+                  <option value="noDams">No dams upstream</option>
+                </select>
+              </div>
+              <div id="usgsBelowRow" hidden>
+                <div class="scale-select-wrap">
+                  <label class="scale-label" for="usgsBelowMi">Within</label>
+                  <input type="number" id="usgsBelowMi" class="select scale-select" min="0" step="0.5" title="Maximum distance below the dam, as the station description gives it" />
+                  <span class="scale-label">mi</span>
+                </div>
+              </div>
               <div class="usgs-list-row">
                 <span class="usgs-shown" id="usgsShown"></span>
                 <button class="btn secondary usgs-icon-btn" id="usgsCopyBtn" title="Copy the shown sites to the clipboard (tab-separated)" aria-label="Copy site list">

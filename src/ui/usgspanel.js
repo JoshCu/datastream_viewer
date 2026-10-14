@@ -2,7 +2,8 @@
 // USGS Gages panel: the catalog's load status, and show/hide per
 // observation type (with each type's colour and site count), and which
 // series count: a period (reporting recently / any time / a date range), a
-// minimum record length and a drainage-area range, plus copying/saving the
+// minimum record length, a drainage-area range and the dams setting (just
+// below a dam / not / no dams upstream), plus copying/saving the
 // shown sites as a table. The layer itself is map/usgssites.js.
 // ====================================================================
 import { USGS_OBS_TYPES, USGS_ACTIVE_WINDOW_MS } from "../config.js";
@@ -17,6 +18,7 @@ import {
   setPeriod,
   onSiteFilterChange,
 } from "../map/usgssites.js";
+import { MAX_BELOW_MI, damBelowMi, hasNoDams } from "../data/usgsdams.js";
 import { setStatus } from "./panels.js";
 
 const $ = (id) => document.getElementById(id);
@@ -54,6 +56,9 @@ export function setupUsgsPanel() {
   $("usgsMinYears").addEventListener("change", (e) => setPeriod({ minYears: e.target.value }));
   $("usgsMinArea").addEventListener("change", (e) => setPeriod({ minArea: e.target.value }));
   $("usgsMaxArea").addEventListener("change", (e) => setPeriod({ maxArea: e.target.value }));
+  $("usgsDams").addEventListener("change", (e) => setPeriod({ dams: e.target.value }));
+  $("usgsBelowMi").addEventListener("change", (e) => setPeriod({ belowMi: e.target.value }));
+  $("usgsBelowMi").max = MAX_BELOW_MI;
   $("usgsCopyBtn").addEventListener("click", copyList);
   $("usgsSaveBtn").addEventListener("click", saveList);
   $("usgsAllBtn").addEventListener("click", () => setAllTypesShown(true));
@@ -72,7 +77,7 @@ export function setupUsgsPanel() {
 }
 
 function sync() {
-  const { period, from, to, cover, minYears, minArea, maxArea } = periodSettings();
+  const { period, from, to, cover, minYears, minArea, maxArea, dams, belowMi } = periodSettings();
   $("usgsPeriod").value = period;
   $("usgsRange").hidden = period !== "range";
   $("usgsFrom").value = from;
@@ -81,6 +86,9 @@ function sync() {
   $("usgsMinYears").value = minYears || "";
   $("usgsMinArea").value = minArea ?? "";
   $("usgsMaxArea").value = maxArea ?? "";
+  $("usgsDams").value = dams;
+  $("usgsBelowRow").hidden = dams !== "below" && dams !== "notBelow";
+  $("usgsBelowMi").value = belowMi;
 
   const masks = filteredMasks();
   const counts = new Array(USGS_OBS_TYPES.length).fill(0);
@@ -106,6 +114,7 @@ function sync() {
 const COLUMNS = [
   "site_id", "site_no", "name", "state", "site_type",
   "latitude", "longitude", "drainage_area_mi2", "types",
+  "below_dam_mi", "no_dams_upstream",
 ];
 
 // The shown sites as rows of strings, header first.
@@ -122,6 +131,8 @@ function listRows() {
       String(site.lon),
       site.area == null ? "" : String(site.area),
       types.map((t) => USGS_OBS_TYPES[t].label).join("; "),
+      String(damBelowMi(site.no) ?? ""),
+      hasNoDams(site.no) ? "yes" : "",
     ]);
   }
   return rows;

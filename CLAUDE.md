@@ -206,9 +206,18 @@ distance that grows with drainage area (so the lower Mississippi stays one
 group and the many "Mill Creek"s don't merge). The GeoJSON layer carries only
 `{ id, no, f }`, where `f` is the type bitmask of the site's series that pass
 the panel's period (recent / any / date range) and min-record-length settings,
-zeroed for sites outside its drainage-area range (`filteredMasks()` in
+zeroed for sites outside its drainage-area range or failing its dams setting (`filteredMasks()` in
 `map/usgssites.js`, cached per catalog + settings; the panel's counts and its
-copy/save-as-CSV list, via `shownSites()`, read it too). Changing those resets the source data; type
+copy/save-as-CSV list, via `shownSites()`, read it too).
+
+The dams setting ("just below a dam" within N mi / not / "no dams upstream")
+is the one catalog fact not fetched in the browser: `data/usgsdams.json` is
+built offline by `scripts/usgs-dams.js`. "Below a dam" is regex-scanned from
+each site's station description (`waterdata.usgs.gov/manuscripts/<id>`, the
+LOCATION / REMARKS text): one request per site and no CORS header, so the
+browser can't. "No dams upstream" is GAGES-II `NDAMS_2009 = 0` (NID dams in
+the watershed), else the description saying "no regulation". Retune the
+regexes against a `--cache` dir rather than refetching. Changing those resets the source data; type
 toggles rebuild just the filter and colour expressions (bit tests via
 `%`/`floor`, since expressions have no bitwise ops). Both persist in
 localStorage. The run's own gages
