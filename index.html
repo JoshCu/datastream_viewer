@@ -517,6 +517,59 @@
             </div>
           </div>
 
+          <!-- Flood mapping (src/ui/floodpanel.js): a water level raised and
+               lowered over the 3D terrain, as a color-relief layer on the DEM. -->
+          <div class="panel collapsed" id="floodPanel" data-url-key="flood">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 7c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0" />
+                <path d="M2 12c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0" />
+                <path d="M2 17c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0" />
+              </svg>
+              Sea Level (fake flood mapping)
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <div class="speed-control">
+                <label for="floodLevel">Level</label>
+                <input type="range" id="floodLevel" min="0" max="100" step="0.1" value="0" />
+                <span class="speed-value" id="floodLevelValue">-</span>
+              </div>
+              <div class="nexrad-row flood-row">
+                <input type="number" id="floodLevelInput" class="select" step="0.1"
+                       title="Water level (m)" />
+                <span class="flood-unit">m above</span>
+                <select id="floodBase" class="select" title="What the level is measured from">
+                  <option value="sea">sea level</option>
+                  <option value="ref">reference</option>
+                </select>
+              </div>
+              <div class="nexrad-row">
+                <button class="btn secondary" id="floodPickBtn"
+                        title="Click the map to use the ground there as the reference">Pick reference</button>
+                <button class="btn secondary" id="floodClearRefBtn">Clear</button>
+              </div>
+              <div class="winds-meta" id="floodRefInfo">No reference point</div>
+              <div class="winds-meta" id="floodSurface"></div>
+              <div class="legend">
+                <div class="legend-title">Water depth</div>
+                <div class="legend-gradient" id="floodLegendGradient"></div>
+                <div class="legend-labels"><span>0 m</span><span id="floodLegendMax">-</span></div>
+              </div>
+              <p class="info-text">
+                A flat water surface over the terrain: everything below the level is
+                flooded, whether or not it's connected to a river. The slider spans the
+                elevations in view. Pick a reference point (say, a river bank) to set the
+                level as a height above it. Hover the map for elevation and depth.
+              </p>
+            </div>
+          </div>
+
           <!-- NEXRAD Level II (src/nexrad/, src/ui/nexradpanel.js): volume scans
                from the public Unidata bucket as deck.gl 3D point clouds, one per
                chosen station. -->
@@ -896,6 +949,8 @@
           <!-- One row per config.VARIABLES entry, built in map/interactions.js -->
           <div id="tooltipRows"></div>
         </div>
+        <!-- Elevation / water depth readout while the flood panel is open. -->
+        <div class="tooltip" id="floodTooltip"></div>
         <div class="tooltip" id="gageTooltip">
           <div class="tooltip-title" id="gageTooltipTitle">-</div>
           <div class="tooltip-sub" id="gageTooltipName"></div>

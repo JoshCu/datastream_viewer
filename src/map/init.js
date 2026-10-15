@@ -57,6 +57,7 @@ import { setupForcingPlot } from "../ui/forcingplot.js";
 import { setupContextMenu } from "../ui/contextmenu.js";
 import { setupNexradPanel } from "../ui/nexradpanel.js";
 import { setupWindsPanel } from "../ui/windspanel.js";
+import { setupFloodPanel } from "../ui/floodpanel.js";
 
 
 // maplibregl and pmtiles are globals provided by CDN <script>s in index.html.
@@ -180,6 +181,7 @@ export function init() {
   setupContextMenu();
   setupNexradPanel();
   setupWindsPanel();
+  setupFloodPanel();
   setupUsgsPanel();
   setupSimPanel();
   setupBrush();

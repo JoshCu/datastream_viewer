@@ -226,6 +226,13 @@ export const SEARCH_LAYER = "catchment-search";
 export const SEARCH_POINT_SOURCE = "search-point";
 export const SEARCH_POINT_LAYER = "search-point";
 export const FORCING_FILL_OPACITY = 0.75;
+// Flood mapping (ui/floodpanel.js): a color-relief layer on the DEM that
+// tints everything below the water level, deeper = darker.
+export const FLOOD_LAYER = "flood-water";
+// Depth (m) at which the water reaches its darkest colour.
+export const FLOOD_DEEP_M = 10;
+export const FLOOD_SHALLOW_COLOR = "rgba(90, 170, 230, 0.55)";
+export const FLOOD_DEEP_COLOR = "rgba(8, 40, 110, 0.85)";
 // What one extra range request is worth in transferred bytes, when deciding
 // whether to merge nearby rows into one request (data/workers/forcing.js).
 export const FORCING_REQUEST_COST_BYTES = 64 * 1024;

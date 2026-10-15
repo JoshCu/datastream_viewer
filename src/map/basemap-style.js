@@ -14,6 +14,7 @@ import {
   USGS_SITES_LABEL_LAYER,
   FORCING_FILL_OPACITY,
   NO_DATA_COLOR,
+  FLOOD_LAYER,
 } from "../config.js";
 
 export function updateIncomingStyle(previousStyle, nextStyle) {
@@ -66,6 +67,23 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
 
     },
     layers: [
+      {
+        // Flood water (ui/floodpanel.js): the DEM tinted below the water
+        // level, under everything else of ours so rivers and gages stay on
+        // top. Shares the hillshade's DEM source; its colour ramp is set by
+        // the panel, and it's hidden until the panel opens.
+        id: FLOOD_LAYER,
+        type: "color-relief",
+        source: "hillshadeSource",
+        layout: { visibility: "none" },
+        paint: {
+          "color-relief-color": [
+            "interpolate", ["linear"], ["elevation"],
+            0, "rgba(0, 0, 0, 0)",
+            1, "rgba(0, 0, 0, 0)",
+          ],
+        },
+      },
       {
         // Forcing colours on the catchments (src/forcing/paint.js), under the
         // rivers. Always rendered — transparent until forcings load — so

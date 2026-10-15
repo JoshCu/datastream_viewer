@@ -2433,3 +2433,29 @@ body.hydro-open .sim-map-controls {
     font: inherit;
     cursor: pointer;
 }
+
+/* ====================================================================
+   Flood mapping (src/ui/floodpanel.js)
+   ==================================================================== */
+.flood-row {
+    align-items: center;
+    margin-top: 10px;
+}
+
+.flood-unit {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.flood-picking canvas {
+    cursor: crosshair !important;
+}
+
+.tooltip-value.flood-depth {
+    color: #5aaae6;
+}
+
+#floodTooltip {
+    transform: translateY(-100%);
+}
