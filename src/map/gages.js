@@ -1,7 +1,9 @@
 // ====================================================================
 // Gage layer visibility: the run's gages (only those sitting on a reach in
 // the loaded run) plus the always-on USGS catalog dots (map/usgssites.js),
-// which share the show/hide and label toggles.
+// which share the show/hide and label toggles. Once the catalog has loaded,
+// the run's gages also follow the USGS Gages panel: only sites it shows are
+// drawn, in their catalog colour (a gage the catalog lacks drops out).
 // ====================================================================
 import { state, map } from "../state.js";
 import {
@@ -15,6 +17,13 @@ import {
   USGS_SITES_LABEL_LAYER,
 } from "../config.js";
 import { iconButton } from "../ui/dom.js";
+import { shownSiteGroups, onSiteFilterChange } from "./usgssites.js";
+import { onCatalogChange } from "../data/usgscatalog.js";
+
+// A gage's USGS site number: hl_uri is "gages-<site>".
+const SITE_NO = ["slice", ["get", "hl_uri"], GAGE_URI_PREFIX.length];
+const RUN_GAGE_FILL = "#ffffff"; // before the catalog loads
+const HOVER_COLOR = "#00d4ff";
 
 // The dot layers always carry the reach filter; the label layer only gets it
 // when labels are actually switched on. For a CONUS run that filter is a
@@ -26,6 +35,8 @@ const DOT_LAYERS = [GAGE_LAYER, GAGE_GLOW_LAYER];
 // first time labels are shown.
 let currentFilter = HIDDEN_FILTER;
 let labelFilterApplied = false;
+// The panel's site groups the filter and colour were last built for.
+let styledFor;
 
 // User toggles from GageControl. Labels only draw while gages are shown.
 let gagesVisible = true;
@@ -61,11 +72,27 @@ export function setGageLabelsVisible(on) {
 // `in` because MapLibre compiles its label list into a hash lookup, which
 // keeps a CONUS-sized id list cheap to evaluate per feature.
 export function updateGageFilter() {
-  if (!map.getLayer(GAGE_LAYER)) return;
+  if (!map?.getLayer(GAGE_LAYER)) return;
+  const groups = shownSiteGroups();
+  styledFor = groups;
   // index keys are de-duplicated; match rejects repeated labels.
-  currentFilter = state.data
+  const onRun = state.data
     ? ["match", ["get", "id"], Array.from(state.data.index.keys()), true, false]
     : HIDDEN_FILTER;
+  if (!state.data || !groups) currentFilter = onRun;
+  else if (!groups.length) currentFilter = HIDDEN_FILTER;
+  else {
+    const nos = groups.flatMap((g) => g.nos);
+    currentFilter = ["all", onRun, ["match", SITE_NO, nos, true, false]];
+  }
+  map.setPaintProperty(GAGE_LAYER, "circle-color", [
+    "case",
+    ["boolean", ["feature-state", "hover"], false],
+    HOVER_COLOR,
+    groups?.length
+      ? ["match", SITE_NO, ...groups.flatMap((g) => [g.nos, g.color]), RUN_GAGE_FILL]
+      : RUN_GAGE_FILL,
+  ]);
   for (const layer of DOT_LAYERS) map.setFilter(layer, currentFilter);
   if (labelsVisible) {
     map.setFilter(GAGE_LABEL_LAYER, currentFilter);
@@ -76,6 +103,14 @@ export function updateGageFilter() {
   // Catch up on any toggle clicked before the style finished loading.
   applyGageVisibility();
 }
+
+// Restyle when the panel's settings or the catalog change. The catalog
+// reports status changes too, so only rebuild when the groups did.
+function restyleIfChanged() {
+  if (shownSiteGroups() !== styledFor) updateGageFilter();
+}
+onSiteFilterChange(restyleIfChanged);
+onCatalogChange(restyleIfChanged);
 
 // USGS site number of a gage sitting on `reachId`, or null. Only gage tiles
 // already loaded can be searched, which is fine for a reach just clicked on

@@ -297,13 +297,15 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         // Hidden until a run loads; map/gages.js then filters to the gages
         // on that run's reaches, so the layer is sparse enough to draw at
         // every zoom rather than fading in only when zoomed close. Drawn over
-        // the catalog dots (usgs-sites), white so the run's gages stand out.
+        // the catalog dots (usgs-sites), larger and dark-ringed so the run's
+        // gages stand out; once the catalog loads, map/gages.js filters and
+        // colours them like those dots (white until then).
         filter: HIDDEN_FILTER,
         paint: {
           "circle-radius": {
             stops: [
-              [3, 3],
-              [11, 6],
+              [3, 4],
+              [11, 7],
             ],
           },
           "circle-color": [

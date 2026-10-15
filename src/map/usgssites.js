@@ -2,7 +2,8 @@
 // The catalog gage layer: every USGS site with a continuous record
 // (data/usgscatalog.js), always on the map, coloured and filtered by what it
 // observes. Independent of the loaded run — the run's own gages
-// (map/gages.js) are drawn as white dots over these.
+// (map/gages.js) are drawn as larger dots over these, filtered and coloured
+// the same way through shownSiteGroups().
 //
 // Which of a site's series count is decided here, per series: the period
 // (reporting recently / any time / overlapping or spanning a date range) and
@@ -206,6 +207,31 @@ export function shownSites() {
     if (types.length) out.push({ site, types });
   });
   return out;
+}
+
+// The shown sites' numbers grouped by the colour their dot takes, as
+// [{ color, nos }] (no empty groups), for styling the run's gages
+// (map/gages.js) like the catalog dots. Null before the catalog has loaded.
+let groupCache = { masks: null, key: "", groups: null };
+export function shownSiteGroups() {
+  const masks = filteredMasks();
+  if (!masks) return null;
+  const shown = shownTypes();
+  const key = shown.join(",");
+  if (groupCache.masks === masks && groupCache.key === key) return groupCache.groups;
+  const byType = new Map(shown.map((t) => [t, []]));
+  const seen = new Set(); // match rejects repeated labels
+  getCatalog().sites.forEach((site, i) => {
+    const t = shown.find((t) => masks[i] & (1 << t));
+    if (t === undefined || seen.has(site.no)) return;
+    seen.add(site.no);
+    byType.get(t).push(site.no);
+  });
+  const groups = [...byType]
+    .filter(([, nos]) => nos.length)
+    .map(([t, nos]) => ({ color: USGS_OBS_TYPES[t].color, nos }));
+  groupCache = { masks, key, groups };
+  return groups;
 }
 
 // ---- Expressions ----------------------------------------------------------
