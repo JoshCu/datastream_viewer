@@ -15,7 +15,9 @@ import {
   FORCING_FILL_OPACITY,
   NO_DATA_COLOR,
   FLOOD_LAYER,
+  GAGE_ICON,
 } from "../config.js";
+import { BASE_FLOWPATH_PAINT, withHover } from "./flowpathstyle.js";
 
 export function updateIncomingStyle(previousStyle, nextStyle) {
   const s3_url = "https://communityhydrofabric.s3.us-east-1.amazonaws.com/map/";
@@ -118,7 +120,7 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
           "line-sort-key": ["get", "order"],
         },
         paint: {
-          "line-color": "rgb(0, 119, 187)",
+          "line-color": withHover("line-color", BASE_FLOWPATH_PAINT["line-color"]),
       
           // Fade orders in progressively instead of popping
           "line-opacity": [
@@ -131,20 +133,8 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
             8,   1,                                      // order 1 faded in
           ],
       
-          "line-width": [
-            "interpolate", ["exponential", 2], ["zoom"],
-            // low zoom: purely cartographic, by order
-            4, ["interpolate", ["exponential", 1.6], ["get", "order"], 1, 0.3, 8, 3],
-            8, ["max",
-                 ["interpolate", ["exponential", 1.6], ["get", "order"], 1, 0.6, 8, 5],
-                 ["*", ["coalesce", ["get", "widthcm"], 0], 0.0000327]],
-            12, ["max",
-                 ["interpolate", ["exponential", 1.6], ["get", "order"], 1, 1, 8, 7],
-                 ["*", ["coalesce", ["get", "widthcm"], 0], 0.000523]],
-            // high zoom: true ground width, with a 1px floor
-            16, ["max", 1, ["*", ["coalesce", ["get", "widthcm"], 0], 0.00837]],
-            22, ["max", 1, ["*", ["coalesce", ["get", "widthcm"], 0], 0.536]],
-          ],
+          // Hovered reach drawn inverted and wider: see map/flowpathstyle.js.
+          "line-width": withHover("line-width", BASE_FLOWPATH_PAINT["line-width"]),
         },
       },
       {
@@ -291,31 +281,36 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
       },
       {
         id: "conus_gages",
-        type: "circle",
+        type: "symbol",
         source: "gages",
         "source-layer": "gages",
         // Hidden until a run loads; map/gages.js then filters to the gages
         // on that run's reaches, so the layer is sparse enough to draw at
         // every zoom rather than fading in only when zoomed close. Drawn over
-        // the catalog dots (usgs-sites), larger and dark-ringed so the run's
+        // the catalog dots (usgs-sites) as dark-ringed triangles so the run's
         // gages stand out; once the catalog loads, map/gages.js filters and
         // colours them like those dots (white until then).
         filter: HIDDEN_FILTER,
-        paint: {
-          "circle-radius": {
+        layout: {
+          "icon-image": GAGE_ICON,
+          "icon-size": {
             stops: [
-              [3, 4],
-              [11, 7],
+              [3, 0.6],
+              [11, 1],
             ],
           },
-          "circle-color": [
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: {
+          "icon-color": [
             "case",
             ["boolean", ["feature-state", "hover"], false],
             "#00d4ff",
             "#ffffff",
           ],
-          "circle-stroke-color": "#1a1a2e",
-          "circle-stroke-width": 1.5,
+          "icon-halo-color": "#1a1a2e",
+          "icon-halo-width": 3,
         },
       },
     ],

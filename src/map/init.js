@@ -26,7 +26,7 @@ import {
   TerrainControl,
   HydrofabricControl,
 } from "./interactions.js";
-import { GageControl, updateGageFilter } from "./gages.js";
+import { GageControl, updateGageFilter, addGageIcon } from "./gages.js";
 import { SearchControl } from "./search.js";
 import { setupUsgsSites } from "./usgssites.js";
 import { loadUsgsCatalog } from "../data/usgscatalog.js";
@@ -90,6 +90,7 @@ export function init() {
     validateStyle: false,
   });
   setMap(map);
+  map.on("styleimagemissing", addGageIcon);
   map.setStyle("https://tiles.openfreemap.org/styles/liberty", {
     transformStyle: updateIncomingStyle,
   });

@@ -8,6 +8,7 @@ import {
   GAGE_LAYER,
   NEXRAD_SITE_LAYER,
   GAGE_FEATURE,
+  FLOWPATH_FEATURE,
   USGS_FLOW_PARAM,
   USGS_OBS_TYPES,
   USGS_SITES_SOURCE,
@@ -137,14 +138,29 @@ export class HydrofabricControl {
 
 // ---- Hover tooltip -------------------------------------------------
 
+// Reach drawn highlighted (map/flowpathstyle.js), with or without a run, so
+// it's clear where one reach ends and the next begins.
+let highlightedReach = null;
+
+function highlightReach(id) {
+  if (id === highlightedReach) return;
+  if (highlightedReach != null) {
+    map.setFeatureState({ ...FLOWPATH_FEATURE, id: highlightedReach }, { hover: false });
+  }
+  highlightedReach = id;
+  if (id != null) map.setFeatureState({ ...FLOWPATH_FEATURE, id }, { hover: true });
+}
+
 export function onFlowpathHover(e) {
-  if (!state.data || !e.features?.length) return;
+  if (!e.features?.length) return;
   // A hovered gage owns the cursor: keep the reach tooltip out of its way.
   if (hovered) {
     onFlowpathLeave();
     return;
   }
   const id = e.features[0].id;
+  highlightReach(id);
+  if (!state.data) return;
   state.hoveredId = id;
 
   const tooltip = document.getElementById("tooltip");
@@ -155,6 +171,7 @@ export function onFlowpathHover(e) {
 }
 
 export function onFlowpathLeave() {
+  highlightReach(null);
   state.hoveredId = null;
   document.getElementById("tooltip").classList.remove("visible");
 }

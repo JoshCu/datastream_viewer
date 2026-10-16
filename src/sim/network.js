@@ -28,6 +28,7 @@ import {
   SIM_CHANNEL_BY_ORDER,
 } from "../config.js";
 import { resultColorStops } from "../color/expressions.js";
+import { flowpathPaint, setFlowpathPaint } from "../map/flowpathstyle.js";
 import { clearData } from "../data/loader.js";
 import { setStatus } from "../ui/panels.js";
 
@@ -268,18 +269,18 @@ const SIM_IS_WET = [">=", RESULT_VALUE, SIM_WET_Q];
 
 function applySimPaint() {
   originalPaint = {
-    "line-color": map.getPaintProperty("flowpaths", "line-color"),
-    "line-width": map.getPaintProperty("flowpaths", "line-width"),
+    "line-color": flowpathPaint("line-color"),
+    "line-width": flowpathPaint("line-width"),
   };
   // resultColorStops only reads bounds (and isDiff) for a transform scale, so
   // a bounds-only stand-in gives the same log ramp as a loaded run's.
   const stops = resultColorStops({ bounds: { flow: SIM_Q_DOMAIN } }, "flow", "log");
   const lo = Math.log10(SIM_Q_DOMAIN.min);
   const hi = Math.log10(SIM_Q_DOMAIN.max);
-  map.setPaintProperty("flowpaths", "line-color", ["case", SIM_IS_WET, stops, SIM_DRY_COLOR]);
+  setFlowpathPaint("line-color", ["case", SIM_IS_WET, stops, SIM_DRY_COLOR]);
   // Dry reaches keep the basemap's order-based width (it has no zoom
   // dependence, so it can nest inside a feature-state case).
-  map.setPaintProperty("flowpaths", "line-width", [
+  setFlowpathPaint("line-width", [
     "case",
     SIM_IS_WET,
     ["interpolate", ["linear"], ["log10", ["max", RESULT_VALUE, SIM_Q_DOMAIN.min]], lo, 2, hi, 8],
@@ -289,8 +290,8 @@ function applySimPaint() {
 
 function restorePaint() {
   if (!originalPaint || !map.getLayer("flowpaths")) return;
-  map.setPaintProperty("flowpaths", "line-color", originalPaint["line-color"]);
-  map.setPaintProperty("flowpaths", "line-width", originalPaint["line-width"]);
+  setFlowpathPaint("line-color", originalPaint["line-color"]);
+  setFlowpathPaint("line-width", originalPaint["line-width"]);
   originalPaint = null;
 }
 

@@ -10,6 +10,7 @@ import {
 import { valueAt } from "../data/access.js";
 import { refreshTooltip } from "./interactions.js";
 import { createStatePainter } from "./statepainter.js";
+import { flowpathPaint, setFlowpathPaint } from "./flowpathstyle.js";
 
 // Feature-state for only the reaches on screen (see map/statepainter.js).
 // Feature-state persists once set, so panning to a new area (or a tile
@@ -50,21 +51,16 @@ export function applyResultsPaint() {
 
   if (!state.originalPaint) {
     state.originalPaint = {
-      "line-color": map.getPaintProperty("flowpaths", "line-color"),
-      "line-width": map.getPaintProperty("flowpaths", "line-width"),
+      "line-color": flowpathPaint("line-color"),
+      "line-width": flowpathPaint("line-width"),
     };
   }
 
-  map.setPaintProperty(
-    "flowpaths",
+  setFlowpathPaint(
     "line-color",
     resultColorExpression(state.data, state.variable, state.scale),
   );
-  map.setPaintProperty(
-    "flowpaths",
-    "line-width",
-    resultWidthExpression(state.data, state.variable),
-  );
+  setFlowpathPaint("line-width", resultWidthExpression(state.data, state.variable));
 }
 
 // Restore the flowpaths layer to its pre-data appearance and drop every
@@ -72,8 +68,8 @@ export function applyResultsPaint() {
 // skipping ids this run already thinks it painted.
 export function clearResultsPaint() {
   if (state.originalPaint && map.getLayer("flowpaths")) {
-    map.setPaintProperty("flowpaths", "line-color", state.originalPaint["line-color"]);
-    map.setPaintProperty("flowpaths", "line-width", state.originalPaint["line-width"]);
+    setFlowpathPaint("line-color", state.originalPaint["line-color"]);
+    setFlowpathPaint("line-width", state.originalPaint["line-width"]);
   }
   painter.reset();
   zoomQueued = false;

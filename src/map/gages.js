@@ -10,6 +10,7 @@ import {
   HIDDEN_FILTER,
   GAGE_URI_PREFIX,
   GAGE_LAYER,
+  GAGE_ICON,
   GAGE_GLOW_LAYER,
   GAGE_LABEL_LAYER,
   GAGE_FEATURE,
@@ -24,6 +25,53 @@ import { onCatalogChange } from "../data/usgscatalog.js";
 const SITE_NO = ["slice", ["get", "hl_uri"], GAGE_URI_PREFIX.length];
 const RUN_GAGE_FILL = "#ffffff"; // before the catalog loads
 const HOVER_COLOR = "#00d4ff";
+
+// An upward triangle as a signed distance field (MapLibre's SDF convention:
+// alpha 0.75 at the edge, falling 1/8 per px outward), so icon-color can
+// recolour it per site and icon-halo draws its ring. Drawn at 2x, so the
+// halo width is in image px: 3 there is ~1.5 CSS px.
+const ICON_PX = 48;
+const SDF_RADIUS = 8;
+function triangleSdf() {
+  const c = ICON_PX / 2;
+  const side = 32;
+  const h = (side * Math.sqrt(3)) / 2;
+  // Centroid on the image centre, so the icon's default centre anchor sits
+  // on the gage point.
+  const pts = [
+    [c, c - (2 * h) / 3],
+    [c + side / 2, c + h / 3],
+    [c - side / 2, c + h / 3],
+  ];
+  const data = new Uint8ClampedArray(ICON_PX * ICON_PX * 4);
+  for (let y = 0; y < ICON_PX; y++) {
+    for (let x = 0; x < ICON_PX; x++) {
+      const px = x + 0.5;
+      const py = y + 0.5;
+      let dist = Infinity;
+      let inside = true;
+      for (let i = 0; i < 3; i++) {
+        const [ax, ay] = pts[i];
+        const [bx, by] = pts[(i + 1) % 3];
+        const ex = bx - ax;
+        const ey = by - ay;
+        const t = Math.max(0, Math.min(1, ((px - ax) * ex + (py - ay) * ey) / (ex * ex + ey * ey)));
+        dist = Math.min(dist, Math.hypot(px - ax - t * ex, py - ay - t * ey));
+        // Clockwise on screen (y down): inside is right of every edge.
+        if (ex * (py - ay) - ey * (px - ax) < 0) inside = false;
+      }
+      const signed = inside ? -dist : dist;
+      data[(y * ICON_PX + x) * 4 + 3] = 255 * (0.75 - signed / SDF_RADIUS);
+    }
+  }
+  return { width: ICON_PX, height: ICON_PX, data };
+}
+
+// Bound to styleimagemissing, so it's added on first use with any style.
+export function addGageIcon(e) {
+  if (e.id !== GAGE_ICON || map.hasImage(GAGE_ICON)) return;
+  map.addImage(GAGE_ICON, triangleSdf(), { sdf: true, pixelRatio: 2 });
+}
 
 // The dot layers always carry the reach filter; the label layer only gets it
 // when labels are actually switched on. For a CONUS run that filter is a
@@ -85,7 +133,7 @@ export function updateGageFilter() {
     const nos = groups.flatMap((g) => g.nos);
     currentFilter = ["all", onRun, ["match", SITE_NO, nos, true, false]];
   }
-  map.setPaintProperty(GAGE_LAYER, "circle-color", [
+  map.setPaintProperty(GAGE_LAYER, "icon-color", [
     "case",
     ["boolean", ["feature-state", "hover"], false],
     HOVER_COLOR,
