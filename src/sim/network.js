@@ -18,7 +18,6 @@
 import { state, map } from "../state.js";
 import {
   FLOWPATH_FEATURE,
-  PALETTE,
   RESULT_VALUE,
   SIM_DT,
   SIM_WET_Q,
@@ -28,6 +27,7 @@ import {
   SIM_CHANNEL_BY_ORDER,
 } from "../config.js";
 import { resultColorStops } from "../color/expressions.js";
+import { DEFAULT_COLORMAP, colormapColors, colormapGradient } from "../color/colormaps.js";
 import { flowpathPaint, setFlowpathPaint } from "../map/flowpathstyle.js";
 import { clearData } from "../data/loader.js";
 import { setStatus } from "../ui/panels.js";
@@ -540,7 +540,7 @@ export function setupSimPanel() {
   applySpeed();
 
   document.getElementById("simLegendGradient").style.background =
-    `linear-gradient(to right, ${PALETTE.join(", ")})`;
+    colormapGradient(colormapColors(DEFAULT_COLORMAP));
   document.getElementById("simLegendMin").textContent = SIM_Q_DOMAIN.min;
   document.getElementById("simLegendMax").textContent = SIM_Q_DOMAIN.max;
   document.getElementById("simStepNote").textContent =

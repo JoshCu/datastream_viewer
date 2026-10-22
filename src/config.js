@@ -17,28 +17,7 @@ export const VARIABLES = {
 // the worker boundary share it.
 export const VARIABLE_KEYS = Object.keys(VARIABLES);
 
-// Ice-fire ramp (matches the static legend gradient in the sidebar).
-export const PALETTE = [
-  "#0077b6",
-  "#00b4d8",
-  "#90e0ef",
-  "#ffba08",
-  "#ff6b35",
-  "#d00000",
-];
-
-// Diverging ramp for diff views (A − B): symmetric around the middle (odd
-// length) so zero difference lands on the pale center stop, not off to one
-// side. Blue = A below B, red = A above B.
-export const DIFF_PALETTE = [
-  "#2166ac",
-  "#67a9cf",
-  "#d1e5f0",
-  "#f7f7f7",
-  "#fddbc7",
-  "#ef8a62",
-  "#b2182b",
-];
+// Colour maps live in color/colormaps.js.
 
 // Short legend suffix per color scale.
 export const SCALE_LABELS = {

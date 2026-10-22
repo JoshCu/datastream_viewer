@@ -12,7 +12,6 @@ import {
   FORCING_CONFIRM_BYTES,
   FORCING_CONFIRM_REQUESTS,
   FORCING_ROOT,
-  PALETTE,
   SCALE_LABELS,
   forcingMeta,
   isValid,
@@ -32,6 +31,8 @@ import { onForcingChange } from "../forcing/store.js";
 import { applyForcingPaint, setForcingTimeIndex } from "../forcing/paint.js";
 import { MIN_CATCHMENT_ZOOM } from "../forcing/viewport.js";
 import { setStatus } from "./panels.js";
+import { fillColormapSelect } from "./colormap.js";
+import { colormapColors, colormapGradient } from "../color/colormaps.js";
 import { escapeHtml } from "./dom.js";
 
 const PLAY_STEP_MS = 400;
@@ -94,6 +95,12 @@ export function setupForcingPanel() {
   });
   $("forcingScaleSelect").addEventListener("change", (e) => {
     forcingState.scale = e.target.value;
+    applyForcingPaint();
+    updateLegend();
+  });
+  fillColormapSelect($("forcingColormapSelect"), false, forcingState.colormap);
+  $("forcingColormapSelect").addEventListener("change", (e) => {
+    forcingState.colormap = e.target.value;
     applyForcingPaint();
     updateLegend();
   });
@@ -415,7 +422,7 @@ function updateLegend() {
   const show = (v) => (v * meta.scale + meta.offset).toFixed(2);
   const scaleNote = scale === "linear" ? "" : ` · ${SCALE_LABELS[scale]}`;
   $("forcingLegendTitle").textContent = `${meta.label}${meta.units ? ` (${meta.units})` : ""}${scaleNote}`;
-  $("forcingLegendGradient").style.background = `linear-gradient(to right, ${PALETTE.join(", ")})`;
+  $("forcingLegendGradient").style.background = colormapGradient(colormapColors(forcingState.colormap));
   $("forcingLegendMin").textContent = b ? show(b.min) : "–";
   $("forcingLegendMax").textContent = b ? show(b.max) : "–";
 }

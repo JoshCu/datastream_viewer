@@ -32,6 +32,10 @@ export const state = {
   isPlaying: false,
   playSpeed: 5,
   scale: "linear", // color scale: linear | log | sqrt | cbrt | symlog | ...
+  // Colour map ids (color/colormaps.js), one for ordinary runs and one for
+  // diffs, so switching between them keeps each choice.
+  colormap: "icefire",
+  diffColormap: "rdbu",
   originalPaint: null, // flowpaths paint to restore on clear
   hoveredId: null,
   lastClickedDivide: null,
@@ -54,6 +58,7 @@ export const forcingState = {
   run: null, // the ForcingRun (forcing/store.js) once any rows have loaded
   variable: null,
   scale: "linear",
+  colormap: "icefire",
   timeIndex: 0,
   busy: false,
 };

@@ -22,6 +22,17 @@ export function resultSamples(dataset, variable) {
   return cache.samples;
 }
 
+// Sorted |value| sample, for the signed (diff) forms of the distribution
+// scales, which classify magnitudes and mirror them around zero.
+export function magnitudeSamples(dataset, variable) {
+  const cache = derived(dataset, variable);
+  if (cache.magnitudes) return cache.magnitudes;
+  cache.magnitudes = resultSamples(dataset, variable)
+    .map(Math.abs)
+    .sort();
+  return cache.magnitudes;
+}
+
 export function quantileOf(sorted, p) {
   if (sorted.length === 0) return 0;
   const idx = p * (sorted.length - 1);
@@ -86,15 +97,36 @@ export function jenksBreaks(data, nClasses) {
   return kclass;
 }
 
-// Interior class boundaries (length nClasses-1) for the classed scales,
-// cached per (dataset, variable, scale).
-export function resultBreaks(dataset, variable, scale, nClasses) {
+// Interior class boundaries (length nColors-1) for the classed scales,
+// cached per (dataset, variable, scale, nColors) since colour maps differ in
+// length. A diff classifies |value| into half as many classes and mirrors the
+// boundaries, so the classes are symmetric and an odd-length map's middle
+// colour is the class around zero.
+export function resultBreaks(dataset, variable, scale, nColors) {
   const cache = derived(dataset, variable);
   cache.breaks = cache.breaks || {};
-  if (cache.breaks[scale]) return cache.breaks[scale];
+  const key = `${scale}:${nColors}`;
+  if (cache.breaks[key]) return cache.breaks[key];
 
-  const samples = resultSamples(dataset, variable);
   let breaks;
+  if (dataset.isDiff) {
+    const mag = classBreaks(
+      magnitudeSamples(dataset, variable),
+      scale,
+      Math.ceil(nColors / 2),
+    );
+    const neg = mag.map((b) => -b).reverse();
+    breaks = nColors % 2 ? [...neg, ...mag] : [...neg, 0, ...mag];
+  } else {
+    breaks = classBreaks(resultSamples(dataset, variable), scale, nColors);
+  }
+  breaks = strictlyIncreasing(breaks);
+  cache.breaks[key] = breaks;
+  return breaks;
+}
+
+// Interior boundaries splitting sorted `samples` into nClasses classes.
+function classBreaks(samples, scale, nClasses) {
   if (scale === "jenks") {
     // Downsample so the O(n^2) DP stays fast.
     const cap = 1000;
@@ -104,14 +136,11 @@ export function resultBreaks(dataset, variable, scale, nClasses) {
       data = new Float64Array(cap);
       for (let i = 0; i < cap; i++) data[i] = samples[Math.floor(i * stride)];
     }
-    breaks = jenksBreaks(data, nClasses).slice(1, nClasses);
-  } else {
-    // Quantile classification: equal-count classes.
-    breaks = [];
-    for (let i = 1; i < nClasses; i++)
-      breaks.push(quantileOf(samples, i / nClasses));
+    return jenksBreaks(data, nClasses).slice(1, nClasses);
   }
-  breaks = strictlyIncreasing(breaks);
-  cache.breaks[scale] = breaks;
+  // Quantile classification: equal-count classes.
+  const breaks = [];
+  for (let i = 1; i < nClasses; i++)
+    breaks.push(quantileOf(samples, i / nClasses));
   return breaks;
 }

@@ -10,6 +10,7 @@
 import { forcingState, map } from "../state.js";
 import { DIVIDE_FEATURE, FORCING_LAYER, NO_DATA_COLOR } from "../config.js";
 import { resultColorExpression } from "../color/expressions.js";
+import { colormapColors } from "../color/colormaps.js";
 import { createStatePainter } from "../map/statepainter.js";
 import { emitForcingChange } from "./store.js";
 
@@ -43,13 +44,17 @@ export function invalidateForcingView() {
 // (Re)apply the colour expression — after a variable/scale change, and after
 // every load batch, since bounds grow as rows arrive — and repaint.
 export function applyForcingPaint() {
-  const { run, variable, scale } = forcingState;
+  const { run, variable, scale, colormap } = forcingState;
   if (!map.getLayer(FORCING_LAYER)) return;
   if (!run || !variable) {
     map.setPaintProperty(FORCING_LAYER, "fill-color", NO_DATA_COLOR);
     return;
   }
-  map.setPaintProperty(FORCING_LAYER, "fill-color", resultColorExpression(run, variable, scale));
+  map.setPaintProperty(
+    FORCING_LAYER,
+    "fill-color",
+    resultColorExpression(run, variable, scale, colormapColors(colormap)),
+  );
   painter.invalidate();
   painter.markViewDirty();
   painter.schedule();

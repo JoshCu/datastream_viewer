@@ -19,13 +19,13 @@
 import { state } from "../state.js";
 import {
   VARIABLES,
-  DIFF_PALETTE,
   SERIES_COLORS,
   SERIES_OVERFLOW_COLOR,
   OBS_COLOR,
   CURRENT_TIME_COLOR,
 } from "../config.js";
 import { seriesAt } from "../data/access.js";
+import { colormapColors } from "../color/colormaps.js";
 import { listSources, onSourcesChange } from "../data/sources.js";
 import { setTimeIndex } from "./time.js";
 import { fetchGageFlow, fetchGageMeta } from "../data/usgs.js";
@@ -42,12 +42,10 @@ const DIFF_GAP = 16; // vertical space between the main plot and the diff strip
 const MIN_SPAN_MS = 30 * 60 * 1000;
 const MIN_DOCK_PX = 220;
 const METRICS_DEBOUNCE_MS = 120;
-// A above B / A below B, taken from the map's diverging ramp so the strip and
-// the map can't drift apart.
-// Matches .hydro-key.diff / .hydro-diff-line in main.css.
+// The diff strip's A above B / A below B fills come from the chosen diff
+// colour map at render time, so the strip and the map can't drift apart.
+// DIFF_LINE_COLOR matches .hydro-key.diff / .hydro-diff-line in main.css.
 const DIFF_LINE_COLOR = "#c3cad3";
-const DIFF_POS_COLOR = DIFF_PALETTE[5];
-const DIFF_NEG_COLOR = DIFF_PALETTE[1];
 
 const view = {
   target: null, // { reachId, site }
@@ -205,8 +203,8 @@ function buildSkeleton() {
   const diffGrid = diff.append("g").attr("class", "hydro-axis hydro-axis-y");
   const diffLabel = diff.append("text").attr("class", "hydro-axis-title");
   const diffBody = diff.append("g").attr("clip-path", "url(#hydro-clip-diff)");
-  const diffPos = diffBody.append("path").attr("fill", DIFF_POS_COLOR).attr("fill-opacity", 0.35);
-  const diffNeg = diffBody.append("path").attr("fill", DIFF_NEG_COLOR).attr("fill-opacity", 0.35);
+  const diffPos = diffBody.append("path").attr("fill-opacity", 0.35);
+  const diffNeg = diffBody.append("path").attr("fill-opacity", 0.35);
   const diffZero = diffBody.append("line").attr("class", "hydro-zero");
   const diffLine = diffBody.append("path").attr("class", "hydro-diff-line");
   const diffNow = diff.append("line").attr("class", "hydro-now");
@@ -776,8 +774,10 @@ function render() {
         .x((i) => x(diff.times[i]))
         .y0(yDiff(0))
         .y1((i) => yDiff(clampFn(diff.values[i], 0)))(idx);
-    chart.diffPos.attr("d", area(Math.max));
-    chart.diffNeg.attr("d", area(Math.min));
+    const diffColors = colormapColors(state.diffColormap, true);
+    const at = (t) => diffColors[Math.round(t * (diffColors.length - 1))];
+    chart.diffPos.attr("fill", at(0.85)).attr("d", area(Math.max));
+    chart.diffNeg.attr("fill", at(0.15)).attr("d", area(Math.min));
     chart.diffZero.attr("x1", 0).attr("x2", innerW).attr("y1", yDiff(0)).attr("y2", yDiff(0));
     chart.diffLine.attr(
       "d",

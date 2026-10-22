@@ -17,7 +17,9 @@ Third-party libraries load from CDNs (MapLibre GL + PMTiles via `<script>` in
 
 - **Run:** `bun serve.js` (or `PORT=3000 bun serve.js`). It must be served over
   HTTP — the ES modules and the module Web Worker will not load from `file://`.
-  `python3 -m http.server 8000` also works.
+  `python3 -m http.server 8000` also works. `serve.js` live-reloads open pages
+  on any file change (CSS-only changes swap stylesheets in place); `RELOAD=0`
+  turns that off.
 - **Syntax-check a module** (no tooling, so this is the fastest sanity check):
   `node --check --input-type=module - < src/<file>.js`
 - **Live-routing wasm** (only when touching `wasm/mc_route`):
@@ -60,7 +62,13 @@ Bounds, distribution samples, class breaks and per-timestep totals are derived
 from these matrices and cached per (dataset, variable) through
 **`derived(dataset, variable)`** in `data/access.js` — not bolted onto
 `state.data` ad hoc. The `color/*` functions are pure and take
-`(dataset, variable, scale)` parameters, so they work for any loaded run.
+`(dataset, variable, scale, palette)` parameters, so they work for any loaded run.
+Every colour map lives in `color/colormaps.js` (sequential, then diverging),
+shared by runs, diffs and forcings; `ui/colormap.js` builds the pickers, which
+list diverging maps first for a diff. A diff (`isDiff`, bounds symmetric about
+zero) gets the **signed** form of every scale — the transform is applied to
+|v| and the sign restored, and quantile / Jenks classify |v| and mirror the
+breaks — so zero always sits on the palette's middle.
 
 ### 2. Painting via MapLibre feature-state (not repainting)
 
@@ -297,5 +305,5 @@ Two rules that keep the wiring from sprawling:
   (`data/sources.js`); `map/init.js` subscribes panels, time, paint, gages and the
   overview. To react to a run loading or clearing, add a subscriber in the module
   that owns that DOM — don't add a line to `promote()`. Dataset-level rules (e.g.
-  a diff only allowing the linear scale) live as properties on the dataset and
-  are read by the module that owns the control.
+  a diff using signed scales and its own colour-map choice) live as properties
+  on the dataset and are read by the module that owns the control.

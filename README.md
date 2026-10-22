@@ -130,7 +130,8 @@ src/
     search.js                 search box + suggestions: gages, river groups, catchments
     usgssites.js              always-on USGS catalog gage layer, filtered/coloured by type
   color/
-    scales.js                 continuous transforms (log, sqrt, symlog, …)
+    colormaps.js              shared colour maps (sequential, diverging)
+    scales.js                 continuous transforms (log, sqrt, symlog, …), signed for diffs
     breaks.js                 quantile / Jenks class breaks
     expressions.js            MapLibre color + width paint expressions
   s3/
@@ -161,6 +162,7 @@ src/
     dom.js                    shared row/button builders + escaping (leaf)
     playback.js               play/pause/step transport
     panels.js                 data-info summary, legend, status lines
+    colormap.js               colour-map picker shared by the run and forcing panels
     time.js                   setTimeIndex() + current-timestep readout
     overview.js               basin-total sparkline + click-to-seek
     infopanel.js              reach click info panel

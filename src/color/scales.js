@@ -6,7 +6,9 @@ import { RESULT_VALUE } from "../config.js";
 // Continuous transform scales: map the feature-state value to an
 // interpolate() input expression, plus the transformed data-range
 // endpoints a (at min) and b (at max) where the palette stops are spread.
-export function scaleTransform(bounds, scale) {
+// A diff (`symmetric`) gets the signed form of each scale instead.
+export function scaleTransform(bounds, scale, symmetric = false) {
+  if (symmetric) return signedTransform(bounds, scale);
   const V = RESULT_VALUE;
   const min = bounds.min;
   const max = bounds.max;
@@ -42,6 +44,50 @@ export function scaleTransform(bounds, scale) {
     default:
       return { input: V, a: min, b: max };
   }
+}
+
+// Decades a signed log scale spans below the largest |difference|; anything
+// smaller lands on the centre colour.
+const SIGNED_LOG_DECADES = 3;
+
+// Signed scales for data centred on zero: transform |v| with a curve g that
+// has g(0) = 0, then restore the sign, so zero stays on the middle colour and
+// equal-and-opposite differences get mirror-image colours.
+function signedTransform(bounds, scale) {
+  const V = RESULT_VALUE;
+  const m = Math.max(Math.abs(bounds.min), Math.abs(bounds.max)) || 1;
+  let g; // (expression of a value >= 0) → expression
+  let f; // the same curve on numbers, for the endpoint
+  switch (scale) {
+    case "log": {
+      const lo = Math.max(m / 10 ** SIGNED_LOG_DECADES, 1e-9);
+      g = (x) => ["log10", ["/", ["max", x, lo], lo]];
+      f = (x) => Math.log10(Math.max(x, lo) / lo);
+      break;
+    }
+    case "symlog": {
+      const lt = Math.max(m / 100, 1e-9);
+      g = (x) => [
+        "case",
+        ["<=", x, lt],
+        ["/", x, lt],
+        ["+", 1, ["log10", ["/", x, lt]]],
+      ];
+      f = (x) => (x <= lt ? x / lt : 1 + Math.log10(x / lt));
+      break;
+    }
+    case "sqrt":
+    case "cbrt": {
+      const gamma = scale === "sqrt" ? 0.5 : 1 / 3;
+      g = (x) => ["^", ["/", x, m], gamma];
+      f = (x) => (x / m) ** gamma;
+      break;
+    }
+    default:
+      return { input: V, a: -m, b: m };
+  }
+  const input = ["case", ["<", V, 0], ["-", g(["-", V])], g(V)];
+  return { input, a: -f(m), b: f(m) };
 }
 
 // PowerNorm-style: color position = ((v-min)/range)^gamma. gamma < 1

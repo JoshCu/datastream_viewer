@@ -11,6 +11,7 @@ import { valueAt } from "../data/access.js";
 import { refreshTooltip } from "./interactions.js";
 import { createStatePainter } from "./statepainter.js";
 import { flowpathPaint, setFlowpathPaint } from "./flowpathstyle.js";
+import { runColors } from "../ui/colormap.js";
 
 // Feature-state for only the reaches on screen (see map/statepainter.js).
 // Feature-state persists once set, so panning to a new area (or a tile
@@ -58,7 +59,7 @@ export function applyResultsPaint() {
 
   setFlowpathPaint(
     "line-color",
-    resultColorExpression(state.data, state.variable, state.scale),
+    resultColorExpression(state.data, state.variable, state.scale, runColors()),
   );
   setFlowpathPaint("line-width", resultWidthExpression(state.data, state.variable));
 }

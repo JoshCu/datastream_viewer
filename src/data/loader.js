@@ -135,10 +135,6 @@ export function formatLabel(name) {
 function promote(data, { fitView = true } = {}) {
   state.data = data;
   state.timeIndex = 0;
-  // A diff's signed, symmetric-around-zero values don't suit the
-  // magnitude-oriented transform scales, so it only permits linear. That's a
-  // property of the dataset; the scale picker's own module enforces it.
-  if (data.isDiff) state.scale = "linear";
   emitActiveDatasetChange({ data, fitView });
   return data;
 }

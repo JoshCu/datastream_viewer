@@ -2,7 +2,9 @@
 // Sidebar panels: data info summary, legend, scale picker, status lines
 // ====================================================================
 import { state } from "../state.js";
-import { VARIABLES, SCALE_LABELS, PALETTE, DIFF_PALETTE } from "../config.js";
+import { VARIABLES, SCALE_LABELS } from "../config.js";
+import { colormapGradient } from "../color/colormaps.js";
+import { fillColormapSelect, runColormapId, runColors } from "./colormap.js";
 import { initialOpenPanels, syncUrl } from "./url.js";
 
 // Makes the whole title bar of every panel that has a `.panel-collapse-toggle`
@@ -95,34 +97,30 @@ export function updateLegend() {
   const { label, units } = VARIABLES[state.variable];
 
   document.getElementById("legendGradient").style.background =
-    `linear-gradient(to right, ${(state.data.isDiff ? DIFF_PALETTE : PALETTE).join(", ")})`;
+    colormapGradient(runColors());
 
-  if (state.data.isDiff) {
-    document.getElementById("legendTitle").textContent =
-      `${label} diff (${units}) — ${state.data.diffLabel}`;
-  } else {
-    const scaleNote =
-      state.scale === "linear" ? "" : ` · ${SCALE_LABELS[state.scale]}`;
-    document.getElementById("legendTitle").textContent =
-      `${label} (${units})${scaleNote}`;
-  }
+  const scaleNote =
+    state.scale === "linear" ? "" : ` · ${SCALE_LABELS[state.scale]}`;
+  document.getElementById("legendTitle").textContent = state.data.isDiff
+    ? `${label} diff (${units})${scaleNote} — ${state.data.diffLabel}`
+    : `${label} (${units})${scaleNote}`;
   document.getElementById("legendMin").textContent = bounds.min.toFixed(2);
   document.getElementById("legendMax").textContent = bounds.max.toFixed(2);
 }
 
-// A diff only permits the linear scale (its signed, symmetric values don't
-// suit the magnitude-oriented transforms). That's a property of the dataset,
-// so the picker reads it rather than the loader reaching in to set it.
-function applyScaleAvailability(data) {
-  const scaleSelect = document.getElementById("scaleSelect");
-  const linearOnly = !!data?.isDiff;
-  if (linearOnly) scaleSelect.value = "linear";
-  scaleSelect.disabled = linearOnly;
+// Every colour map is offered to every run; a diff lists the diverging ones
+// first and keeps its own choice (state.diffColormap).
+function syncColormapSelect(data) {
+  fillColormapSelect(
+    document.getElementById("colormapSelect"),
+    !!data?.isDiff,
+    runColormapId(data),
+  );
 }
 
 // Reaction to the active run changing. Registered in map/init.js.
 export function syncPanelsToDataset({ data }) {
-  applyScaleAvailability(data);
+  syncColormapSelect(data);
   setDataPanels(!!data);
   if (!data) return;
   updateDataInfo();

@@ -58,6 +58,7 @@ import { setupContextMenu } from "../ui/contextmenu.js";
 import { setupNexradPanel } from "../ui/nexradpanel.js";
 import { setupWindsPanel } from "../ui/windspanel.js";
 import { setupFloodPanel } from "../ui/floodpanel.js";
+import { setRunColormapId } from "../ui/colormap.js";
 
 
 // maplibregl and pmtiles are globals provided by CDN <script>s in index.html.
@@ -214,6 +215,11 @@ function setupEventListeners() {
   // feature-state), so no feature-state re-apply is needed.
   document.getElementById("scaleSelect").addEventListener("change", (e) => {
     state.scale = e.target.value;
+    applyResultsPaint();
+    updateLegend();
+  });
+  document.getElementById("colormapSelect").addEventListener("change", (e) => {
+    setRunColormapId(e.target.value);
     applyResultsPaint();
     updateLegend();
   });
