@@ -19,18 +19,16 @@
 // (LNGLAT_OFFSETS), so float32 keeps sub-metre precision at high zoom.
 // ====================================================================
 import { map, flowState } from "../state.js";
-import { FLOW_MANNING_EXP, FLOW_LIFE_FRAMES, FLOW_LIFT_M } from "../config.js";
+import { FLOW_LIFE_FRAMES, FLOW_LIFT_M } from "../config.js";
+import { packFlowCells, FLOW_LUT_SIZE as LUT_SIZE } from "../data/workers/flowcells.js";
 import { colormapColors } from "../color/colormaps.js";
 import { loadDeck, setDeckLayers } from "../map/deck.js";
 import { onFlowField } from "./field.js";
 
 const OWNER = "flow";
-const LUT_SIZE = 256;
+const OVERLAY_PROPS = { useDevicePixels: 1 };
 // Frames a particle takes to fade in after spawning, and out before dying.
 const FADE_FRAMES = 12;
-// Normalised speed range (1 = the field's 90th percentile).
-const MIN_SPEED = 0.04;
-const MAX_SPEED = 3;
 // Largest move per sub-step, in field cells, so a fast particle doesn't
 // jump a ridge or a channel.
 const MAX_STEP_CELLS = 0.75;
@@ -40,7 +38,6 @@ const MAX_SUBSTEPS = 6;
 const SPAWN_GRID = 16;
 // Field spans (degrees of latitude) below which positions are offsets.
 const OFFSET_SPAN_DEG = 2;
-const SAMPLE_CELLS = 20000; // cells sampled for the speed normalisation
 
 let deck = null;
 let rafId = null;
@@ -65,8 +62,9 @@ let lut = null;
 
 // Field-derived.
 let field = null;
-let speed = null; // Float32Array(w*h): normalised speed per cell
+let cells = null; // Float32Array(4wh): per cell [dirX, dirY, ±speed, elev]
 let colour = null; // Uint8Array(w*h): LUT index per cell
+let latRow = null; // Float64Array(h+2): latitude of each row's top edge
 let origin = [0, 0];
 let offsets = false;
 let spawnQuads = null; // Float64Array of quad corners, or null
@@ -137,46 +135,33 @@ export function resizeFlowTrail() {
 
 // ---- Field ----------------------------------------------------------
 
-// Each cell's speed for the current model, scaled so the 90th percentile of
-// the land cells (sampled) is 1, and clamped; and its colour index for the
-// current colour-by. Rerun when either setting changes.
+// Repack the field's cells for the current speed model and colour-by (the
+// worker packs a new field for the settings it was asked with).
 export function updateFlowCells() {
   if (!field) return;
-  const { sqrtSlope, acc, outlet } = field;
-  const n = field.w * field.h;
-  const manning = flowState.speedModel === "manning";
-  speed = new Float32Array(n);
-  for (let i = 0; i < n; i++) speed[i] = manning ? sqrtSlope[i] * acc[i] ** FLOW_MANNING_EXP : sqrtSlope[i];
-  const every = Math.max(1, Math.floor(n / SAMPLE_CELLS));
-  const vals = [];
-  for (let i = 0; i < n; i += every) if (!outlet[i]) vals.push(speed[i]);
-  vals.sort((a, b) => a - b);
-  const norm = (vals.length && vals[Math.floor(vals.length * 0.9)]) || 1;
-  for (let i = 0; i < n; i++) speed[i] = Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed[i] / norm));
-
-  colour = new Uint8Array(n);
-  const top = LUT_SIZE - 1;
-  if (flowState.colorBy === "speed") {
-    for (let i = 0; i < n; i++) colour[i] = Math.min(top, Math.round((speed[i] / 2) * top));
-  } else {
-    let maxAcc = 2;
-    for (let i = 0; i < n; i++) if (acc[i] > maxAcc) maxAcc = acc[i];
-    const k = top / Math.log(maxAcc);
-    for (let i = 0; i < n; i++) colour[i] = Math.round(Math.log(acc[i]) * k);
-  }
+  ({ cells, colour } = packFlowCells(field, flowState.speedModel, flowState.colorBy));
 }
+
+const latOf = (y) => (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
 
 function installField(f) {
   field = f;
-  updateFlowCells();
+  // Settings changed while it was being built: repack.
+  if (f.speedModel === flowState.speedModel && f.colorBy === flowState.colorBy) {
+    ({ cells, colour } = f);
+  } else {
+    updateFlowCells();
+  }
+  // Row-edge latitudes, interpolated per particle in place of atan(sinh()).
+  latRow = new Float64Array(f.h + 2);
+  for (let r = 0; r < latRow.length; r++) latRow[r] = latOf((f.y0 + r) / f.scale);
   // Centre of the field, for offset positions.
   const cx = (f.x0 + f.w / 2) / f.scale;
   const cy = (f.y0 + f.h / 2) / f.scale;
-  const lat = (y) => (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
-  const span = lat(f.y0 / f.scale) - lat((f.y0 + f.h) / f.scale);
+  const span = latOf(f.y0 / f.scale) - latOf((f.y0 + f.h) / f.scale);
   // Each layer keeps the origin it was written with, so this can move freely.
   offsets = span < OFFSET_SPAN_DEG;
-  origin = offsets ? [cx * 360 - 180, lat(cy)] : [0, 0];
+  origin = offsets ? [cx * 360 - 180, latOf(cy)] : [0, 0];
   rebuildSpawnGrid();
 }
 
@@ -242,74 +227,75 @@ function spawn(p) {
 
 // ---- Stepping -----------------------------------------------------------
 
-// The cell interpolation sampleAt last did, for finishAt.
-let i00 = 0, w00 = 0, w10 = 0, w01 = 0, w11 = 0, near = 0;
-let dirX = 0, dirY = 0, spd = 0;
-
-// Bilinear direction and speed at Mercator (x, y) into dirX/dirY/spd. False
-// off the field or over an outlet (the nearest cell decides: water that's
-// reached the sea has left).
-function sampleAt(x, y) {
-  const f = field;
-  const gx = x * f.scale - f.x0 - 0.5;
-  const gy = y * f.scale - f.y0 - 0.5;
-  if (!(gx >= 0 && gy >= 0 && gx <= f.w - 1 && gy <= f.h - 1)) return false;
-  const ix = Math.min(f.w - 2, Math.floor(gx));
-  const iy = Math.min(f.h - 2, Math.floor(gy));
-  const tx = gx - ix;
-  const ty = gy - iy;
-  i00 = iy * f.w + ix;
-  near = i00 + (tx < 0.5 ? 0 : 1) + (ty < 0.5 ? 0 : f.w);
-  if (f.outlet[near]) return false;
-  w00 = (1 - tx) * (1 - ty);
-  w10 = tx * (1 - ty);
-  w01 = (1 - tx) * ty;
-  w11 = tx * ty;
-  const d = f.dir;
-  const a = 2 * i00, b = a + 2, c = a + 2 * f.w, e = c + 2;
-  dirX = d[a] * w00 + d[b] * w10 + d[c] * w01 + d[e] * w11;
-  dirY = d[a + 1] * w00 + d[b + 1] * w10 + d[c + 1] * w01 + d[e + 1] * w11;
-  const j = i00 + f.w;
-  spd = speed[i00] * w00 + speed[i00 + 1] * w10 + speed[j] * w01 + speed[j + 1] * w11;
-  return true;
-}
-
-// Elevation (m) at the point sampleAt last succeeded at.
-function elevAtSample() {
-  const e = field.elev;
-  const j = i00 + field.w;
-  const v = e[i00] * w00 + e[i00 + 1] * w10 + e[j] * w01 + e[j + 1] * w11;
-  return Number.isFinite(v) ? v : 0;
-}
-
 // Move every particle one frame and write its segment (where it was drawn
-// last frame → where it is now) into `buf`.
+// last frame → where it is now) into `buf`. This is most of a frame's CPU
+// time, so the sampling is inlined with everything it reads in locals:
+// bilinear direction and speed from the packed `cells` (data/workers/
+// flowcells.js), and an end off the field or over an outlet (the nearest
+// cell decides: water that's reached the sea has left).
 function step(dtFrames, buf) {
+  const { w, h, x0, y0, scale } = field;
   // css px per field cell at the map's current zoom.
-  const pxPerCell = (512 * 2 ** map.getZoom()) / field.scale;
+  const pxPerCell = (512 * 2 ** map.getZoom()) / scale;
   const terrain = map.getTerrain();
   const exag = terrain ? terrain.exaggeration ?? 1 : 0;
   const lift = FLOW_LIFT_M * Math.max(1, exag);
   const [olng, olat] = origin;
   const { src, tgt, col } = buf;
   const move = (flowState.speed * dtFrames) / pxPerCell;
+  const C = cells, Lat = latRow, colr = colour, L = lut;
+  const row = 4 * w;
+  // Cell centres are at +0.5.
+  const ox = x0 + 0.5, oy = y0 + 0.5;
+  const xMax = w - 1, yMax = h - 1;
   for (let p = 0; p < P; p++) {
     const p3 = p * 3;
     const p4 = p * 4;
     col[p4 + 3] = 0;
     if (!live[p] || age[p] >= life[p]) spawn(p);
     if (!live[p]) continue;
-    let alive = sampleAt(mx[p], my[p]);
-    if (alive) {
-      const cells = move * spd;
-      const sub = Math.max(1, Math.min(MAX_SUBSTEPS, Math.ceil(cells / MAX_STEP_CELLS)));
-      const ds = cells / sub / field.scale;
-      for (let k = 0; k < sub && alive; k++) {
-        mx[p] += dirX * ds;
-        my[p] += dirY * ds;
-        alive = sampleAt(mx[p], my[p]);
+    let x = mx[p], y = my[p];
+    let alive = true;
+    // The first sample sets the sub-steps (sub < 0 until then); the one
+    // after the last sub-step only tests for the end and keeps its weights,
+    // for the elevation and colour.
+    let sub = -1, k = 0, ds = 0;
+    let a = 0, near = 0, w00 = 0, w10 = 0, w01 = 0, w11 = 0;
+    for (;;) {
+      const gx = x * scale - ox;
+      const gy = y * scale - oy;
+      if (!(gx >= 0 && gy >= 0 && gx <= xMax && gy <= yMax)) { alive = false; break; }
+      const ix = Math.min(w - 2, Math.floor(gx));
+      const iy = Math.min(h - 2, Math.floor(gy));
+      const tx = gx - ix;
+      const ty = gy - iy;
+      const i00 = iy * w + ix;
+      near = i00 + (tx < 0.5 ? 0 : 1) + (ty < 0.5 ? 0 : w);
+      if (C[4 * near + 2] < 0) { alive = false; break; }
+      w00 = (1 - tx) * (1 - ty);
+      w10 = tx * (1 - ty);
+      w01 = (1 - tx) * ty;
+      w11 = tx * ty;
+      a = 4 * i00;
+      if (k === sub) break;
+      const c = a + row;
+      const dx = C[a] * w00 + C[a + 4] * w10 + C[c] * w01 + C[c + 4] * w11;
+      const dy = C[a + 1] * w00 + C[a + 5] * w10 + C[c + 1] * w01 + C[c + 5] * w11;
+      if (sub < 0) {
+        // Outlet neighbours carry their speed negated.
+        const spd =
+          Math.abs(C[a + 2]) * w00 + Math.abs(C[a + 6]) * w10 +
+          Math.abs(C[c + 2]) * w01 + Math.abs(C[c + 6]) * w11;
+        const cellsMoved = move * spd;
+        sub = Math.max(1, Math.min(MAX_SUBSTEPS, Math.ceil(cellsMoved / MAX_STEP_CELLS)));
+        ds = cellsMoved / sub / scale;
       }
+      x += dx * ds;
+      y += dy * ds;
+      k++;
     }
+    mx[p] = x;
+    my[p] = y;
     if (!alive) {
       // Left the field or reached the sea: its old segments fade out with
       // their layers; it respawns next frame.
@@ -317,9 +303,12 @@ function step(dtFrames, buf) {
       continue;
     }
     age[p]++;
-    const lng = mx[p] * 360 - 180;
-    const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * my[p]))) * 180) / Math.PI;
-    const z = elevAtSample() * exag + lift;
+    const lng = x * 360 - 180;
+    const gr = y * scale - y0;
+    const r0 = Math.floor(gr);
+    const lat = Lat[r0] + (Lat[r0 + 1] - Lat[r0]) * (gr - r0);
+    const c = a + row;
+    const z = (C[a + 3] * w00 + C[a + 7] * w10 + C[c + 3] * w01 + C[c + 7] * w11) * exag + lift;
     if (hasLast[p]) {
       src[p3] = last[p3] - olng;
       src[p3 + 1] = last[p3 + 1] - olat;
@@ -327,13 +316,13 @@ function step(dtFrames, buf) {
       tgt[p3] = lng - olng;
       tgt[p3 + 1] = lat - olat;
       tgt[p3 + 2] = z;
-      const c = colour[near] * 3;
-      col[p4] = lut[c];
-      col[p4 + 1] = lut[c + 1];
-      col[p4 + 2] = lut[c + 2];
+      const ci = colr[near] * 3;
+      col[p4] = L[ci];
+      col[p4 + 1] = L[ci + 1];
+      col[p4 + 2] = L[ci + 2];
       // Fade in after spawning and out at the end of life.
-      const a = age[p];
-      col[p4 + 3] = 255 * Math.min(1, a / FADE_FRAMES, (life[p] - a) / FADE_FRAMES);
+      const ag = age[p];
+      col[p4 + 3] = 255 * Math.min(1, ag / FADE_FRAMES, (life[p] - ag) / FADE_FRAMES);
     }
     last[p3] = lng;
     last[p3 + 1] = lat;
@@ -366,7 +355,9 @@ function draw() {
     const k = (head - a + n) % n;
     if (slots[k]) layers.push(layerOf(slots[k], k, a));
   }
-  setDeckLayers(OWNER, layers);
+  // At css px, not device px: a quarter of the fragments on a 2× screen
+  // for thin translucent lines that hardly look different.
+  setDeckLayers(OWNER, layers, OVERLAY_PROPS);
 }
 
 function frame(now) {
@@ -418,7 +409,7 @@ export async function startFlowParticles() {
 export function stopFlowParticles() {
   if (rafId != null) cancelAnimationFrame(rafId);
   rafId = null;
-  field = speed = colour = null;
+  field = cells = colour = latRow = null;
   mx = my = age = life = live = last = hasLast = null;
   slots = [];
   spare = null;

@@ -333,7 +333,12 @@ Opening the panel starts it, collapsing stops it; settings are `flowState`
   receivers converge, so keep the look-ahead.
 
 `flow/particles.js` simulates on the CPU (positions in Mercator [0, 1], so
-they survive a field swap). Trails are a **ring of `LineLayer`s**, one per
+they survive a field swap). Its `step()` is the hot loop, with sampling
+inlined over one interleaved `[dirX, dirY, ±speed, elev]` record per cell
+(`data/workers/flowcells.js`, packed in the flow worker for the settings
+the field was requested with; outlets carry negated speed). Keep it free of
+per-sample property lookups and module-global writes: those, not memory
+traffic, were most of its cost. Trails are a **ring of `LineLayer`s**, one per
 frame of trail, each holding that frame's one segment per particle and
 fading by its layer `opacity` as it ages. A frame therefore writes and
 uploads only the newest layer, not every trail. The newest layer always takes

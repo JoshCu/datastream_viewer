@@ -164,6 +164,7 @@ function send(dem, p, coarse) {
   getWorker().postMessage({
     type: "field", epoch, id, ...p,
     url: dem.url, encoding: dem.encoding, tileSize: dem.tileSize,
+    speedModel: flowState.speedModel, colorBy: flowState.colorBy,
   });
 }
 

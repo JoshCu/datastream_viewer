@@ -70,8 +70,9 @@ export function setDeckTooltip(owner, fn) {
 
 // Replace `owner`'s layers and redraw them. Layers are built from
 // loadDeck()'s classes, so it has resolved by the time any arrive; clearing
-// before then is a no-op.
-export function setDeckLayers(owner, layers) {
+// before then is a no-op. `props` (e.g. useDevicePixels) go to the owner's
+// overlay when it's made.
+export function setDeckLayers(owner, layers, props) {
   let overlay = overlays.get(owner);
   if (!overlay) {
     if (!layers.length) return;
@@ -79,6 +80,7 @@ export function setDeckLayers(owner, layers) {
     overlay = new deck.MapboxOverlay({
       interleaved: false,
       deviceProps: deck.deviceProps,
+      ...props,
       ...(getTooltip && { getTooltip }),
       onDeviceInitialized: (device) => console.info(`${owner}: deck.gl on ${device.type}`),
     });

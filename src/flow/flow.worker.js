@@ -14,13 +14,16 @@
 //
 // Protocol (main → worker):
 //   { type: "cancel", epoch }  drop anything older than `epoch`
-//   { type: "field", epoch, id, z, x0, y0, w, h, url, encoding, tileSize }
+//   { type: "field", epoch, id, z, x0, y0, w, h, url, encoding, tileSize,
+//     speedModel, colorBy }
 //       Build the field over global pixels [x0, x0+w) × [y0, y0+h) at zoom z
 //       (pixels of the source's tileSize tiles). `url` is the source's tile
-//       template ({z}/{x}/{y}).
+//       template ({z}/{x}/{y}); the particles' cells are packed for
+//       `speedModel` / `colorBy` (data/workers/flowcells.js).
 // Replies (worker → main):
 //   { type: "field", epoch, id, result: { z, x0, y0, w, h, elev, dir,
-//     sqrtSlope, acc, outlet, tiles, fallback, failed, ms } }  — arrays
+//     sqrtSlope, acc, outlet, cells, colour, speedModel, colorBy, tiles,
+//     fallback, failed, ms } }  — arrays
 //     transferred; `fallback` tiles came from an ancestor, `failed` ones
 //     because a fetch failed (worth retrying)
 //   { type: "error", epoch, id, error }
@@ -28,6 +31,7 @@
 // load, before the (expensive) routing.
 // ====================================================================
 import { routeFlow } from "../data/workers/flowroute.js";
+import { packFlowCells } from "../data/workers/flowcells.js";
 
 const CACHE_TILES = 96; // ~1 MB each at 512²
 // "z/x/y" -> Promise<{ dim, elev } | null (no tile) | FAILED>, LRU order.
@@ -232,7 +236,7 @@ function rowMetres(z, y0, h, tileSize) {
   return out;
 }
 
-async function buildField({ epoch, z, x0, y0, w, h, url, encoding, tileSize }) {
+async function buildField({ epoch, z, x0, y0, w, h, url, encoding, tileSize, speedModel, colorBy }) {
   const t0 = performance.now();
   const n = 2 ** z;
   const tiles = [];
@@ -289,8 +293,9 @@ async function buildField({ epoch, z, x0, y0, w, h, url, encoding, tileSize }) {
   });
 
   const routed = routeFlow(elev, w, h, rowMetres(z, y0, h, tileSize));
+  const packed = packFlowCells({ w, h, elev, ...routed }, speedModel, colorBy);
   return {
-    z, x0, y0, w, h, elev, ...routed,
+    z, x0, y0, w, h, elev, ...routed, ...packed, speedModel, colorBy,
     tiles: tiles.length,
     fallback,
     failed,
@@ -312,6 +317,8 @@ self.onmessage = async ({ data }) => {
       result.sqrtSlope.buffer,
       result.acc.buffer,
       result.outlet.buffer,
+      result.cells.buffer,
+      result.colour.buffer,
     ]);
   } catch (err) {
     self.postMessage({ type: "error", epoch: data.epoch, id: data.id, error: String(err?.message ?? err) });
