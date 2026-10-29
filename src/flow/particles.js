@@ -17,13 +17,18 @@
 // so the newest layer always takes the spare buffer set). With the field a
 // degree or two across, positions are offsets from its centre
 // (LNGLAT_OFFSETS), so float32 keeps sub-metre precision at high zoom.
+//
+// On WebGPU the step runs as a compute shader instead (flow/gpusim.js),
+// writing the trail buffers deck draws; this module still owns the
+// settings, the field, the spawn grid and the ring's drawing.
 // ====================================================================
 import { map, flowState } from "../state.js";
 import { FLOW_LIFE_FRAMES, FLOW_LIFT_M } from "../config.js";
 import { packFlowCells, FLOW_LUT_SIZE as LUT_SIZE } from "../data/workers/flowcells.js";
 import { colormapColors } from "../color/colormaps.js";
-import { loadDeck, setDeckLayers } from "../map/deck.js";
+import { loadDeck, setDeckLayers, deckDevice } from "../map/deck.js";
 import { onFlowField } from "./field.js";
+import { createFlowGpu, GPU_NO_QUAD } from "./gpusim.js";
 
 const OWNER = "flow";
 const OVERLAY_PROPS = { useDevicePixels: 1 };
@@ -40,6 +45,8 @@ const SPAWN_GRID = 16;
 const OFFSET_SPAN_DEG = 2;
 
 let deck = null;
+let gpu = null; // the WebGPU step, or null for the CPU one
+let startId = 0; // bumped by every start and stop, so a stale start gives up
 let rafId = null;
 let lastFrame = 0;
 let needsAlloc = false; // the count changed: reallocate at the next frame
@@ -89,6 +96,7 @@ function lutFor(id) {
 
 export function setFlowColormap() {
   lut = lutFor(flowState.colormap);
+  gpu?.setLut(lut);
 }
 
 const newBuf = () => ({
@@ -97,8 +105,14 @@ const newBuf = () => ({
   col: new Uint8Array(P * 4),
 });
 
+const trailSlots = () => Math.max(1, flowState.trail - 1);
+
 function allocate() {
   P = flowState.count;
+  if (gpu) {
+    gpu.allocate(P, trailSlots());
+    return;
+  }
   mx = new Float64Array(P);
   my = new Float64Array(P);
   age = new Int32Array(P);
@@ -106,7 +120,7 @@ function allocate() {
   live = new Uint8Array(P);
   last = new Float64Array(P * 3);
   hasLast = new Uint8Array(P);
-  slots = new Array(Math.max(1, flowState.trail - 1)).fill(null);
+  slots = new Array(trailSlots()).fill(null);
   head = 0;
   spare = newBuf();
 }
@@ -120,7 +134,12 @@ export function resetFlowParticles() {
 // Trail length changed: keep the particles, regrow the ring of layers.
 export function resizeFlowTrail() {
   if (rafId == null) return;
-  const n = Math.max(1, flowState.trail - 1);
+  const n = trailSlots();
+  if (gpu) {
+    // Its ring is positions; starting it over costs a second of trails.
+    gpu.resizeRing(n);
+    return;
+  }
   // Oldest first, so the newest stay when it shrinks.
   const kept = [];
   for (let a = slots.length - 1; a >= 0; a--) {
@@ -140,17 +159,19 @@ export function resizeFlowTrail() {
 export function updateFlowCells() {
   if (!field) return;
   ({ cells, colour } = packFlowCells(field, flowState.speedModel, flowState.colorBy));
+  gpu?.setColour(colour, cells);
 }
 
 const latOf = (y) => (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
 
 function installField(f) {
+  const prev = field;
   field = f;
   // Settings changed while it was being built: repack.
   if (f.speedModel === flowState.speedModel && f.colorBy === flowState.colorBy) {
     ({ cells, colour } = f);
   } else {
-    updateFlowCells();
+    ({ cells, colour } = packFlowCells(f, flowState.speedModel, flowState.colorBy));
   }
   // Row-edge latitudes, interpolated per particle in place of atan(sinh()).
   latRow = new Float64Array(f.h + 2);
@@ -162,6 +183,19 @@ function installField(f) {
   // Each layer keeps the origin it was written with, so this can move freely.
   offsets = span < OFFSET_SPAN_DEG;
   origin = offsets ? [cx * 360 - 180, latOf(cy)] : [0, 0];
+  if (gpu) {
+    // Its positions are in field cells: x' = x·k + c moves them to this one.
+    const k = prev ? f.scale / prev.scale : 1;
+    const lat = new Float32Array(latRow.length);
+    for (let r = 0; r < lat.length; r++) lat[r] = latRow[r] - origin[1];
+    const geo = {
+      lngPerCell: 360 / f.scale,
+      lngOff: (f.x0 * 360) / f.scale - 180 - origin[0],
+      origin,
+      offsets,
+    };
+    gpu.setField(f, cells, colour, lat, geo, k, prev ? prev.x0 * k - f.x0 : 0, prev ? prev.y0 * k - f.y0 : 0);
+  }
   rebuildSpawnGrid();
 }
 
@@ -183,6 +217,16 @@ export function rebuildSpawnGrid() {
     }
   }
   spawnQuads = pts;
+  if (gpu && field) {
+    // In field cells for the GPU.
+    const q = new Float32Array(pts.length);
+    for (let i = 0; i < pts.length; i += 2) {
+      const ok = Number.isFinite(pts[i]);
+      q[i] = ok ? pts[i] * field.scale - field.x0 : GPU_NO_QUAD;
+      q[i + 1] = ok ? pts[i + 1] * field.scale - field.y0 : GPU_NO_QUAD;
+    }
+    gpu.setQuads(q);
+  }
 }
 
 // Field cell under Mercator (x, y), or -1 off the field.
@@ -333,28 +377,26 @@ function step(dtFrames, buf) {
 
 // ---- Drawing ----------------------------------------------------------
 
-function layerOf(slot, k, ageFrames) {
+function layerOf(slot, k, ageFrames, n) {
   return new deck.LineLayer({
     id: `flow-trail-${k}`,
+    visible: !slot.hidden,
     data: slot.data,
     coordinateSystem: slot.offsets ? deck.COORDINATE_SYSTEM.LNGLAT_OFFSETS : deck.COORDINATE_SYSTEM.LNGLAT,
     coordinateOrigin: [slot.origin[0], slot.origin[1], 0],
     getWidth: flowState.width,
     widthUnits: "pixels",
-    opacity: flowState.opacity * (1 - ageFrames / slots.length),
+    opacity: flowState.opacity * Math.max(0, 1 - ageFrames / n),
     // Trails never hide one another or the NEXRAD clouds.
     parameters: { depthWriteEnabled: false, depthCompare: "always" },
     pickable: false,
   });
 }
 
-function draw() {
-  const layers = [];
-  const n = slots.length;
-  for (let a = n - 1; a >= 0; a--) {
-    const k = (head - a + n) % n;
-    if (slots[k]) layers.push(layerOf(slots[k], k, a));
-  }
+// Draw the ring: `ring` oldest first, as { key, data, origin, offsets,
+// hidden }, the last `n` of it a trail's worth of frames.
+function draw(ring, n) {
+  const layers = ring.map((s, i) => layerOf(s, s.key, ring.length - 1 - i, n));
   // At css px, not device px: a quarter of the fragments on a 2× screen
   // for thin translucent lines that hardly look different.
   setDeckLayers(OWNER, layers, OVERLAY_PROPS);
@@ -371,6 +413,16 @@ function frame(now) {
   // long gap (a hidden tab) is one frame, not a jump.
   const dt = lastFrame ? Math.min(3, (now - lastFrame) / (1000 / 60)) : 1;
   lastFrame = now;
+
+  if (gpu) {
+    const pxPerCell = (512 * 2 ** map.getZoom()) / field.scale;
+    const terrain = map.getTerrain();
+    const exag = terrain ? terrain.exaggeration ?? 1 : 0;
+    const [lifeMin, lifeMax] = FLOW_LIFE_FRAMES;
+    gpu.step((flowState.speed * dt) / pxPerCell, exag, FLOW_LIFT_M * Math.max(1, exag), lifeMin, lifeMax - lifeMin);
+    draw(gpu.slots(), trailSlots());
+    return;
+  }
 
   head = (head + 1) % slots.length;
   const buf = spare;
@@ -389,15 +441,44 @@ function frame(now) {
       },
     },
   };
-  draw();
+  const ring = [];
+  const n = slots.length;
+  for (let a = n - 1; a >= 0; a--) {
+    const k = (head - a + n) % n;
+    if (slots[k]) ring.push({ key: k, ...slots[k] });
+  }
+  draw(ring, n);
 }
 
 // ---- Start / stop -------------------------------------------------------
 
 export async function startFlowParticles() {
   if (rafId != null) return;
+  const id = ++startId;
   deck = await loadDeck();
-  if (!flowState.active || rafId != null) return;
+  if (id !== startId) return;
+  if (deck.deviceProps.type === "webgpu") {
+    // The overlay's own device; if the shader won't build there, the CPU.
+    try {
+      const device = await deckDevice(OWNER, OVERLAY_PROPS);
+      // (deck falls back to WebGL2 if the WebGPU device fails.)
+      const g =
+        device.type === "webgpu" &&
+        (await createFlowGpu(device, {
+          grid: SPAWN_GRID,
+          fade: FADE_FRAMES,
+          maxStep: MAX_STEP_CELLS,
+          maxSub: MAX_SUBSTEPS,
+        }));
+      if (id !== startId) return g && g.destroy();
+      gpu = g || null;
+    } catch (err) {
+      console.warn("Flow particles: WebGPU step unavailable, using the CPU", err);
+    }
+    if (id !== startId) return;
+  }
+  if (!flowState.active) return;
+  console.info(`flow: particles stepped on the ${gpu ? "GPU" : "CPU"}`);
   allocate();
   setFlowColormap();
   if (flowState.field) installField(flowState.field);
@@ -407,8 +488,11 @@ export async function startFlowParticles() {
 
 // Stop, and let go of every particle and field array.
 export function stopFlowParticles() {
+  startId++;
   if (rafId != null) cancelAnimationFrame(rafId);
   rafId = null;
+  gpu?.destroy();
+  gpu = null;
   field = cells = colour = latRow = null;
   mx = my = age = life = live = last = hasLast = null;
   slots = [];

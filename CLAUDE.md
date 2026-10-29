@@ -349,8 +349,29 @@ field cell, so on-screen speed doesn't depend on zoom. Positions switch to
 `LNGLAT_OFFSETS` around the field centre when it's small, for float32
 precision. z is the DEM × the terrain exaggeration (0 with terrain off).
 
+When the flow overlay's device is WebGPU, **`flow/gpusim.js`** runs the
+same step as a compute shader on deck's own device (`deckDevice()`), and
+particles.js keeps the CPU step as the fallback (WebGL2, or a pipeline that
+fails to build). Keep the two steps in sync. On the GPU:
+- particle positions are f32 field cells, remapped (x·k + c, c in f64)
+  when a field lands;
+- the ring is per-frame **positions** (slot i's layer draws slot i−1 → i),
+  so a frame whose origin changed draws no segment;
+- deck applies a new layer list only in its own rAF callback, which runs
+  before ours, but a camera move makes MapLibre's `render` redraw deck
+  afterwards with the list from the tick before. So the ring keeps two
+  undrawn spare slots (no list deck may still draw reads the slot a step
+  writes), every slot is emitted each frame with a stable id (`visible:
+  false` for the spares), and dropped ring buffers are destroyed a few
+  frames late;
+- each slot is its own `VERTEX | STORAGE` buffer laid out `[x, y, z, 0, 0, 0]`
+  (deck's line positions are float64, and WebGPU needs every attribute to
+  start within its stride). They're handed to deck with a placeholder
+  Float32Array `value` next to the buffer: without one, deck binds the low
+  half as a constant attribute, which WebGPU can't do.
+
 **`map/deck.js`** owns deck.gl's loading and one `MapboxOverlay` per mode
-(`setDeckLayers(owner, layers)`). They're kept separate on purpose: an overlay
+(`setDeckLayers(owner, layers, props)`, or `deckDevice(owner)` for a mode that writes its own GPU buffers). They're kept separate on purpose: an overlay
 redraws all of its layers when any one changes, and the particles change
 every frame. Its esm.sh imports pin `@deck.gl/core` through
 `?deps=`, because otherwise a new core patch release gets loaded next to the
