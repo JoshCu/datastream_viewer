@@ -312,7 +312,10 @@ Opening the panel starts it, collapsing stops it; settings are `flowState`
   read MapLibre's own loaded tiles: those are private, live in MapLibre's
   workers, and come at whatever mixed zooms the terrain/hillshade picked.
   It decodes them via `createImageBitmap` with no colour conversion or
-  premultiplication, and keeps an LRU. Tiles that 404 (past the data's
+  premultiplication, and keeps an LRU. Browsers with fingerprinting
+  protection perturb canvas readback (a flipped red byte is a 256 m spike),
+  so when a probe detects that, pixels are read through `VideoFrame`
+  instead, as MapLibre does. Tiles that 404 (past the data's
   zoom) are filled from their nearest ancestor, upsampled in that zoom's
   global pixels (reading neighbouring ancestors across their seams), so mixed
   DEM resolution is seamless. Fetch failures are counted separately so the

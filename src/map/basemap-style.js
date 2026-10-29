@@ -36,10 +36,12 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
       terrainSource: {
         type: "raster-dem",
         url: "https://tiles.mapterhorn.com/tilejson.json",
+        maxzoom: 17,
       },
       hillshadeSource: {
         type: "raster-dem",
         url: "https://tiles.mapterhorn.com/tilejson.json",
+        maxzoom: 17,
       },
       // VPU polygons (vpuid "01".."18"): which forcing file covers the view.
       vpus: {
@@ -121,7 +123,7 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         },
         paint: {
           "line-color": withHover("line-color", BASE_FLOWPATH_PAINT["line-color"]),
-      
+
           // Fade orders in progressively instead of popping
           "line-opacity": [
             "interpolate", ["linear"], ["zoom"],
@@ -132,7 +134,7 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
             7,   ["step", ["get", "order"], 0, 2, 1],   // order 2 faded in; order 1 held at 0 as it appears
             8,   1,                                      // order 1 faded in
           ],
-      
+
           // Hovered reach drawn inverted and wider: see map/flowpathstyle.js.
           "line-width": withHover("line-width", BASE_FLOWPATH_PAINT["line-width"]),
         },
