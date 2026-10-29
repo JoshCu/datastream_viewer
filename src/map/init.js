@@ -58,7 +58,10 @@ import { setupContextMenu } from "../ui/contextmenu.js";
 import { setupNexradPanel } from "../ui/nexradpanel.js";
 import { setupWindsPanel } from "../ui/windspanel.js";
 import { setupFloodPanel } from "../ui/floodpanel.js";
+import { setupFlowPanel } from "../ui/flowpanel.js";
 import { setRunColormapId } from "../ui/colormap.js";
+import { initialMapView, syncMapView } from "../ui/url.js";
+import { writeUrl as writeLayersUrl } from "./layerprefs.js";
 
 
 // maplibregl and pmtiles are globals provided by CDN <script>s in index.html.
@@ -88,6 +91,8 @@ export function init() {
     container: "map",
     center: [-96, 40],
     zoom: 4,
+    // A link's `map=` camera, if it has one.
+    ...initialMapView(),
     validateStyle: false,
   });
   setMap(map);
@@ -162,6 +167,12 @@ export function init() {
   // Rebuild the live sim's network for the new view. Not on idle: a running
   // sim writes feature-state every frame, so the map may never go idle.
   map.on("moveend", scheduleSimRebuild);
+  // Keep the camera in the URL. Not written until the first move, so a plain
+  // visit's URL stays plain.
+  map.on("moveend", () => syncMapView(map));
+  // Each layer control applies its starting state on load; then put the
+  // whole set in the URL, so the link reproduces it.
+  map.once("load", writeLayersUrl);
 
   // Warm the shared parquet-wasm binary once the map has settled, so its 6.5MB
   // fetch doesn't contend with the basemap style, glyphs and first tiles. It
@@ -184,6 +195,7 @@ export function init() {
   setupNexradPanel();
   setupWindsPanel();
   setupFloodPanel();
+  setupFlowPanel();
   setupUsgsPanel();
   setupSimPanel();
   setupBrush();

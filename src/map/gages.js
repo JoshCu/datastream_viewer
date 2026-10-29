@@ -18,6 +18,7 @@ import {
   USGS_SITES_LABEL_LAYER,
 } from "../config.js";
 import { iconButton } from "../ui/dom.js";
+import { initialLayer, noteLayer, saveLayer } from "./layerprefs.js";
 import { shownSiteGroups, onSiteFilterChange } from "./usgssites.js";
 import { onCatalogChange } from "../data/usgscatalog.js";
 
@@ -87,8 +88,9 @@ let labelFilterApplied = false;
 let styledFor;
 
 // User toggles from GageControl. Labels only draw while gages are shown.
-let gagesVisible = true;
-let labelsVisible = false;
+// Both start from map/layerprefs.js; only a click saves.
+let gagesVisible = initialLayer("gages");
+let labelsVisible = initialLayer("labels");
 
 function applyGageVisibility() {
   const vis = (on) => (on ? "visible" : "none");
@@ -102,11 +104,13 @@ function applyGageVisibility() {
 
 export function setGagesVisible(on) {
   gagesVisible = on;
+  noteLayer("gages", on);
   if (map.getLayer(GAGE_LAYER)) applyGageVisibility();
 }
 
 export function setGageLabelsVisible(on) {
   labelsVisible = on;
+  noteLayer("labels", on);
   if (!map.getLayer(GAGE_LAYER)) return;
   if (on && !labelFilterApplied) {
     map.setFilter(GAGE_LABEL_LAYER, currentFilter);
@@ -183,7 +187,7 @@ export function gageSiteForReach(reachId) {
 // ---- Map control: show/hide gages, show/hide gage id labels -----------
 
 export class GageControl {
-  onAdd() {
+  onAdd(map) {
     this._container = document.createElement("div");
     this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
 
@@ -202,15 +206,22 @@ export class GageControl {
 
     this._gageBtn.onclick = () => {
       setGagesVisible(!gagesVisible);
+      saveLayer("gages", gagesVisible);
       this._sync();
     };
     this._labelBtn.onclick = () => {
       setGageLabelsVisible(!labelsVisible);
+      saveLayer("labels", labelsVisible);
       this._sync();
     };
 
     this._container.append(this._gageBtn, this._labelBtn);
     this._sync();
+    // Apply the starting state (map/layerprefs.js) once the layers exist.
+    map.once("load", () => {
+      setGagesVisible(gagesVisible);
+      setGageLabelsVisible(labelsVisible);
+    });
     return this._container;
   }
 

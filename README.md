@@ -63,6 +63,16 @@ velocity / depth on the hydrofabric flowpaths over time.
   at the radar when forcings covering it are loaded. Subtracting the
   Open-Meteo wind at each bin's height gives airspeed; bins under 5 m/s are
   marked as likely insects.
+- **Flow particles** — a wind-map-style animation of surface runoff. Rain
+  falls evenly over the view and runs downhill on the map's own DEM tiles (the
+  hillshade's raster-dem source, decoded in a worker). Pits and flats are
+  filled (Priority-Flood) so water always drains, and flow accumulation
+  makes the particles collect into the drainage network, so the rivers draw
+  themselves. Speed follows √slope, and in Manning mode upstream area too.
+  Colour shows upstream area or speed. The field is re-routed for the view after
+  each move (coarse first, then full resolution), and tiles past the DEM's
+  coverage fall back to their nearest coarser ancestor. Works pitched, on the
+  3D terrain.
 - **Winds aloft** — Open-Meteo's hourly pressure-level winds (1000–250 hPa)
   for the map centre or a right-clicked point, as a time–height grid of
   arrows coloured by speed, with an hour's table of height, speed, direction
@@ -127,6 +137,7 @@ src/
     paint.js                  results paint expression + per-reach feature-state
     statepainter.js           on-screen feature-state painter (reaches + catchments)
     interactions.js           hover tooltip, click info, catchment click, upstream highlight
+    deck.js                   deck.gl loader + one MapboxOverlay per mode (NEXRAD, flow particles)
     search.js                 search box + suggestions: gages, river groups, catchments
     usgssites.js              always-on USGS catalog gage layer, filtered/coloured by type
   color/
@@ -155,6 +166,7 @@ src/
       usgscatalog.js          USGS site catalog fetch + station-name normalization (pure)
       nexrad.js               NEXRAD Level II records → per-tilt gate positions + bird profile sums (pure)
       bzip2.js                bzip2 decoder for the Level II records (pure)
+      flowroute.js            DEM routing: Priority-Flood fill, accumulation, flow direction (pure)
       parsers/
         netcdf.js             NetCDF4/HDF5 parser (worker-side, pure)
         parquet.js            Parquet parser (worker-side, pure)
@@ -174,15 +186,20 @@ src/
     contextmenu.js            map right-click menu
     nexradpanel.js            NEXRAD panel: date, per-station scan rows + lock, display controls
     windspanel.js             winds aloft panel: time–height arrow grid + hour table
+    flowpanel.js              flow particles panel: count, speed, trail, colour, detail
   forcing/
     store.js                  sparse, growable catchment store + change events
     layout.js                 per-file layout scan + IndexedDB cache
     loader.js                 load planning/orchestration (viewport, VPU, catchment)
     viewport.js               VPUs and catchments in view
     paint.js                  catchment fill expression + feature-state, forcing clock
+  flow/
+    field.js                  which DEM box/zoom to route for the view; coarse → fine requests
+    flow.worker.js            DEM tile fetch/decode/LRU, mosaic with ancestor fallback, routing
+    particles.js              particle sim + trails, drawn as a deck.gl LineLayer
   nexrad/
     source.js                 bucket listings, scan download, worker fan-out + tilt merge
-    layer.js                  deck.gl PointCloudLayer per radar (lazy-loads deck.gl)
+    layer.js                  deck.gl PointCloudLayer per radar (via map/deck.js)
     products.js               moment labels, ranges, colour ramps
     birds.js                  bird-mode profile: density + VAD solve, sun elevation
     surface.js                bird-mode surface context (rain, 10 m wind) from loaded forcings

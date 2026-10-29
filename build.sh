@@ -17,10 +17,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-rm -rf dist/datastream_viewer.html dist/workers dist/mc_route_bg.wasm
+rm -rf dist/datastream_viewer.html dist/workers dist/flow.worker.js dist/mc_route_bg.wasm
 
 bun build ./index.html --compile --target=browser --outfile=dist/datastream_viewer.html
 bun build ./src/data/workers/parse.worker.js --target=browser --format=esm --outfile=dist/workers/parse.worker.js
+bun build ./src/flow/flow.worker.js --target=browser --format=esm --outfile=dist/flow.worker.js
 cp src/vendor/mc_route/mc_route_bg.wasm dist/mc_route_bg.wasm
 
-echo "Built dist/datastream_viewer.html + dist/workers/parse.worker.js + dist/mc_route_bg.wasm"
+echo "Built dist/datastream_viewer.html + dist/workers/parse.worker.js + dist/flow.worker.js + dist/mc_route_bg.wasm"

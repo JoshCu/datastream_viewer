@@ -84,6 +84,23 @@ export const nexradState = {
   birdRange: 80, // km: bird mode's points stop this far from the radar
 };
 
+// Flow particles (src/flow/, ui/flowpanel.js): surface runoff traced down the
+// DEM. The panel's settings; `field` is the routed DEM mosaic the particles
+// move on (flow/field.js), null until the first one lands.
+export const flowState = {
+  active: false, // the panel is open
+  count: 20000, // particles
+  speed: 1.5, // on-screen speed, css px per frame at the field's typical speed
+  trail: 50, // positions kept per particle
+  width: 2, // line width, px
+  opacity: 0.35,
+  speedModel: "manning", // "slope": v ∝ √S; "manning": v ∝ √S · A^FLOW_MANNING_EXP
+  colorBy: "acc", // "acc" (upstream area) | "speed"
+  colormap: "blues",
+  detail: -1, // field zoom relative to the map's: -2 coarse, -1 normal, 0 fine
+  field: null,
+};
+
 // The MapLibre map instance. It's created asynchronously in map/init.js;
 // `map` is a live binding, so importers see the value once setMap() runs.
 export let map = null;

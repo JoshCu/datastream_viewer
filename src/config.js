@@ -185,6 +185,23 @@ export const SIM_CHANNEL_BY_ORDER = [
   { bw: 110, tw: 250, cs: 0.12, n: 0.04 }, // order 10+
 ];
 
+// Flow particles (src/flow/). The DEM source they route over (the hillshade's,
+// so the tiles are the ones the map already fetched).
+export const FLOW_DEM_SOURCE = "hillshadeSource";
+// Deepest zoom the field is built at; past the data's own depth, tiles fall
+// back to their ancestors anyway.
+export const FLOW_MAX_ZOOM = 16;
+// Field size cap (cells); the zoom steps down until the view fits. Routing
+// costs ~0.25 s per million cells.
+export const FLOW_MAX_CELLS = 3_000_000;
+// Manning's v = R^⅔ S^½ / n, with hydraulic depth R ∝ Q^0.4 and Q ∝ upstream
+// area: v ∝ √S · A^0.27. Rivers run faster than their slope alone suggests.
+export const FLOW_MANNING_EXP = 0.27;
+// Particle lifetimes, frames: each gets a random one in this range.
+export const FLOW_LIFE_FRAMES = [120, 480];
+// Particles lifted this far above the terrain (m, before exaggeration).
+export const FLOW_LIFT_M = 3;
+
 // ---- Forcings (src/forcing/) -----------------------------------------
 //
 // ngen forcing files hold one (catchment × time) float64 matrix per

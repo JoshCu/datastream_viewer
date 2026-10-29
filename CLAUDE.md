@@ -115,6 +115,17 @@ a parameter so the "which import form works" question is isolated to the worker
 (jsfive's `+esm` build exports `File` as a named export with no default, hence the
 `mod.default ?? mod` fallback).
 
+### URL and layer toggles (`ui/url.js`, `map/layerprefs.js`)
+
+The query string carries the open panels, the S3 location, the camera
+(`map=zoom/lat/lng[/bearing[/pitch]]`, written on `moveend`) and the layer
+toggle buttons (`layers=` the keys that are on). A toggle's starting state is
+the URL's `layers=`, else the last-used set in localStorage, else
+`LAYER_DEFAULTS`. Every change goes to the URL through `noteLayer()`, but only
+a button click calls `saveLayer()`, so opening a link doesn't overwrite
+someone's saved settings. Code that toggles a layer itself (the context
+menu's catchments, the flood panel's terrain) must not save.
+
 ### Module dependency notes
 
 Keep `state.js` / `config.js` as leaves to avoid cycles. `ui/dom.js` is also a
@@ -260,8 +271,8 @@ forcing plot opens if a forcing source is set.
 
 A third independent mode: Level II volume scans from the public
 `unidata-nexrad-level2` bucket, one per chosen station (`nexradState.radars`),
-each drawn as a deck.gl `PointCloudLayer` in one
-`MapboxOverlay` (deck.gl is imported as ES modules from esm.sh on first use —
+each drawn as a deck.gl `PointCloudLayer` in NEXRAD's
+`MapboxOverlay` from `map/deck.js` (deck.gl is imported as ES modules from esm.sh on first use —
 it's not in `index.html` — and runs on WebGPU when `requestAdapter()` succeeds,
 WebGL2 otherwise; the UMD bundle can't be used because its `window.luma` lacks
 the classes `@luma.gl/webgpu` extends). `source.js` downloads the file and splits it into LDM records
@@ -282,6 +293,60 @@ plus additive per-height sums (`PF` in `data/workers/nexrad.js`) that
 `nexrad/birds.js` solves into a density + VAD profile. Points decode to 150 km
 and `buildPoints` trims them by `nexradState.birdRange` (so the slider never
 re-decodes); the profile only uses 5–40 km.
+
+### Flow particles (`src/flow/`, `ui/flowpanel.js`)
+
+A fourth independent mode: wind-map-style particles running down the DEM.
+Opening the panel starts it, collapsing stops it; settings are `flowState`
+(`state.js`). Three layers:
+
+- **`flow/field.js`** decides what to route: one mosaic over the view plus a
+  margin, in global pixels of the DEM source's tiles at a zoom tied to the
+  map's (`flowState.detail` below it), stepped down until it fits
+  `FLOW_MAX_CELLS`. Pitched far ground is clipped a few screen-widths out. A
+  view the current field doesn't mostly cover gets a coarse field (two zooms
+  down) first, then the fine one. Requests carry an epoch, and the higher id wins.
+- **`flow/flow.worker.js`** fetches the same tile URLs as `FLOW_DEM_SOURCE`
+  (the hillshade's raster-dem source: its `tiles`/`encoding`/`tileSize` are
+  read off `map.getSource()`), so they're HTTP-cache hits. It does **not**
+  read MapLibre's own loaded tiles: those are private, live in MapLibre's
+  workers, and come at whatever mixed zooms the terrain/hillshade picked.
+  It decodes them via `createImageBitmap` with no colour conversion or
+  premultiplication, and keeps an LRU. Tiles that 404 (past the data's
+  zoom) are filled from their nearest ancestor, upsampled in that zoom's
+  global pixels (reading neighbouring ancestors across their seams), so mixed
+  DEM resolution is seamless. Fetch failures are counted separately so the
+  field gets retried.
+  It's its own worker, not the parse pool, because the tile cache lives there.
+- **`data/workers/flowroute.js`** (pure) routes the mosaic. It runs
+  Priority-Flood + ε from the edges and the cells at or below 0 m / no data,
+  which are outlets, so closed basins below sea level end there. Receivers
+  are then re-picked as steepest descent on the filled surface; the flood's
+  own receiver is the *lowest* neighbour, which biases flow about 40° toward
+  the diagonals. Accumulation is a Kahn pass. Direction is the filled-surface
+  Horn gradient on hillslopes, blended as accumulation grows into the
+  direction toward the cell `LOOKAHEAD` steps down the receiver chain. Aiming
+  at the next cell instead makes the bilinearly sampled field stall where D8
+  receivers converge, so keep the look-ahead.
+
+`flow/particles.js` simulates on the CPU (positions in Mercator [0, 1], so
+they survive a field swap). Trails are a **ring of `LineLayer`s**, one per
+frame of trail, each holding that frame's one segment per particle and
+fading by its layer `opacity` as it ages. A frame therefore writes and
+uploads only the newest layer, not every trail. The newest layer always takes
+the spare buffer set, because deck only re-uploads an attribute whose typed
+array changed identity. Speed is
+per-field normalised (90th percentile = 1) and converted with css px per
+field cell, so on-screen speed doesn't depend on zoom. Positions switch to
+`LNGLAT_OFFSETS` around the field centre when it's small, for float32
+precision. z is the DEM × the terrain exaggeration (0 with terrain off).
+
+**`map/deck.js`** owns deck.gl's loading and one `MapboxOverlay` per mode
+(`setDeckLayers(owner, layers)`). They're kept separate on purpose: an overlay
+redraws all of its layers when any one changes, and the particles change
+every frame. Its esm.sh imports pin `@deck.gl/core` through
+`?deps=`, because otherwise a new core patch release gets loaded next to the
+pinned one and deck refuses to run.
 
 ### Winds aloft (`src/winds/`, `ui/windspanel.js`)
 

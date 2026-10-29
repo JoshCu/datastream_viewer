@@ -686,6 +686,96 @@
             </div>
           </div>
 
+          <!-- Flow particles (src/flow/, src/ui/flowpanel.js): runoff traced
+               down the DEM as wind-map-style deck.gl particles. -->
+          <div class="panel collapsed" id="flowPanel" data-url-key="flow">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 4c4 0 5 4 9 4s5-4 9-4" />
+                <path d="M3 11c4 0 5 4 9 4s5-4 9-4" />
+                <path d="M12 15v6" />
+                <polyline points="9 18 12 21 15 18" />
+              </svg>
+              Flow Particles (DEM runoff)
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <div class="status" id="flowStatus">
+                <span class="status-dot" id="flowStatusDot"></span>
+                <span id="flowStatusText">Open to start</span>
+              </div>
+              <div class="speed-control" title="How many particles are on screen at once">
+                <label for="flowCount">Particles</label>
+                <input type="range" id="flowCount" min="1000" max="60000" step="1000" value="15000" />
+                <span class="speed-value" id="flowCountValue">15k</span>
+              </div>
+              <div class="speed-control" title="Screen speed of a typical particle">
+                <label for="flowSpeed">Speed</label>
+                <input type="range" id="flowSpeed" min="0.1" max="5" step="0.1" value="1.5" />
+                <span class="speed-value" id="flowSpeedValue">1.5</span>
+              </div>
+              <div class="speed-control" title="Positions kept per particle">
+                <label for="flowTrail">Trail</label>
+                <input type="range" id="flowTrail" min="2" max="100" step="2" value="50" />
+                <span class="speed-value" id="flowTrailValue">50</span>
+              </div>
+              <div class="speed-control">
+                <label for="flowWidth">Width</label>
+                <input type="range" id="flowWidth" min="0.5" max="5" step="0.25" value="2.25" />
+                <span class="speed-value" id="flowWidthValue">2.25px</span>
+              </div>
+              <div class="speed-control">
+                <label for="flowOpacity">Opacity</label>
+                <input type="range" id="flowOpacity" min="0.05" max="1" step="0.05" value="0.35" />
+                <span class="speed-value" id="flowOpacityValue">0.35</span>
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="flowSpeedModel">Speed</label>
+                <select id="flowSpeedModel" class="select scale-select">
+                  <option value="manning">Slope + river size</option>
+                  <option value="slope">Slope only (√S)</option>
+                </select>
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="flowColorBy">Colour by</label>
+                <select id="flowColorBy" class="select scale-select">
+                  <option value="acc">Upstream area</option>
+                  <option value="speed">Speed</option>
+                </select>
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="flowColormap">Colours</label>
+                <select id="flowColormap" class="select scale-select"></select>
+              </div>
+              <div class="scale-select-wrap" title="DEM resolution the flow is routed at, relative to the map zoom">
+                <label class="scale-label" for="flowDetail">Detail</label>
+                <select id="flowDetail" class="select scale-select">
+                  <option value="-2">Coarse (4 px per cell)</option>
+                  <option value="-1">Normal (2 px per cell)</option>
+                  <option value="0">Fine (1 px per cell)</option>
+                </select>
+              </div>
+              <div class="legend">
+                <div class="legend-gradient" id="flowLegendGradient"></div>
+                <div class="legend-labels"><span id="flowLegendMin">-</span><span id="flowLegendMax">-</span></div>
+              </div>
+              <p class="info-text">
+                Rain falls evenly over the view and runs downhill over the map's own
+                elevation tiles. Pits and flats are filled so water always finds a way
+                out, and the particles collect into the drainage network, so the rivers
+                draw themselves. Particles move faster on steeper ground (√slope); in
+                Manning mode bigger rivers move faster too. The field is rebuilt for the
+                view after each move, and areas where the elevation data is coarser use
+                its nearest coarser tiles.
+              </p>
+            </div>
+          </div>
+
           <!-- NEXRAD Level II (src/nexrad/, src/ui/nexradpanel.js): volume scans
                from the public Unidata bucket as deck.gl 3D point clouds, one per
                chosen station. -->

@@ -820,6 +820,14 @@ input[type="range"]::-webkit-slider-thumb {
     cursor: pointer;
     outline: none;
     transition: all 0.2s;
+    /* A <select> is as wide as its longest option, and a flex item won't
+       shrink below that by default: let it shrink, and clip the closed
+       control's text instead of spilling out of the panel. */
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .select:hover {
@@ -1999,6 +2007,10 @@ body.hydro-open #info-panel {
 .hydro-select {
     flex: 1;
     min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
     padding: 4px 6px;
     font: inherit;
     font-size: 11px;

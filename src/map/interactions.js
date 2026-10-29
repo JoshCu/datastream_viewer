@@ -26,11 +26,13 @@ import { showGageInfo, showSiteInfo } from "../ui/gagepanel.js";
 import { openForcingPlot } from "../ui/forcingplot.js";
 import { hasForcingSource } from "../forcing/loader.js";
 import { invalidateResultsView } from "./paint.js";
+import { initialLayer, noteLayer, saveLayer } from "./layerprefs.js";
 // maplibregl is a global provided by the CDN <script> in index.html.
 
 
 // Terrain + hillshade, grouped in one box: wraps MapLibre's TerrainControl
-// and appends the hillshade toggle to its container.
+// and appends the hillshade toggle to its container. Both start from
+// map/layerprefs.js and report to it.
 export class TerrainControl {
   onAdd(map) {
     this._map = map;
@@ -39,6 +41,24 @@ export class TerrainControl {
       exaggeration: 1,
     });
     this._container = this._terrain.onAdd(map);
+    // MapLibre's own button: once the style is in, its click handler (added
+    // first) has already toggled the terrain by the time this one runs.
+    // Before that, its setTerrain throws, so the click is kept as what to
+    // apply on load. The flood panel turns terrain on from code, which the
+    // terrain event catches.
+    this._terrainOn = initialLayer("terrain");
+    let loaded = false;
+    const terrainButton = this._container.firstElementChild;
+    terrainButton.addEventListener("click", () => {
+      this._terrainOn = loaded ? !!map.getTerrain() : !this._terrainOn;
+      if (!loaded) {
+        terrainButton.classList.toggle("maplibregl-ctrl-terrain", !this._terrainOn);
+        terrainButton.classList.toggle("maplibregl-ctrl-terrain-enabled", this._terrainOn);
+      }
+      saveLayer("terrain", this._terrainOn);
+    });
+    map.on("terrain", () => noteLayer("terrain", !!map.getTerrain()));
+
     this._button = iconButton(
       "maplibregl-ctrl-hillshade",
       "Enable hillshade",
@@ -48,14 +68,33 @@ export class TerrainControl {
           "fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1px",
       },
     );
+    this._hillshade = initialLayer("hillshade");
+    this._syncHillshade();
     this._button.onclick = () => {
-      const visible = map.getLayoutProperty("hills", "visibility") === "visible";
-      map.setLayoutProperty("hills", "visibility", visible ? "none" : "visible");
-      this._button.classList.toggle("active", !visible);
-      this._button.title = visible ? "Enable hillshade" : "Disable hillshade";
+      this._setHillshade(!this._hillshade);
+      saveLayer("hillshade", this._hillshade);
     };
     this._container.appendChild(this._button);
+
+    // The terrain and hills sources/layers only exist once the style loads.
+    map.once("load", () => {
+      loaded = true;
+      if (this._terrainOn) map.setTerrain(this._terrain.options);
+      this._setHillshade(this._hillshade);
+    });
     return this._container;
+  }
+  _setHillshade(on) {
+    this._hillshade = on;
+    if (this._map.getLayer("hills")) {
+      this._map.setLayoutProperty("hills", "visibility", on ? "visible" : "none");
+    }
+    this._syncHillshade();
+    noteLayer("hillshade", on);
+  }
+  _syncHillshade() {
+    this._button.classList.toggle("active", this._hillshade);
+    this._button.title = this._hillshade ? "Disable hillshade" : "Enable hillshade";
   }
   onRemove() {
     this._terrain.onRemove();
@@ -71,11 +110,11 @@ export class TerrainControl {
 // Catchments: the divide outlines plus the selected/upstream highlight
 // layers, hidden by default. Choosing "Highlight upstream" from the context
 // menu turns them on (setCatchmentsVisible), since the highlight is drawn by
-// those layers.
+// those layers. Both start from map/layerprefs.js; only a button click saves.
 const FLOWPATH_LAYERS = ["flowpaths", "flowpaths-hover"];
 const CATCHMENT_LAYERS = ["divides", "selected-divides", "upstream-divides"];
-let flowpathsVisible = true;
-let catchmentsVisible = false;
+let flowpathsVisible = initialLayer("flowpaths");
+let catchmentsVisible = initialLayer("catchments");
 let flowpathButton = null;
 let catchmentButton = null;
 
@@ -93,40 +132,60 @@ export function setFlowpathsVisible(visible) {
   // queryRenderedFeatures sees nothing while the layer is hidden, so the
   // painter's on-screen set is stale: requery once it's back.
   else if (state.data) invalidateResultsView();
-  if (flowpathButton) {
-    flowpathButton.classList.toggle("active", visible);
-    flowpathButton.title = visible ? "Hide flowpaths" : "Show flowpaths";
-  }
+  syncHydrofabricButtons();
+  noteLayer("flowpaths", visible);
 }
 
 export function setCatchmentsVisible(visible) {
   catchmentsVisible = visible;
   setLayersVisible(CATCHMENT_LAYERS, visible);
+  syncHydrofabricButtons();
+  noteLayer("catchments", visible);
+}
+
+function syncHydrofabricButtons() {
+  if (flowpathButton) {
+    flowpathButton.classList.toggle("active", flowpathsVisible);
+    flowpathButton.title = flowpathsVisible ? "Hide flowpaths" : "Show flowpaths";
+  }
   if (catchmentButton) {
-    catchmentButton.classList.toggle("active", visible);
-    catchmentButton.title = visible ? "Hide catchments" : "Show catchments";
+    catchmentButton.classList.toggle("active", catchmentsVisible);
+    catchmentButton.title = catchmentsVisible ? "Hide catchments" : "Show catchments";
   }
 }
 
 export class HydrofabricControl {
-  onAdd() {
+  onAdd(map) {
     this._container = document.createElement("div");
     this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
     // Branching line: a river network.
     flowpathButton = iconButton(
-      "maplibregl-ctrl-flowpaths active",
+      "maplibregl-ctrl-flowpaths",
       "Hide flowpaths",
       "M4,20C8,17,9,13,12,11s5-5,6-7M12,11c2,1,5,1,7,3M9,15C7,14,5,11,5,8",
     );
-    flowpathButton.onclick = () => setFlowpathsVisible(!flowpathsVisible);
+    flowpathButton.onclick = () => {
+      setFlowpathsVisible(!flowpathsVisible);
+      saveLayer("flowpaths", flowpathsVisible);
+    };
     // Irregular polygon: a catchment outline.
     catchmentButton = iconButton(
       "maplibregl-ctrl-catchments",
       "Show catchments",
       "M4,8,10,4l8,3,2,8-7,5L5,17Z",
     );
-    catchmentButton.onclick = () => setCatchmentsVisible(!catchmentsVisible);
+    catchmentButton.onclick = () => {
+      setCatchmentsVisible(!catchmentsVisible);
+      saveLayer("catchments", catchmentsVisible);
+    };
     this._container.append(flowpathButton, catchmentButton);
+    syncHydrofabricButtons();
+    // The style's own visibility is the default; apply the starting state
+    // once its layers exist.
+    map.once("load", () => {
+      setFlowpathsVisible(flowpathsVisible);
+      setCatchmentsVisible(catchmentsVisible);
+    });
     return this._container;
   }
   onRemove() {
