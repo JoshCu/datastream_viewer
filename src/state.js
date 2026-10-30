@@ -98,6 +98,7 @@ export const flowState = {
   colorBy: "acc", // "acc" (upstream area) | "speed"
   colormap: "blues",
   detail: -1, // field zoom relative to the map's: -2 coarse, -1 normal, 0 fine
+  debug: "off", // overlay: "off" | "rgb" (raw DEM tiles) | "dir" (routed direction grid)
   field: null,
 };
 

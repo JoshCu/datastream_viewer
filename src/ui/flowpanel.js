@@ -21,6 +21,7 @@ import {
   updateFlowCells,
   rebuildSpawnGrid,
 } from "../flow/particles.js";
+import { applyFlowDebug } from "../flow/debug.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -69,6 +70,7 @@ function onToggle() {
     stopFlowParticles();
     clearFlowField();
   }
+  applyFlowDebug();
 }
 
 export function setupFlowPanel() {
@@ -90,6 +92,7 @@ export function setupFlowPanel() {
     syncLegend();
   });
   bindSelect("flowDetail", "detail", () => refreshFlowField(true), Number);
+  bindSelect("flowDebug", "debug", applyFlowDebug);
   syncLegend();
 
   map.on("moveend", () => {

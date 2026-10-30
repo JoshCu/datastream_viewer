@@ -760,6 +760,17 @@
                   <option value="0">Fine (1 px per cell)</option>
                 </select>
               </div>
+              <div
+                class="scale-select-wrap"
+                title="DEM tiles: the raw elevation tiles the flow is routed from. Flow direction: the routed field, one pixel per cell; hue is the downhill direction (red east, lime north, cyan west, violet south), brightness the upstream area"
+              >
+                <label class="scale-label" for="flowDebug">Debug</label>
+                <select id="flowDebug" class="select scale-select">
+                  <option value="off">Off</option>
+                  <option value="rgb">DEM tiles (RGB)</option>
+                  <option value="dir">Flow direction</option>
+                </select>
+              </div>
               <div class="legend">
                 <div class="legend-gradient" id="flowLegendGradient"></div>
                 <div class="legend-labels"><span id="flowLegendMin">-</span><span id="flowLegendMax">-</span></div>

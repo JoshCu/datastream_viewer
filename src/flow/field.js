@@ -57,7 +57,9 @@ function getWorker() {
 }
 
 // The map's DEM source, once its TileJSON has loaded.
-function demSource() {
+// The DEM source's tiles: { url, encoding, tileSize, maxzoom }, or null
+// until its TileJSON has loaded.
+export function demSource() {
   const src = map.getSource(FLOW_DEM_SOURCE);
   if (!src?.tiles?.length) return null;
   return {
