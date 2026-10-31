@@ -6,6 +6,7 @@ import { map, flowState } from "../state.js";
 import { colormapColors, colormapGradient } from "../color/colormaps.js";
 import { fillColormapSelect } from "./colormap.js";
 import { setStatus } from "./panels.js";
+import { bindSlider } from "./sliders.js";
 import {
   onFlowStatus,
   refreshFlowField,
@@ -16,6 +17,7 @@ import {
   startFlowParticles,
   stopFlowParticles,
   resetFlowParticles,
+  restartFlowParticles,
   resizeFlowTrail,
   setFlowColormap,
   updateFlowCells,
@@ -30,19 +32,6 @@ function syncLegend() {
   const byArea = flowState.colorBy === "acc";
   $("flowLegendMin").textContent = byArea ? "Hillslope" : "Slow";
   $("flowLegendMax").textContent = byArea ? "Big river" : "Fast";
-}
-
-// A range input bound to flowState[key]: `fmt` labels it, `apply` reacts.
-function bindSlider(id, key, fmt, apply) {
-  const input = $(id);
-  const label = $(`${id}Value`);
-  input.value = flowState[key];
-  label.textContent = fmt(flowState[key]);
-  input.addEventListener("input", () => {
-    flowState[key] = Number(input.value);
-    label.textContent = fmt(flowState[key]);
-    apply?.();
-  });
 }
 
 function bindSelect(id, key, apply, parse = String) {
@@ -76,11 +65,12 @@ function onToggle() {
 export function setupFlowPanel() {
   onFlowStatus(({ kind, text }) => setStatus(kind, text, "flow"));
 
-  bindSlider("flowCount", "count", (v) => `${v / 1000}k`, resetFlowParticles);
-  bindSlider("flowSpeed", "speed", (v) => v.toFixed(1));
-  bindSlider("flowTrail", "trail", (v) => `${v}`, resizeFlowTrail);
-  bindSlider("flowWidth", "width", (v) => `${v}px`);
-  bindSlider("flowOpacity", "opacity", (v) => v.toFixed(2));
+  bindSlider(flowState, "flowCount", "count", (v) => `${v / 1000}k`, resetFlowParticles);
+  bindSlider(flowState, "flowSpeed", "speed", (v) => v.toFixed(1));
+  bindSlider(flowState, "flowMomentum", "momentum", (v) => v.toFixed(2));
+  bindSlider(flowState, "flowTrail", "trail", (v) => `${v}`, resizeFlowTrail);
+  bindSlider(flowState, "flowWidth", "width", (v) => `${v}px`);
+  bindSlider(flowState, "flowOpacity", "opacity", (v) => v.toFixed(2));
   bindSelect("flowSpeedModel", "speedModel", updateFlowCells);
   bindSelect("flowColorBy", "colorBy", () => {
     updateFlowCells();
@@ -93,6 +83,7 @@ export function setupFlowPanel() {
   });
   bindSelect("flowDetail", "detail", () => refreshFlowField(true), Number);
   bindSelect("flowDebug", "debug", applyFlowDebug);
+  bindSelect("flowCompute", "compute", restartFlowParticles);
   syncLegend();
 
   map.on("moveend", () => {

@@ -59,6 +59,7 @@ import { setupNexradPanel } from "../ui/nexradpanel.js";
 import { setupWindsPanel } from "../ui/windspanel.js";
 import { setupFloodPanel } from "../ui/floodpanel.js";
 import { setupFlowPanel } from "../ui/flowpanel.js";
+import { setupErosionPanel } from "../ui/erosionpanel.js";
 import { setRunColormapId } from "../ui/colormap.js";
 import { initialMapView, syncMapView } from "../ui/url.js";
 import { writeUrl as writeLayersUrl } from "./layerprefs.js";
@@ -196,6 +197,7 @@ export function init() {
   setupWindsPanel();
   setupFloodPanel();
   setupFlowPanel();
+  setupErosionPanel();
   setupUsgsPanel();
   setupSimPanel();
   setupBrush();

@@ -11,9 +11,14 @@
 // cells, mostly ancestor tiles that are already cached) when the current one
 // doesn't cover it, so particles appear at once, then the full-resolution
 // one. Each request carries an epoch; a newer view supersedes older ones.
+//
+// Terrain edits (flow/terrain.js) go with every request, and an edit asks
+// for the field it's on to be rebuilt (rebuildFlowField), from the same
+// (cached) tiles.
 // ====================================================================
 import { map, flowState } from "../state.js";
 import { FLOW_DEM_SOURCE, FLOW_MAX_ZOOM, FLOW_MAX_CELLS } from "../config.js";
+import { demTemplate, deltasFor } from "./terrain.js";
 // maplibregl is a global provided by the CDN <script> in index.html.
 
 // Field extent past the visible ground, as a fraction of its size per side.
@@ -56,14 +61,14 @@ function getWorker() {
   return worker;
 }
 
-// The map's DEM source, once its TileJSON has loaded.
 // The DEM source's tiles: { url, encoding, tileSize, maxzoom }, or null
-// until its TileJSON has loaded.
+// until its TileJSON has loaded. `url` is the source's own template even
+// once the map draws edited tiles.
 export function demSource() {
   const src = map.getSource(FLOW_DEM_SOURCE);
   if (!src?.tiles?.length) return null;
   return {
-    url: src.tiles[0],
+    url: demTemplate(FLOW_DEM_SOURCE) ?? src.tiles[0],
     encoding: src.encoding ?? "mapbox",
     tileSize: src.tileSize ?? 512,
     maxzoom: Math.min(src.maxzoom ?? FLOW_MAX_ZOOM, FLOW_MAX_ZOOM),
@@ -125,13 +130,18 @@ function boxAt(box, z, tileSize) {
   return { z, x0, y0, w: Math.ceil(box.x1 * world) - x0, h: Math.ceil(box.y1 * world) - y0 };
 }
 
-// The field to build for `box`: at the map's zoom less flowState.detail,
-// stepped down until it fits FLOW_MAX_CELLS.
-function plan(dem, box) {
+// The zoom a field for the current view starts at: the map's, less
+// flowState.detail.
+export function fieldZoom(dem) {
   const tilesPerMapTile = 512 / dem.tileSize;
-  let z = Math.round(map.getZoom() + Math.log2(tilesPerMapTile)) + flowState.detail;
-  z = Math.max(0, Math.min(dem.maxzoom, z));
-  for (;; z--) {
+  const z = Math.round(map.getZoom() + Math.log2(tilesPerMapTile)) + flowState.detail;
+  return Math.max(0, Math.min(dem.maxzoom, z));
+}
+
+// The field to build for `box`: at fieldZoom(), stepped down until it fits
+// FLOW_MAX_CELLS.
+function plan(dem, box) {
+  for (let z = fieldZoom(dem); ; z--) {
     const p = boxAt(box, z, dem.tileSize);
     if (p.w * p.h <= FLOW_MAX_CELLS || z === 0) return p;
   }
@@ -159,15 +169,33 @@ function overlap(f, p) {
 // (cleared if it fails, so the next move retries).
 let lastPlan = null;
 let fieldSummary = ""; // the installed field's status line
+// The terrain was edited after the requests in flight were sent: rebuild
+// once they've landed.
+let rebuildAfterPending = false;
 
-function send(dem, p, coarse) {
+function send(dem, p, coarse, rebuild = false) {
   const id = nextId++;
-  pending.set(id, { plan: p, coarse });
+  pending.set(id, { plan: p, coarse, rebuild });
+  rebuildAfterPending = false;
   getWorker().postMessage({
     type: "field", epoch, id, ...p,
     url: dem.url, encoding: dem.encoding, tileSize: dem.tileSize,
     speedModel: flowState.speedModel, colorBy: flowState.colorBy,
+    deltas: deltasFor(dem.tileSize * 2 ** p.z, p.x0, p.y0, p.w, p.h),
   });
+}
+
+// The terrain under the field was edited: route the same box again.
+export function rebuildFlowField() {
+  const f = flowState.field;
+  const dem = demSource();
+  if (!f || !dem || !flowState.active) return;
+  if (pending.size) {
+    rebuildAfterPending = true;
+    return;
+  }
+  status("loading", "Rerouting the edited terrain…");
+  send(dem, { z: f.z, x0: f.x0, y0: f.y0, w: f.w, h: f.h }, false, true);
 }
 
 // Build a field for the current view if the one we have (or have asked for)
@@ -191,8 +219,12 @@ export function refreshFlowField(force = false) {
   const field = flowState.field;
   if (!force && field?.complete && covers(field, onScreen)) {
     // Back inside it after asking for somewhere else: that answer would now
-    // be for the wrong view.
-    if (pending.size) cancel(fieldSummary);
+    // be for the wrong view. (A rebuild for an edit is still wanted.)
+    const reqs = [...pending.values()];
+    if (reqs.some((r) => !r.rebuild)) {
+      cancel(fieldSummary);
+      if (reqs.some((r) => r.rebuild)) rebuildFlowField();
+    }
     return;
   }
   if (!force && covers(lastPlan, onScreen)) return;
@@ -233,6 +265,7 @@ function onMessage({ data }) {
   const req = pending.get(data.id);
   if (data.epoch !== epoch || !req) return;
   pending.delete(data.id);
+  if (rebuildAfterPending && !pending.size) queueMicrotask(rebuildFlowField);
   if (data.type === "error") {
     if (!req.coarse) lastPlan = null;
     status("error", data.error);

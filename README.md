@@ -72,7 +72,15 @@ velocity / depth on the hydrofabric flowpaths over time.
   Colour shows upstream area or speed. The field is re-routed for the view after
   each move (coarse first, then full resolution), and tiles past the DEM's
   coverage fall back to their nearest coarser ancestor. Works pitched, on the
-  3D terrain.
+  3D terrain. Steps on the GPU (WebGPU compute) or the CPU, selectable.
+- **Particle erosion** — the flow particles carry momentum and share speed
+  with their neighbours, so river water drags slow hillslope water along.
+  Speed lost against the ground (a turn, a head-on stop) erodes it, less on
+  steeper (rockier) ground; particles carry the material and drop it as they
+  go and at the sea. Every few seconds the erosion is written into the map's
+  own DEM tiles (3D terrain and hillshade, re-encoded in a worker and served
+  through a MapLibre protocol) and the flow is rerouted over it. Brushes
+  raise or lower the terrain or rain particles into one spot.
 - **Winds aloft** — Open-Meteo's hourly pressure-level winds (1000–250 hPa)
   for the map centre or a right-clicked point, as a time–height grid of
   arrows coloured by speed, with an hour's table of height, speed, direction
@@ -167,6 +175,8 @@ src/
       nexrad.js               NEXRAD Level II records → per-tilt gate positions + bird profile sums (pure)
       bzip2.js                bzip2 decoder for the Level II records (pure)
       flowroute.js            DEM routing: Priority-Flood fill, accumulation, flow direction (pure)
+      flowcells.js            routed field packed for the particles: per-cell record + colour (pure)
+      flowterrain.js          terrain-edit deltas: resampling onto a grid, DEM + PNG encoding (pure)
       parsers/
         netcdf.js             NetCDF4/HDF5 parser (worker-side, pure)
         parquet.js            Parquet parser (worker-side, pure)
@@ -186,7 +196,9 @@ src/
     contextmenu.js            map right-click menu
     nexradpanel.js            NEXRAD panel: date, per-station scan rows + lock, display controls
     windspanel.js             winds aloft panel: time–height arrow grid + hour table
-    flowpanel.js              flow particles panel: count, speed, trail, colour, detail
+    flowpanel.js              flow particles panel: count, speed, trail, colour, detail, GPU/CPU
+    erosionpanel.js           particle erosion panel: interaction, erosion, brushes, terrain reset
+    sliders.js                range inputs bound to settings keys, kept in step across panels
   forcing/
     store.js                  sparse, growable catchment store + change events
     layout.js                 per-file layout scan + IndexedDB cache
@@ -195,8 +207,13 @@ src/
     paint.js                  catchment fill expression + feature-state, forcing clock
   flow/
     field.js                  which DEM box/zoom to route for the view; coarse → fine requests
-    flow.worker.js            DEM tile fetch/decode/LRU, mosaic with ancestor fallback, routing
-    particles.js              particle sim + trails, drawn as a deck.gl LineLayer
+    flow.worker.js            DEM tile LRU, mosaic with ancestor fallback, terrain edits, routing
+    demio.js                  DEM tile fetch + decode (fingerprint-safe), shared by the workers
+    particles.js              particle sim + trails, drawn as a deck.gl LineLayer; CPU step
+    gpusim.js                 the same step as a WebGPU compute shader
+    terrain.js                terrain-edit store, flowdem:// protocol, map tile refresh
+    terrain.worker.js         edited DEM tiles for the map: original + edits → PNG
+    brush.js                  raise / lower / rain brushes
   nexrad/
     source.js                 bucket listings, scan download, worker fan-out + tilt merge
     layer.js                  deck.gl PointCloudLayer per radar (via map/deck.js)

@@ -2060,14 +2060,17 @@ body.hydro-open #info-panel {
 }
 
 /* Beats the inline cursor the layer hover handlers set on the canvas. */
-#map.sim-brush-on canvas {
+#map.sim-brush-on canvas,
+#map.flow-brush-on canvas {
     cursor: crosshair !important;
 }
 
 /* The brush owns one-finger drags, so the browser mustn't claim them for
    scrolling (that cancels the pointer stream after the first touch). */
 #map.sim-brush-on .maplibregl-canvas-container,
-#map.sim-brush-on canvas {
+#map.sim-brush-on canvas,
+#map.flow-brush-on .maplibregl-canvas-container,
+#map.flow-brush-on canvas {
     touch-action: none;
 }
 

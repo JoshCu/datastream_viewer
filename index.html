@@ -719,6 +719,11 @@
                 <input type="range" id="flowSpeed" min="0.1" max="5" step="0.1" value="1.5" />
                 <span class="speed-value" id="flowSpeedValue">1.5</span>
               </div>
+              <div class="speed-control" title="How much of its heading a particle keeps from one frame to the next: higher carries it wider round bends">
+                <label for="flowMomentum">Momentum</label>
+                <input type="range" id="flowMomentum" min="0" max="0.95" step="0.05" value="0" />
+                <span class="speed-value" id="flowMomentumValue">0.00</span>
+              </div>
               <div class="speed-control" title="Positions kept per particle">
                 <label for="flowTrail">Trail</label>
                 <input type="range" id="flowTrail" min="2" max="100" step="2" value="50" />
@@ -771,6 +776,16 @@
                   <option value="dir">Flow direction</option>
                 </select>
               </div>
+              <div
+                class="scale-select-wrap"
+                title="Where the particles are stepped: a WebGPU compute shader (when the browser has WebGPU) or JavaScript on the CPU"
+              >
+                <label class="scale-label" for="flowCompute">Compute</label>
+                <select id="flowCompute" class="select scale-select">
+                  <option value="gpu">GPU (WebGPU)</option>
+                  <option value="cpu">CPU</option>
+                </select>
+              </div>
               <div class="legend">
                 <div class="legend-gradient" id="flowLegendGradient"></div>
                 <div class="legend-labels"><span id="flowLegendMin">-</span><span id="flowLegendMax">-</span></div>
@@ -783,6 +798,99 @@
                 Manning mode bigger rivers move faster too. The field is rebuilt for the
                 view after each move, and areas where the elevation data is coarser use
                 its nearest coarser tiles.
+              </p>
+            </div>
+          </div>
+
+          <!-- Particle erosion (src/flow/terrain.js, src/flow/brush.js,
+               src/ui/erosionpanel.js): the flow particles share speed, erode
+               and deposit, editing the map's DEM tiles. -->
+          <div class="panel collapsed" id="erosionPanel" data-url-key="erosion">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 20l6-10 4 6 3-4 7 8z" />
+                <path d="M14 5c1.5 0 2 1.5 3.5 1.5S19 5 21 5" />
+              </svg>
+              Particle Erosion
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <div class="status" id="erosionStatus">
+                <span class="status-dot" id="erosionStatusDot"></span>
+                <span id="erosionStatusText">Terrain unedited</span>
+              </div>
+              <div class="speed-control" title="Screen speed of a typical particle (the same as the Flow Particles panel's)">
+                <label for="eroSpeed">Speed</label>
+                <input type="range" id="eroSpeed" min="0.1" max="5" step="0.1" value="1.5" />
+                <span class="speed-value" id="eroSpeedValue">1.5</span>
+              </div>
+              <div class="speed-control" title="How much of its speed and heading a particle keeps from one frame to the next (the same as the Flow Particles panel's)">
+                <label for="eroMomentum">Momentum</label>
+                <input type="range" id="eroMomentum" min="0" max="0.95" step="0.05" value="0" />
+                <span class="speed-value" id="eroMomentumValue">0.00</span>
+              </div>
+              <p class="info-text">Interaction</p>
+              <div class="speed-control" title="Particles about this close together (screen px) share their speed">
+                <label for="eroRange">Reach</label>
+                <input type="range" id="eroRange" min="2" max="40" step="1" value="8" />
+                <span class="speed-value" id="eroRangeValue">8px</span>
+              </div>
+              <div class="speed-control" title="How much of the gap to its neighbours' mean speed a particle closes each frame: fast river water carries slow water along">
+                <label for="eroTransfer">Share</label>
+                <input type="range" id="eroTransfer" min="0" max="0.5" step="0.01" value="0.1" />
+                <span class="speed-value" id="eroTransferValue">0.10</span>
+              </div>
+              <p class="info-text">Erosion</p>
+              <div class="speed-control" title="Metres taken from the ground a particle runs into, per unit of speed it loses there (a typical particle stopping head-on loses 1)">
+                <label for="eroRate">Erode</label>
+                <input type="range" id="eroRate" min="0" max="0.5" step="0.005" value="0.05" />
+                <span class="speed-value" id="eroRateValue">0.050 m</span>
+              </div>
+              <div class="speed-control" title="How much steeper ground resists: mud and sand collect on the flats, rock stands on the slopes. Erodibility is 1 / (1 + hardness × slope / 5%)">
+                <label for="eroHardness">Hardness</label>
+                <input type="range" id="eroHardness" min="0" max="10" step="0.5" value="2" />
+                <span class="speed-value" id="eroHardnessValue">2.0</span>
+              </div>
+              <div class="speed-control" title="Metres of its carried sediment a particle drops each frame where it is; the rest settles where it ends">
+                <label for="eroDeposit">Deposit</label>
+                <input type="range" id="eroDeposit" min="0" max="0.02" step="0.0005" value="0.002" />
+                <span class="speed-value" id="eroDepositValue">0.0020 m</span>
+              </div>
+              <div class="speed-control" title="Seconds between applying the erosion to the terrain and rerouting the flow over it">
+                <label for="eroInterval">Apply every</label>
+                <input type="range" id="eroInterval" min="0.5" max="10" step="0.5" value="2" />
+                <span class="speed-value" id="eroIntervalValue">2.0 s</span>
+              </div>
+              <p class="info-text">Brush (drag on the map)</p>
+              <div class="variable-selector" id="eroTools">
+                <button class="var-btn active" data-tool="none">Off</button>
+                <button class="var-btn" data-tool="raise">Raise</button>
+                <button class="var-btn" data-tool="lower">Lower</button>
+                <button class="var-btn" data-tool="rain">Rain</button>
+              </div>
+              <div class="speed-control" title="Brush diameter, screen px">
+                <label for="eroSize">Size</label>
+                <input type="range" id="eroSize" min="10" max="300" step="5" value="80" />
+                <span class="speed-value" id="eroSizeValue">80px</span>
+              </div>
+              <div class="speed-control" title="Metres a second raised or lowered at the brush centre">
+                <label for="eroStrength">Strength</label>
+                <input type="range" id="eroStrength" min="1" max="200" step="1" value="20" />
+                <span class="speed-value" id="eroStrengthValue">20 m/s</span>
+              </div>
+              <button class="btn secondary" id="eroResetBtn" style="margin-top: 8px">Reset terrain</button>
+              <p class="info-text">
+                Works on the Flow Particles (opening this opens them). Particles that turn
+                or stop lose speed against the ground they run into, and erode it in
+                proportion; they carry what they take and drop it as they go, and at the
+                sea. The erosion is applied to the map's own elevation tiles (3D terrain
+                and hillshade) every few seconds, and the flow is rerouted over it.
+                Edits stay until Reset terrain.
               </p>
             </div>
           </div>

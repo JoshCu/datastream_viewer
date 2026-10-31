@@ -377,6 +377,39 @@ every frame. Its esm.sh imports pin `@deck.gl/core` through
 `?deps=`, because otherwise a new core patch release gets loaded next to the
 pinned one and deck refuses to run.
 
+### Particle erosion and terrain edits (`flow/terrain.js`, `flow/brush.js`, `ui/erosionpanel.js`)
+
+Settings are `erosionState` (`state.js`) and apply only while the erosion
+panel is open (opening it opens the flow panel). Both particle steps carry a
+per-particle speed and sediment (the GPU's in a `motion` vec4) as well as
+the heading:
+- **Interaction**: the field is binned ~`range` css px; each particle's
+  speed is pulled toward *last* frame's bin mean (two halves of bins,
+  swapped per frame, so no frame reads what it's writing).
+- **Erosion**: impact = speed lost along the previous heading
+  (`|v₀| − v₁·v̂₀`), eroding the cell one ahead, scaled by
+  `1 / (1 + hardness·S / 5%)`. Deposits go where the particle is; all of it
+  on ageing out or at an outlet; off the field it's lost.
+- The erosion sums into a field-sized grid (CPU `Float32Array`; GPU fixed
+  point via `atomicAdd`, read back by `takeErosion()`) that is committed every
+  `interval` s and whenever the field moves: `addTerrainDelta()` then
+  `rebuildFlowField()`.
+
+The WGSL is at WebGPU's default **8 storage buffers per stage**: read-only
+per-cell data shares one `aux` buffer and the bins + erosion grid share one
+atomic `acc` buffer. Don't add a binding; pack into those.
+
+`flow/terrain.js` keeps edits as per-DEM-tile metre deltas at the zoom they
+were made at (`data/workers/flowterrain.js` resamples and sums across zooms).
+At the first edit it **switches `FLOW_EDIT_SOURCES` to the `flowdem://`
+protocol** via `setTiles`; untouched tiles are the original bytes, edited ones
+come from `terrain.worker.js` (decode, add, re-encode as a hand-written PNG,
+since canvas exports are perturbed by fingerprinting protection). So
+`map.getSource(...).tiles` is no longer the real URL: go through
+`demSource()` / `demTemplate()`. `map.refreshTiles` only reloads tiles in
+view, so served tiles are versioned and stale ones are refreshed on
+`moveend`. Field builds carry `deltasFor()` their box.
+
 ### Winds aloft (`src/winds/`, `ui/windspanel.js`)
 
 Open-Meteo hourly pressure-level winds for one point, fetched straight from

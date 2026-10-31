@@ -15,11 +15,13 @@
 // Protocol (main → worker):
 //   { type: "cancel", epoch }  drop anything older than `epoch`
 //   { type: "field", epoch, id, z, x0, y0, w, h, url, encoding, tileSize,
-//     speedModel, colorBy }
+//     speedModel, colorBy, deltas }
 //       Build the field over global pixels [x0, x0+w) × [y0, y0+h) at zoom z
 //       (pixels of the source's tileSize tiles). `url` is the source's tile
 //       template ({z}/{x}/{y}); the particles' cells are packed for
-//       `speedModel` / `colorBy` (data/workers/flowcells.js).
+//       `speedModel` / `colorBy` (data/workers/flowcells.js). `deltas` are
+//       the terrain edits over it (data/workers/flowterrain.js), added to
+//       the mosaic before routing.
 // Replies (worker → main):
 //   { type: "field", epoch, id, result: { z, x0, y0, w, h, elev, dir,
 //     sqrtSlope, acc, outlet, cells, colour, speedModel, colorBy, tiles,
@@ -32,6 +34,8 @@
 // ====================================================================
 import { routeFlow } from "../data/workers/flowroute.js";
 import { packFlowCells } from "../data/workers/flowcells.js";
+import { applyDeltas } from "../data/workers/flowterrain.js";
+import { fetchTile } from "./demio.js";
 
 const CACHE_TILES = 96; // ~1 MB each at 512²
 // "z/x/y" -> Promise<{ dim, elev } | null (no tile) | FAILED>, LRU order.
@@ -40,85 +44,6 @@ const cache = new Map();
 // like a missing one, but not cached, and counted so the field is retried.
 const FAILED = { failed: true };
 let latestEpoch = -1;
-
-function decode(rgba, encoding) {
-  const out = new Float32Array(rgba.length / 4);
-  for (let i = 0, p = 0; i < out.length; i++, p += 4) {
-    const r = rgba[p], g = rgba[p + 1], b = rgba[p + 2];
-    if (rgba[p + 3] === 0) out[i] = NaN;
-    else if (encoding === "mapbox") out[i] = -10000 + (r * 65536 + g * 256 + b) * 0.1;
-    else out[i] = r * 256 + g + b / 256 - 32768; // terrarium
-  }
-  return out;
-}
-
-// Browsers with fingerprinting protection (Firefox's, Brave's) perturb a few
-// bytes of every canvas readback. In a DEM that's a ±256 m spike wherever a
-// red byte is hit, so check once, as MapLibre does (its DEM tiles go the same
-// way): draw known bytes and read them back.
-let canvasDistorted = null;
-function isCanvasDistorted() {
-  if (canvasDistorted != null) return canvasDistorted;
-  const n = 5;
-  const ctx = new OffscreenCanvas(n, n).getContext("2d", { willReadFrequently: true });
-  for (let i = 0; i < n * n; i++) {
-    ctx.fillStyle = `rgb(${i * 4},${i * 4 + 1},${i * 4 + 2})`;
-    ctx.fillRect(i % n, Math.floor(i / n), 1, 1);
-  }
-  const { data } = ctx.getImageData(0, 0, n, n);
-  canvasDistorted = data.some((v, i) => i % 4 !== 3 && v !== i);
-  return canvasDistorted;
-}
-
-// The bitmap's RGBA bytes through VideoFrame, which the fingerprinting
-// protection leaves alone, or null if the frame isn't in an RGB format.
-async function readVideoFrame(bmp) {
-  if (typeof VideoFrame === "undefined") return null;
-  const frame = new VideoFrame(bmp, { timestamp: 0 });
-  try {
-    const format = frame.format;
-    if (!format || !(format.startsWith("RGB") || format.startsWith("BGR"))) return null;
-    const data = new Uint8ClampedArray(bmp.width * bmp.height * 4);
-    await frame.copyTo(data);
-    const bgr = format.startsWith("BGR");
-    const opaque = format.endsWith("X"); // RGBX / BGRX: the fourth byte is padding
-    for (let p = 0; p < data.length; p += 4) {
-      if (bgr) {
-        const r = data[p + 2];
-        data[p + 2] = data[p];
-        data[p] = r;
-      }
-      if (opaque) data[p + 3] = 255;
-    }
-    return data;
-  } finally {
-    frame.close();
-  }
-}
-
-function readCanvas(bmp) {
-  const ctx = new OffscreenCanvas(bmp.width, bmp.height).getContext("2d", { willReadFrequently: true });
-  ctx.drawImage(bmp, 0, 0);
-  return ctx.getImageData(0, 0, bmp.width, bmp.height).data;
-}
-
-async function fetchTile(url, encoding) {
-  const res = await fetch(url);
-  // 404 (past the data's zoom) and 204 (no tile) both mean "use the parent".
-  if (res.status === 404 || res.status === 204) return null;
-  if (!res.ok) throw new Error(`DEM tile ${res.status}: ${url}`);
-  // No colour management or premultiplication: the RGB bytes are the data.
-  const bmp = await createImageBitmap(await res.blob(), {
-    premultiplyAlpha: "none",
-    colorSpaceConversion: "none",
-  });
-  try {
-    const data = (isCanvasDistorted() && (await readVideoFrame(bmp).catch(() => null))) || readCanvas(bmp);
-    return { dim: bmp.width, elev: decode(data, encoding) };
-  } finally {
-    bmp.close();
-  }
-}
 
 function getTile(template, encoding, z, x, y) {
   const key = `${z}/${x}/${y}`;
@@ -236,7 +161,7 @@ function rowMetres(z, y0, h, tileSize) {
   return out;
 }
 
-async function buildField({ epoch, z, x0, y0, w, h, url, encoding, tileSize, speedModel, colorBy }) {
+async function buildField({ epoch, z, x0, y0, w, h, url, encoding, tileSize, speedModel, colorBy, deltas }) {
   const t0 = performance.now();
   const n = 2 ** z;
   const tiles = [];
@@ -291,6 +216,7 @@ async function buildField({ epoch, z, x0, y0, w, h, url, encoding, tileSize, spe
     if (!b || b.failed) failed++;
     blit(elev, x0, y0, w, h, tileSize, t.tx, t.ty, b, b && levels.get(z - b.dz));
   });
+  if (deltas?.length) applyDeltas(elev, tileSize * n, x0, y0, w, h, deltas);
 
   const routed = routeFlow(elev, w, h, rowMetres(z, y0, h, tileSize));
   const packed = packFlowCells({ w, h, elev, ...routed }, speedModel, colorBy);

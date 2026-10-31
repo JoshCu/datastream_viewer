@@ -201,6 +201,9 @@ export const FLOW_MANNING_EXP = 0.27;
 export const FLOW_LIFE_FRAMES = [120, 480];
 // Particles lifted this far above the terrain (m, before exaggeration).
 export const FLOW_LIFT_M = 3;
+// The raster-dem sources terrain edits (flow/terrain.js) are drawn on: the
+// 3D terrain's and the hillshade's.
+export const FLOW_EDIT_SOURCES = ["terrainSource", "hillshadeSource"];
 
 // ---- Forcings (src/forcing/) -----------------------------------------
 //

@@ -91,6 +91,7 @@ export const flowState = {
   active: false, // the panel is open
   count: 20000, // particles
   speed: 1.5, // on-screen speed, css px per frame at the field's typical speed
+  momentum: 0, // share of its heading a particle keeps per frame (0 = follows the field exactly)
   trail: 50, // positions kept per particle
   width: 2, // line width, px
   opacity: 0.35,
@@ -99,7 +100,25 @@ export const flowState = {
   colormap: "blues",
   detail: -1, // field zoom relative to the map's: -2 coarse, -1 normal, 0 fine
   debug: "off", // overlay: "off" | "rgb" (raw DEM tiles) | "dir" (routed direction grid)
+  compute: "gpu", // "gpu": WebGPU compute shader when available | "cpu"
   field: null,
+};
+
+// Particle erosion (src/flow/, ui/erosionpanel.js): settings for the flow
+// particles' interaction and erosion, and the terrain brushes. Applies only
+// while the panel is open (`active`); terrain edits stay until reset.
+export const erosionState = {
+  active: false,
+  range: 8, // css px: particles about this close share their speed
+  transfer: 0.1, // share of the gap to the neighbours' mean speed closed per frame
+  rate: 0.05, // m eroded per unit of speed lost (1 = a typical particle's speed)
+  hardness: 2, // steeper ground resists: erodibility 1 / (1 + hardness · slope / 5%)
+  deposit: 0.002, // m of carried sediment dropped per frame
+  interval: 2, // s between applying erosion to the terrain and rerouting
+  tool: "none", // brush: "none" | "raise" | "lower" | "rain"
+  size: 80, // brush diameter, css px
+  strength: 20, // m a second raised or lowered at the brush centre
+  rain: null, // { x, y, r } (Mercator) while the rain brush is held
 };
 
 // The MapLibre map instance. It's created asynchronously in map/init.js;
