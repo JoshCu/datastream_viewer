@@ -96,6 +96,19 @@ export async function listTrouteFileUrls(vpuPath) {
     .map((f) => `${base}/${f}`);
 }
 
+// The hourly grid files (interp_YYYY-MM-DD_HH.nc) anywhere under a qkrig
+// folder: a day (qkrig.YYYYMMDD/, one HH/ folder per hour) or one hour. A day
+// is 48 keys, well inside one listing page.
+export async function listGridFileUrls(path) {
+  const xml = await listXml(path);
+  const base = objectBase(s3State.currentBucket);
+  return Array.from(xml.querySelectorAll("Contents > Key"))
+    .map((k) => k.textContent)
+    .filter((f) => /\/interp_[^/]*\.nc$/.test(f))
+    .sort()
+    .map((f) => `${base}/${f}`);
+}
+
 // One level of `bucket` under `prefix`: its folders plus the files directly
 // in it, each file with its download URL.
 export async function listS3Level(prefix, bucket) {

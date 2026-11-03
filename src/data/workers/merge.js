@@ -60,13 +60,20 @@ export function mergeDatasets(datasets) {
     }
   }
 
+  // A gridded run (parsers/grid.js) is one file per hour: its reference is
+  // the first hour, and its grid and labels ride along.
+  const d0 = datasets[0];
+  const grid = d0?.reaches === "grid";
   return {
     time,
     timeAbsolute,
     nTimes,
     featureIds,
     matrices,
-    refTime: datasets[0]?.refTime,
+    refTime: grid && timeAbsolute && nTimes ? new Date(time[0]).toISOString() : d0?.refTime,
+    reaches: d0?.reaches,
+    grid: d0?.grid,
+    variableInfo: d0?.variableInfo,
   };
 }
 

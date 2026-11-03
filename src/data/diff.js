@@ -11,6 +11,10 @@
 import { FILL_VALUE, VARIABLE_KEYS, isValid } from "../config.js";
 
 export function diffDatasets(a, b) {
+  // Ids only mean the same thing on the same network (config.REACH_SETS).
+  if ((a.reaches ?? "hydrofabric") !== (b.reaches ?? "hydrofabric")) {
+    throw new Error("The two sources are on different networks");
+  }
   // Feature intersection: only reaches present in both sources are
   // comparable. Order follows A for a stable, deterministic result.
   const featureIds = [];
@@ -89,6 +93,9 @@ export function diffDatasets(a, b) {
       shared.map((v) => [v, diffBounds(matrices[v])]),
     ),
     refTime: a.refTime,
+    reaches: a.reaches,
+    grid: a.grid,
+    variableInfo: a.variableInfo,
   };
 }
 

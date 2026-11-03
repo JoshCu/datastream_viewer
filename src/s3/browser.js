@@ -2,7 +2,7 @@
 // S3 browser UI: bucket/folder navigation, breadcrumb, file picker.
 // ====================================================================
 import { s3State } from "../state.js";
-import { fetchS3Folders, listTrouteFileUrls } from "./client.js";
+import { fetchS3Folders, listTrouteFileUrls, listGridFileUrls } from "./client.js";
 import { loadFiles } from "../data/loader.js";
 import { setStatus } from "../ui/panels.js";
 import { escapeHtml } from "../ui/dom.js";
@@ -109,11 +109,13 @@ async function listS3Folder(prefix) {
   }
 }
 
-async function listTrouteFiles(vpuPath) {
-  setStatus("loading", "Loading T-Route files...");
+// A run's loadable files, listed into the file picker: a VPU's t-route
+// output, or a qkrig day's (or hour's) grids.
+async function listTrouteFiles(vpuPath, { list = listTrouteFileUrls, noun = "T-Route" } = {}) {
+  setStatus("loading", `Loading ${noun} files...`);
 
   try {
-    const urls = await listTrouteFileUrls(vpuPath);
+    const urls = await list(vpuPath);
     const files = urls.map((u) => ({ name: u.split("/").pop(), url: u }));
 
     const fileSection = document.getElementById("fileSection");
@@ -134,7 +136,7 @@ async function listTrouteFiles(vpuPath) {
     fileCount.textContent = `${files.length} files`;
     fileSection.style.display = "block";
 
-    setStatus("success", `Found ${files.length} T-Route files`);
+    setStatus("success", `Found ${files.length} ${noun} files`);
   } catch (error) {
     console.error("Error listing T-Route files:", error);
     setStatus("error", `Error loading files: ${error.message}`);
@@ -187,7 +189,16 @@ function handleFolderClick(path, name) {
   s3State.pathSegments = pathParts;
   const currentSegment = pathParts[currentDepth];
 
-  if (currentSegment.split("_")[0] === "VPU") {
+  // A qkrig day (qkrig.YYYYMMDD) or an hour folder inside one: its hourly
+  // grids load as one run.
+  const qkrigDay = pathParts.findIndex((p) => isQkrigDay(p));
+  if (qkrigDay >= 0 && qkrigDay >= currentDepth - 1) {
+    listTrouteFiles(path, { list: listGridFileUrls, noun: "qkrig grid" });
+    document.getElementById("folderList").innerHTML =
+      `<div class="folder-empty">${qkrigDay === currentDepth ? "Day" : "Hour"} selected - load its grids below</div>`;
+    s3State.currentPath = path;
+    updateBreadcrumb();
+  } else if (currentSegment.split("_")[0] === "VPU") {
     // VPU level: list its t-route files.
     listTrouteFiles(path);
     document.getElementById("folderList").innerHTML =
@@ -261,6 +272,8 @@ const isDateFolder = (name) => /\d{8}/.test(name); // ngen.20260720
 const isRangeFolder = (name) => /_range$/i.test(name) || /^analysis/i.test(name);
 const isCycleFolder = (name) => /^\d+$/.test(name); // 00, 06, 18
 const isVpuFolder = (name) => /^VPU[_-]/i.test(name);
+// outputs/qkrig/qkrig.YYYYMMDD/HH/interp_*.nc (data/workers/parsers/grid.js)
+const isQkrigDay = (name) => /^qkrig\.\d{8}$/.test(name);
 const dateKey = (name) => {
   const m = name.match(/(\d{8})/);
   return m ? parseInt(m[1], 10) : 0;

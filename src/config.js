@@ -63,6 +63,25 @@ export const REACH_SETS = {
     hoverLayer: "nwm-flowlines-hover",
     label: (id) => `COMID ${id}`,
   },
+  // A gridded run's cells (qkrig; data/workers/parsers/grid.js): a GeoJSON
+  // source of one square per cell that map/grid.js fills in when the run
+  // loads. `fill` marks a polygon layer (fill-color, no width); the fill is
+  // its own hover layer.
+  grid: {
+    key: "grid",
+    feature: { source: "grid-cells" },
+    layer: "grid-cells",
+    hoverLayer: "grid-cells",
+    fill: true,
+    label: (id, data) => {
+      const g = data?.grid;
+      if (!g) return `cell ${id}`;
+      const i = id - 1;
+      const lat = g.lat[Math.floor(i / g.lon.length)];
+      const lon = g.lon[i % g.lon.length];
+      return `cell ${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+    },
+  },
 };
 // The network a dataset's ids belong to (hydrofabric unless it says otherwise).
 export function reachSetOf(data) {

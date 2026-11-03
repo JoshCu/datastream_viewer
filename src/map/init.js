@@ -60,6 +60,7 @@ import { setupContextMenu } from "../ui/contextmenu.js";
 import { setupNexradPanel } from "../ui/nexradpanel.js";
 import { setupWindsPanel } from "../ui/windspanel.js";
 import { setupFloodPanel } from "../ui/floodpanel.js";
+import { syncGridToDataset } from "./grid.js";
 import { setupFlowPanel } from "../ui/flowpanel.js";
 import { setupErosionPanel } from "../ui/erosionpanel.js";
 import { setRunColormapId } from "../ui/colormap.js";
@@ -83,6 +84,7 @@ export function init() {
   onActiveDatasetChange(invalidateOverview);
   onActiveDatasetChange(syncPanelsToDataset);
   onActiveDatasetChange(syncTimeToDataset);
+  onActiveDatasetChange(syncGridToDataset); // before paint: it adds the layer painted
   onActiveDatasetChange(syncPaintToDataset);
   onActiveDatasetChange(updateGageFilter);
 

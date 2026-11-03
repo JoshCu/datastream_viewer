@@ -4,8 +4,8 @@
 // observations when one sits on it.
 // ====================================================================
 import { state } from "../state.js";
-import { VARIABLES, REACH_SETS, isValid, reachSetOf } from "../config.js";
-import { valueAt } from "../data/access.js";
+import { REACH_SETS, isValid, reachSetOf } from "../config.js";
+import { valueAt, variableInfo } from "../data/access.js";
 import { gageSiteForReach } from "../map/gages.js";
 import { labeledRows } from "./dom.js";
 import { openHydrograph } from "./hydrograph.js";
@@ -13,9 +13,9 @@ import { openHydrograph } from "./hydrograph.js";
 export function showFeatureInfo(feature) {
   const id = feature.id;
   const row = state.data.index.get(id);
-  document.getElementById("info-id").textContent = reachSetOf(state.data).label(id);
+  document.getElementById("info-id").textContent = reachSetOf(state.data).label(id, state.data);
 
-  const { label, units } = VARIABLES[state.variable];
+  const { label, units } = variableInfo(state.variable);
   const value =
     row === undefined
       ? undefined
@@ -40,9 +40,12 @@ export function showFeatureInfo(feature) {
 
   // An NWM reach names its USGS gage in the tile (`gages`, omitted when it
   // has none); hydrofabric gages come from the gage layer.
+  const set = reachSetOf(state.data);
   const site =
-    reachSetOf(state.data) === REACH_SETS.nwm
+    set === REACH_SETS.nwm
       ? feature.properties?.gages || null
-      : gageSiteForReach(id);
+      : set === REACH_SETS.grid
+        ? null // grid cells have no gages
+        : gageSiteForReach(id);
   openHydrograph({ reachId: id, site });
 }

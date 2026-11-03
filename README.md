@@ -11,6 +11,10 @@ velocity / depth on the hydrofabric flowpaths over time.
 
 - **S3 browser** — navigate bucket → cycle → VPU folders and pick a t-route
   output file, or load an entire CONUS cycle at once.
+- **qkrig grids** — `outputs/qkrig/qkrig.YYYYMMDD/` holds hourly USGS
+  streamflow kriged onto a 200 × 200 lat/lon grid (mm/h). Picking a day (or
+  one hour folder) loads its grids as one run, drawn as filled cells with the
+  same colour scales, playback, tooltip and hydrograph as a t-route run.
 - **NWM forecasts** — the NWM Forecast panel loads operational NWM v3
   channel output (short range, medium range per member or blended, long
   range per member, or the last 48 hours of analysis) straight from the
@@ -165,6 +169,7 @@ src/
     basemap-style.js          merges the hydrofabric layers into the base style
     init.js                   creates the map, binds map + DOM event listeners
     paint.js                  results paint expression + per-reach feature-state
+    grid.js                   a gridded (qkrig) run's cells as a GeoJSON fill layer
     statepainter.js           on-screen feature-state painter (reaches + catchments)
     interactions.js           hover tooltip, click info, catchment click, upstream highlight
     deck.js                   deck.gl loader + one MapboxOverlay per mode (NEXRAD, flow particles)
@@ -207,6 +212,7 @@ src/
       flowterrain.js          terrain-edit deltas: resampling onto a grid, DEM + PNG encoding (pure)
       parsers/
         netcdf.js             NetCDF4/HDF5 parser (worker-side, pure)
+        grid.js               qkrig hourly lat/lon grid → one dataset of cells
         parquet.js            Parquet parser (worker-side, pure)
   ui/
     dom.js                    shared row/button builders + escaping (leaf)

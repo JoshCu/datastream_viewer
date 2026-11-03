@@ -5,6 +5,7 @@
 // direct CDN dependency and stays easy to reason about.
 // ====================================================================
 import { VARIABLE_KEYS, refTimeMillis } from "../../../config.js";
+import { isGridFile, parseGridFile } from "./grid.js";
 
 // Canonical dataset shape returned by every parser and consumed by
 // mergeDatasets() and finalizeData():
@@ -20,13 +21,16 @@ export async function parseNetCDF(url, hdf5) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
   const arrayBuffer = await response.arrayBuffer();
-  return parseNetCDFBuffer(arrayBuffer, hdf5);
+  return parseNetCDFBuffer(arrayBuffer, hdf5, url);
 }
 
 // Same as parseNetCDF(), but for a buffer already in hand (e.g. a local file
-// upload) rather than one that needs to be fetched.
-export function parseNetCDFBuffer(arrayBuffer, hdf5) {
+// upload) rather than one that needs to be fetched. A qkrig grid (no
+// feature_id; see grid.js) goes to its own parser; `filename` is its fallback
+// for the hour.
+export function parseNetCDFBuffer(arrayBuffer, hdf5, filename) {
   const file = new hdf5.File(arrayBuffer);
+  if (isGridFile(file)) return parseGridFile(file, filename);
 
   const raw = Array.from(file.get("time")?.value || []);
   const featureIds = Array.from(file.get("feature_id")?.value || []).map(

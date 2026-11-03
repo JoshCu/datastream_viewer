@@ -276,7 +276,7 @@ export function setupFloodPanel() {
   $("floodDepthFrom").addEventListener("change", (e) => setFimDepthFrom(e.target.value));
   // The depth choice only applies to an ngen run (an NWM run has no depth).
   onActiveDatasetChange(({ data }) => {
-    $("floodDepthFromRow").style.display = data && data.reaches !== "nwm" && !data.isDiff ? "" : "none";
+    $("floodDepthFromRow").style.display = data && !data.reaches && !data.isDiff ? "" : "none";
   });
   $("floodLevel").addEventListener("input", (e) => setLevel(baseElev() + Number(e.target.value)));
   $("floodLevelInput").addEventListener("change", (e) => {

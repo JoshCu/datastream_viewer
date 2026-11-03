@@ -10,7 +10,7 @@
 // dataset that isn't the active one.
 // ====================================================================
 import { state } from "../state.js";
-import { isValid, VARIABLE_KEYS } from "../config.js";
+import { isValid, VARIABLE_KEYS, VARIABLES } from "../config.js";
 
 // Whether a dataset carries `variable`. A run may leave variables out (NWM
 // output has no depth): its `matrices` then simply lacks the key, and every
@@ -21,6 +21,12 @@ export function hasVariable(variable, data = state.data) {
 
 export function datasetVariables(data = state.data) {
   return VARIABLE_KEYS.filter((v) => hasVariable(v, data));
+}
+
+// { label, units } of a variable in a dataset: config.VARIABLES unless the
+// run says otherwise (a qkrig grid's flow slot is streamflow in mm/h).
+export function variableInfo(variable, data = state.data) {
+  return data?.variableInfo?.[variable] ?? VARIABLES[variable];
 }
 
 export function valueAt(variable, row, timeIndex, data = state.data) {

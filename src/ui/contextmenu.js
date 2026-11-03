@@ -88,7 +88,7 @@ function itemsAt(point, lngLat) {
     );
   }
   if (reach) {
-    items.push({ label: `Hydrograph for ${reachSetOf(state.data).label(reach.id)}`, action: () => showFeatureInfo(reach) });
+    items.push({ label: `Hydrograph for ${reachSetOf(state.data).label(reach.id, state.data)}`, action: () => showFeatureInfo(reach) });
   }
   if (catchment) {
     items.push({

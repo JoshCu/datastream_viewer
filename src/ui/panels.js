@@ -2,9 +2,9 @@
 // Sidebar panels: data info summary, legend, scale picker, status lines
 // ====================================================================
 import { state } from "../state.js";
-import { VARIABLES, SCALE_LABELS } from "../config.js";
+import { SCALE_LABELS } from "../config.js";
 import { colormapGradient } from "../color/colormaps.js";
-import { hasVariable } from "../data/access.js";
+import { hasVariable, variableInfo } from "../data/access.js";
 import { fillColormapSelect, runColormapId, runColors } from "./colormap.js";
 import { initialOpenPanels, syncUrl } from "./url.js";
 
@@ -95,7 +95,7 @@ export function updateDataInfo() {
 export function updateLegend() {
   if (!state.data) return;
   const bounds = state.data.bounds[state.variable];
-  const { label, units } = VARIABLES[state.variable];
+  const { label, units } = variableInfo(state.variable);
 
   document.getElementById("legendGradient").style.background =
     colormapGradient(runColors());
@@ -124,7 +124,10 @@ function syncColormapSelect(data) {
 // the paint subscriber, so the new run is painted with it.
 function syncVariableButtons(data) {
   const buttons = [...document.querySelectorAll("#varSelector .var-btn")];
-  for (const btn of buttons) btn.disabled = !hasVariable(btn.dataset.var, data);
+  for (const btn of buttons) {
+    btn.disabled = !hasVariable(btn.dataset.var, data);
+    btn.textContent = variableInfo(btn.dataset.var, data).label;
+  }
   if (!hasVariable(state.variable, data)) {
     const first = buttons.find((b) => !b.disabled);
     if (first) state.variable = first.dataset.var;

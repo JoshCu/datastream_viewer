@@ -22,7 +22,7 @@ export async function showGageInfo(feature) {
 
   document.getElementById("info-id").textContent = `USGS-${site}`;
   const content = document.getElementById("info-content");
-  content.replaceChildren(labeledRow("Reach", reachSetOf(state.data).label(reachId)));
+  content.replaceChildren(labeledRow("Reach", reachSetOf(state.data).label(reachId, state.data)));
   document.getElementById("info-panel").classList.add("visible");
 
   openHydrograph({ reachId, site });

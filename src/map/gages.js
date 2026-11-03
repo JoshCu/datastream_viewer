@@ -166,13 +166,15 @@ export function nwmReachForSite(site) {
 export function runReachOfGage(feature) {
   if (!state.data) return null;
   if (state.data.reaches === "nwm") return nwmReachForSite(siteFromGageFeature(feature)) ?? null;
+  if (state.data.reaches === "grid") return null;
   return feature.properties.id ?? null;
 }
 
 // Which of the gage tiles' points belong to the loaded run: by reach id for a
 // hydrofabric run, by site number for an NWM one.
 function runGageFilter() {
-  if (!state.data) return HIDDEN_FILTER;
+  // A grid's cell ids aren't reaches: it has no gages of its own.
+  if (!state.data || state.data.reaches === "grid") return HIDDEN_FILTER;
   if (state.data.reaches === "nwm") {
     harvestNwmGages();
     // match needs at least one label.

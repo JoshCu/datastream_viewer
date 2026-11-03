@@ -159,6 +159,11 @@ function finalizeData(dataset, bounds, options) {
       refTime: dataset.refTime,
       // Which reach network the ids are on (config.REACH_SETS); absent = hydrofabric.
       reaches: dataset.reaches,
+      // A gridded run's cell centres ({ lat, lon }; map/grid.js draws them).
+      grid: dataset.grid,
+      // Per-variable { label, units } overriding config.VARIABLES (a qkrig
+      // grid's flow slot is kriged streamflow in mm/h); see variableInfo().
+      variableInfo: dataset.variableInfo,
     },
     options,
   );

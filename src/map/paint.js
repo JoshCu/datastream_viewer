@@ -12,6 +12,7 @@ import { refreshTooltip } from "./interactions.js";
 import { createStatePainter } from "./statepainter.js";
 import { flowpathPaint, setFlowpathPaint } from "./flowpathstyle.js";
 import { runColors } from "../ui/colormap.js";
+import { gridBounds } from "./grid.js";
 
 // Feature-state for only the reaches on screen (see map/statepainter.js).
 // Feature-state persists once set, so panning to a new area (or a tile
@@ -69,19 +70,23 @@ const originalPaint = {};
 // Set once per variable; timestep changes only touch feature-state.
 export function applyResultsPaint() {
   if (!state.data) return;
-  const { layer } = reachSetOf(state.data);
+  const set = reachSetOf(state.data);
+  const { layer } = set;
   if (!map.getLayer(layer)) return;
+  const color = resultColorExpression(state.data, state.variable, state.scale, runColors());
+  // A gridded run's cells (map/grid.js) are a fill made for the run: no
+  // width, and nothing to restore.
+  if (set.fill) {
+    map.setPaintProperty(layer, "fill-color", color);
+    return;
+  }
 
   originalPaint[layer] ??= {
     "line-color": flowpathPaint("line-color", layer),
     "line-width": flowpathPaint("line-width", layer),
   };
 
-  setFlowpathPaint(
-    "line-color",
-    resultColorExpression(state.data, state.variable, state.scale, runColors()),
-    layer,
-  );
+  setFlowpathPaint("line-color", color, layer);
   setFlowpathPaint("line-width", resultWidthExpression(state.data, state.variable), layer);
 }
 
@@ -90,6 +95,10 @@ export function applyResultsPaint() {
 // skipping ids this run already thinks it painted.
 export function clearResultsPaint() {
   for (const set of Object.values(REACH_SETS)) {
+    if (set.fill) {
+      if (map.getSource(set.feature.source)) map.removeFeatureState(set.feature);
+      continue;
+    }
     const paint = originalPaint[set.layer];
     if (!paint) continue;
     delete originalPaint[set.layer];
@@ -151,6 +160,11 @@ export function sidebarFitOffset() {
 // measure — otherwise a close-up view would only ever fit to the handful of
 // reaches it happens to have loaded.
 export function fitToData(data) {
+  // A grid's extent is known without tiles.
+  if (data.grid) {
+    fitToLoadedTiles(data);
+    return;
+  }
   if (map.getZoom() > FIT_OVERVIEW_ZOOM) {
     map.jumpTo({ zoom: FIT_OVERVIEW_ZOOM });
     map.once("idle", () => fitToLoadedTiles(data));
@@ -160,6 +174,11 @@ export function fitToData(data) {
 }
 
 function fitToLoadedTiles(data) {
+  if (data.grid) {
+    const box = gridBounds(data);
+    if (box) map.fitBounds(box, { padding: 60, maxZoom: 10, offset: sidebarFitOffset() });
+    return;
+  }
   const { source, sourceLayer } = reachSetOf(data).feature;
   const features = map.querySourceFeatures(source, { sourceLayer });
   let minX = Infinity,

@@ -182,6 +182,25 @@ the worker a per-catchment (cat-N → wb-N) qlat table per forcing hour; the
 worker floors each reach's qlat at that value before every 5-min step on its
 own clock and loops the series when it runs out.
 
+### Gridded runs: qkrig (`data/workers/parsers/grid.js`, `map/grid.js`)
+
+`outputs/qkrig/qkrig.YYYYMMDD/HH/interp_YYYY-MM-DD_HH.nc` is one hour of
+USGS streamflow kriged onto a regular 200 × 200 lat/lon grid (`z_interp`,
+mm/h, NaN outside the kriged area; no time variable — the hour is the
+`date`/`hour` global attributes). `parseNetCDFBuffer` hands any file with
+`z_interp` to the grid parser, which makes the cells the features (id =
+latRow × nLon + lonCol + 1, only cells with a value) on the `grid` reach set
+with `reaches: "grid"`, the centres in `data.grid`, and the value in the
+`flow` slot relabelled through `data.variableInfo` — so read a variable's
+label/units with `variableInfo()` (`data/access.js`), not `VARIABLES`
+directly. `mergeDatasets` unions a day's hours as it does VPUs. `map/grid.js`
+builds a GeoJSON square per cell when such a run becomes active (subscribed
+before the paint), and the ordinary painter colours it (`fill: true` on the
+set: `fill-color`, no width). Grid ids collide with wb-N/COMID numbers, so
+anything matching ids across runs (gages, hydrograph series, diffs) checks
+the network first. The S3 browser lists a day's or an hour's grids into the
+file picker.
+
 ### NWM forecasts (`data/nwm.js`, `data/workers/nwm.js`, `ui/nwmpanel.js`)
 
 An NWM run is an ordinary dataset with `reaches: "nwm"` and no `depth`,

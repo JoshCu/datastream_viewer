@@ -18,7 +18,6 @@
 // ====================================================================
 import { state } from "../state.js";
 import {
-  VARIABLES,
   SERIES_COLORS,
   SERIES_OVERFLOW_COLOR,
   OBS_COLOR,
@@ -29,7 +28,7 @@ import {
   reachSetOf,
 } from "../config.js";
 import { retroEstimate, retroSeries } from "../data/retro.js";
-import { seriesAt } from "../data/access.js";
+import { seriesAt, variableInfo } from "../data/access.js";
 import { colormapColors } from "../color/colormaps.js";
 import { listSources, onSourcesChange } from "../data/sources.js";
 import { setTimeIndex } from "./time.js";
@@ -292,7 +291,19 @@ export function openHydrograph({ reachId, site = null, reaches }) {
 
 function targetLabel() {
   const set = REACH_SETS[view.target?.reaches] ?? reachSetOf(state.data);
-  return set.label(view.target.reachId);
+  return set.label(view.target.reachId, targetDataset());
+}
+
+const reachKey = (data) => reachSetOf(data).key;
+
+// A loaded run on the target's network: what labels its reach and variable.
+function targetDataset() {
+  if (state.data && reachKey(state.data) === view.target?.reaches) return state.data;
+  return listSources().find((s) => reachKey(s.dataset) === view.target?.reaches)?.dataset ?? null;
+}
+
+function targetVariableInfo() {
+  return variableInfo(view.variable, targetDataset());
 }
 
 export function closeHydrograph() {
@@ -431,9 +442,11 @@ function obsStatusFor(site) {
 async function rebuild() {
   const seq = ++requestSeq;
   const { reachId, site } = view.target;
-  els.dock.querySelectorAll(".hydro-var-btn").forEach((b) =>
-    b.classList.toggle("active", b.dataset.var === view.variable),
-  );
+  const labelsFrom = targetDataset();
+  els.dock.querySelectorAll(".hydro-var-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.var === view.variable);
+    b.textContent = variableInfo(b.dataset.var, labelsFrom).label;
+  });
 
   view.series = modelSeries(reachId, view.variable);
   const retro = view.retro;
@@ -491,6 +504,9 @@ async function rebuild() {
 function modelSeries(reachId, variable) {
   const out = [];
   for (const src of listSources()) {
+    // Ids are only comparable within one network (a grid cell number can
+    // equal a wb-N or a COMID).
+    if (reachKey(src.dataset) !== view.target.reaches) continue;
     // seriesAt returns null for a reach the run doesn't have, and for a run
     // with no absolute clock — neither can share this axis.
     const series = seriesAt(src.dataset, reachId, variable);
@@ -840,7 +856,7 @@ function render() {
   const diffH = diff ? Math.round((plotH - DIFF_GAP) * 0.32) : 0;
   const mainH = diff ? plotH - DIFF_GAP - diffH : plotH;
   const diffTop = mainH + DIFF_GAP;
-  const { units, label } = VARIABLES[view.variable];
+  const { units, label } = targetVariableInfo();
 
   const x = d3.scaleUtc().domain(view.domain).range([0, innerW]);
   const log = view.logY;
@@ -1033,7 +1049,7 @@ function drawHover() {
 }
 
 function renderTooltip(snap, rows, diffPoint, sx) {
-  const { units } = VARIABLES[view.variable];
+  const { units } = targetVariableInfo();
   const head = document.createElement("div");
   head.className = "hydro-tt-time";
   head.textContent = fmtTime(new Date(snap));

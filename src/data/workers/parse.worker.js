@@ -138,7 +138,7 @@ async function parseLocal(buffer, filename) {
   if (filename.toLowerCase().endsWith(".parquet")) {
     return parseParquetBuffer(new Uint8Array(buffer), await loadParquetWasm());
   }
-  return parseNetCDFBuffer(buffer, await loadHdf5());
+  return parseNetCDFBuffer(buffer, await loadHdf5(), filename);
 }
 
 // Buffers to hand off when returning a dataset (avoids a structured-clone copy).

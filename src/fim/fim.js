@@ -371,6 +371,7 @@ function rowsFor(data) {
 function runMode(data) {
   if (!data) return { problem: "Load a run (NWM Forecast panel, or an ngen output) to map its flooding" };
   if (data.isDiff) return { problem: "A diff has no stage to map" };
+  if (data.reaches === "grid") return { problem: "A gridded run has no reaches to map" };
   const flowVel = hasVariable("flow", data) && hasVariable("velocity", data);
   if (data.reaches === "nwm") {
     return flowVel ? { mode: "flowvel" } : { problem: "The run needs flow and velocity" };

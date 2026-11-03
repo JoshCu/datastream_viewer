@@ -18,7 +18,7 @@ import {
   VARIABLES,
   isValid,
 } from "../config.js";
-import { valueAt, dataTimeRangeMs, hasVariable } from "../data/access.js";
+import { valueAt, dataTimeRangeMs, hasVariable, variableInfo } from "../data/access.js";
 import { fetchGageMeta, peekGageMeta } from "../data/usgs.js";
 import { catalogMeta } from "../data/usgscatalog.js";
 import { siteFromGageFeature, runReachOfGage } from "./gages.js";
@@ -235,7 +235,8 @@ let highlighted = null;
 
 function highlightReach(set, id) {
   if (highlighted?.set === set && highlighted?.id === id) return;
-  if (highlighted) {
+  // A gridded run's source (map/grid.js) goes away with the run.
+  if (highlighted && map.getSource(highlighted.set.feature.source)) {
     map.setFeatureState({ ...highlighted.set.feature, id: highlighted.id }, { hover: false });
   }
   highlighted = id == null ? null : { set, id };
@@ -296,14 +297,15 @@ export function onFlowpathLeave(set) {
 
 function updateTooltipContent() {
   const { set, id, properties, withData } = hoveredReach;
-  document.getElementById("tooltipTitle").textContent = set.label(id);
+  document.getElementById("tooltipTitle").textContent = set.label(id, state.data);
   const rows = [];
   if (withData) {
     const row = state.data.index.get(id);
     // One row per variable the run has, so adding a variable to
     // config.VARIABLES is all it takes to show up here.
-    for (const [key, { label, units }] of Object.entries(VARIABLES)) {
+    for (const key of Object.keys(VARIABLES)) {
       if (!hasVariable(key)) continue;
+      const { label, units } = variableInfo(key);
       const v = row === undefined ? undefined : valueAt(key, row, state.timeIndex);
       const text = v !== undefined && isValid(v) ? `${v.toFixed(3)} ${units}` : "N/A";
       rows.push(labeledRow(label, text, { prefix: "tooltip" }));
@@ -393,7 +395,7 @@ export function onUsgsSiteHover(e) {
 // The run's reach a gage dot sits on, as its network names it, or null.
 function runReachName(feature) {
   const reachId = runReachOfGage(feature);
-  return reachId == null ? null : reachSetOf(state.data).label(reachId);
+  return reachId == null ? null : reachSetOf(state.data).label(reachId, state.data);
 }
 
 // `reachName` labels the run's reach under the gage (null for a catalog dot).
