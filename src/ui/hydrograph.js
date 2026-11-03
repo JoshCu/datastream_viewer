@@ -23,8 +23,12 @@ import {
   SERIES_OVERFLOW_COLOR,
   OBS_COLOR,
   CURRENT_TIME_COLOR,
+  RETRO_COLOR,
+  RETRO_VARIABLES,
+  REACH_SETS,
   reachSetOf,
 } from "../config.js";
+import { retroEstimate, retroSeries } from "../data/retro.js";
 import { seriesAt } from "../data/access.js";
 import { colormapColors } from "../color/colormaps.js";
 import { listSources, onSourcesChange } from "../data/sources.js";
@@ -38,6 +42,8 @@ import {
 } from "../data/metrics.js";
 
 const OBS_KEY = "obs";
+const RETRO_KEY = "retro";
+const DAY_MS = 24 * 3600 * 1000;
 const MARGIN = { top: 10, right: 16, bottom: 24, left: 60 };
 const DIFF_GAP = 16; // vertical space between the main plot and the diff strip
 const MIN_SPAN_MS = 30 * 60 * 1000;
@@ -49,7 +55,10 @@ const METRICS_DEBOUNCE_MS = 120;
 const DIFF_LINE_COLOR = "#c3cad3";
 
 const view = {
-  target: null, // { reachId, site }
+  target: null, // { reachId, site, reaches } (reaches: a REACH_SETS key)
+  // The NWM retrospective series last loaded: { reachId, variable, label,
+  // times, values }, shown while it matches the target and variable.
+  retro: null,
   variable: "flow",
   series: [], // [{ key, label, kind: "model"|"obs", color, dashed, times, values, step }]
   obsStatus: "",
@@ -127,7 +136,13 @@ export function setupHydrograph() {
     selectB: $("hydro-compare-b"),
     diffToggle: $("hydro-diff-toggle"),
     compareTable: $("hydro-compare-table"),
+    retroSection: $("hydro-retro-section"),
+    retroFrom: $("hydro-retro-from"),
+    retroTo: $("hydro-retro-to"),
+    retroLoad: $("hydro-retro-load"),
+    retroNote: $("hydro-retro-note"),
   };
+  setupRetro();
 
   buildSkeleton();
 
@@ -150,6 +165,7 @@ export function setupHydrograph() {
       if (btn.dataset.var === view.variable) return;
       view.variable = btn.dataset.var;
       rebuild();
+      if (view.target?.reaches === "nwm") scheduleRetroEstimate();
     }),
   );
 
@@ -242,10 +258,10 @@ function buildSkeleton() {
 
 // Chart `reachId` from every loaded run; `site` (USGS site number, or null)
 // adds the gage's observed discharge and the vs-observed skill table.
-export function openHydrograph({ reachId, site = null }) {
+export function openHydrograph({ reachId, site = null, reaches }) {
   // The forcing plot shares the dock's spot; it closes itself on this.
   document.dispatchEvent(new CustomEvent("dockopen", { detail: "hydro" }));
-  view.target = { reachId, site };
+  view.target = { reachId, site, reaches: reaches ?? reachSetOf(state.data).key };
   view.variable = site ? "flow" : state.variable;
   view.hidden.clear();
   view.domain = null;
@@ -255,8 +271,8 @@ export function openHydrograph({ reachId, site = null }) {
   els.diffToggle.checked = false;
   hoverPx = null;
 
-  // The reach's name on the active run's network (wb-N or COMID N).
-  const reachName = reachSetOf(state.data).label(reachId);
+  // The reach's name on its network (wb-N or COMID N).
+  const reachName = targetLabel();
   els.title.textContent = site ? `USGS-${site}` : reachName;
   els.subtitle.textContent = site ? reachName : "";
   if (site) {
@@ -270,7 +286,13 @@ export function openHydrograph({ reachId, site = null }) {
 
   els.dock.classList.add("visible");
   document.body.classList.add("hydro-open");
+  syncRetroSection();
   rebuild();
+}
+
+function targetLabel() {
+  const set = REACH_SETS[view.target?.reaches] ?? reachSetOf(state.data);
+  return set.label(view.target.reachId);
 }
 
 export function closeHydrograph() {
@@ -300,6 +322,102 @@ export function updateHydrographCursor() {
   if (view.target && geom) drawNowMarker();
 }
 
+// ---- NWM retrospective ------------------------------------------------
+//
+// For an NWM reach: a date range, its download size (HEAD per chunk), and a
+// Load that adds the retrospective as one more line. The range is kept
+// across reaches; it defaults to the record's last three months.
+
+let retroEstimateSeq = 0;
+let retroEstimateTimer = null;
+
+const dateMs = (input) => (input.value ? Date.parse(`${input.value}T00:00:00Z`) : NaN);
+
+function retroWindow() {
+  const from = dateMs(els.retroFrom);
+  const to = dateMs(els.retroTo);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return null;
+  return [from, to + DAY_MS - 1];
+}
+
+function fmtMB(b) {
+  return b < 1024 * 1024 ? `${(b / 1024).toFixed(0)} kB` : `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function setupRetro() {
+  els.retroFrom.value = "2022-11-01";
+  els.retroTo.value = "2023-01-31";
+  for (const input of [els.retroFrom, els.retroTo]) {
+    input.addEventListener("change", scheduleRetroEstimate);
+  }
+  els.retroLoad.addEventListener("click", loadRetro);
+}
+
+function retroApplies() {
+  return view.target?.reaches === "nwm" && !!RETRO_VARIABLES[view.variable];
+}
+
+function syncRetroSection() {
+  const nwm = view.target?.reaches === "nwm";
+  els.retroSection.style.display = nwm ? "" : "none";
+  if (nwm) scheduleRetroEstimate();
+}
+
+function scheduleRetroEstimate() {
+  clearTimeout(retroEstimateTimer);
+  retroEstimateTimer = setTimeout(updateRetroEstimate, 250);
+}
+
+async function updateRetroEstimate() {
+  const seq = ++retroEstimateSeq;
+  const win = retroWindow();
+  if (!retroApplies()) {
+    els.retroLoad.disabled = true;
+    els.retroNote.textContent = view.target?.reaches === "nwm" ? "Flow and velocity only" : "";
+    return;
+  }
+  if (!win) {
+    els.retroLoad.disabled = true;
+    els.retroNote.textContent = "Pick a date range";
+    return;
+  }
+  els.retroLoad.disabled = false;
+  els.retroNote.textContent = "Measuring…";
+  try {
+    const { chunks, bytes } = await retroEstimate(view.target.reachId, view.variable, ...win);
+    if (seq !== retroEstimateSeq) return;
+    els.retroNote.textContent = chunks
+      ? `${chunks} chunk${chunks === 1 ? "" : "s"} · ${fmtMB(bytes)}`
+      : "Outside the record (1979-02 to 2023-01)";
+    els.retroLoad.disabled = !chunks;
+  } catch (err) {
+    if (seq !== retroEstimateSeq) return;
+    els.retroNote.textContent = err.message;
+  }
+}
+
+async function loadRetro() {
+  const win = retroWindow();
+  if (!win || !retroApplies()) return;
+  const { reachId } = view.target;
+  const variable = view.variable;
+  els.retroLoad.disabled = true;
+  els.retroNote.textContent = "Loading…";
+  try {
+    const r = await retroSeries(reachId, variable, ...win);
+    view.retro = { reachId, variable, label: "NWM retrospective 3.0", times: r.times, values: r.values };
+    if (view.target?.reachId !== reachId) return;
+    els.retroNote.textContent = `Loaded ${r.chunks} chunk${r.chunks === 1 ? "" : "s"} · ${fmtMB(r.bytes)}`;
+    view.domain = null;
+    rebuild();
+  } catch (err) {
+    console.error("Retrospective load error:", err);
+    els.retroNote.textContent = err.message;
+  } finally {
+    els.retroLoad.disabled = false;
+  }
+}
+
 // ---- Series assembly -------------------------------------------------
 
 // What the obs line should say before any fetch resolves. Four independent
@@ -318,6 +436,19 @@ async function rebuild() {
   );
 
   view.series = modelSeries(reachId, view.variable);
+  const retro = view.retro;
+  if (retro && retro.reachId === reachId && retro.variable === view.variable) {
+    view.series.push({
+      key: RETRO_KEY,
+      label: retro.label,
+      kind: "model",
+      color: RETRO_COLOR,
+      dashed: false,
+      times: retro.times,
+      values: retro.values,
+      step: medianStep(retro.times),
+    });
+  }
   view.full = extentOf(view.series);
   clampDomain();
   view.obsStatus = obsStatusFor(site);
@@ -445,9 +576,11 @@ function renderLegend() {
   const empty = view.series.length === 0;
   els.empty.style.display = empty ? "" : "none";
   if (empty) {
-    els.empty.textContent = view.target
-      ? `No loaded run contains ${reachSetOf(state.data).label(view.target.reachId)}`
-      : "";
+    els.empty.textContent = !view.target
+      ? ""
+      : view.target.reaches === "nwm"
+        ? `No loaded run contains ${targetLabel()}; load the NWM retrospective (right)`
+        : `No loaded run contains ${targetLabel()}`;
   }
 }
 

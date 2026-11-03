@@ -28,6 +28,8 @@
 //     -> result { time, refTime, values: { key: Float32Array }, stats }
 //        (one channel_rt file; `rows` = sorted Int32Array of file rows or
 //        null for all; times in epoch ms; values unpacked, fill → FILL_VALUE)
+//   in  { id, type: "retroSeries", name, col, h0, h1 }
+//     -> result { times, values, bytes, chunks }        (data/workers/retro.js)
 //   in  { id, type: "usgsCatalog" }
 //     -> result { fetchedAt, params, sites }           (data/workers/usgscatalog.js)
 //   out { id, ok: true,  result }
@@ -43,10 +45,12 @@ import { decodeRecords } from "./nexrad.js";
 import { scanCatchmentIndex, readIndexRow } from "./hfindex.js";
 import { fetchUsgsCatalog } from "./usgscatalog.js";
 import { readNwmFeatureIds, readNwmSizes, readNwmHour } from "./nwm.js";
+import { readRetroSeries } from "./retro.js";
 
 let hdf5Promise = null;
 let parquetWasmPromise = null;
 let hyparquetPromise = null;
+let zstdPromise = null;
 
 // The main thread compiles the 6.5MB parquet-wasm binary once and ships the
 // resulting WebAssembly.Module to every worker (structured-clone shares the
@@ -98,6 +102,24 @@ function loadHyparquet() {
     });
   }
   return hyparquetPromise;
+}
+
+// zstddec: a 76 kB single-file ESM build with the wasm inlined, ~3 GB/s on
+// the retrospective's 80 MB chunks (fzstd, pure JS, ran ~5× slower).
+function loadZstd() {
+  if (!zstdPromise) {
+    zstdPromise = import("https://cdn.jsdelivr.net/npm/zstddec@0.3.4/dist/zstddec.mjs").then(
+      async (mod) => {
+        const decoder = new mod.ZSTDDecoder();
+        await decoder.init();
+        return decoder;
+      },
+    );
+    zstdPromise.catch(() => {
+      zstdPromise = null;
+    });
+  }
+  return zstdPromise;
 }
 
 async function parse(url) {
@@ -158,6 +180,11 @@ self.onmessage = async (e) => {
     if (type === "nwmHour") {
       const result = await readNwmHour(e.data);
       self.postMessage({ id, ok: true, result }, Object.values(result.values).map((v) => v.buffer));
+      return;
+    }
+    if (type === "retroSeries") {
+      const result = await readRetroSeries(e.data, await loadZstd());
+      self.postMessage({ id, ok: true, result }, [result.times.buffer, result.values.buffer]);
       return;
     }
     if (type === "usgsCatalog") {

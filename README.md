@@ -19,6 +19,10 @@ velocity / depth on the hydrofabric flowpaths over time.
   the reaches in view (or all of CONUS), and shows the download and memory
   cost before a big load. The run is painted on the NWM flowlines (COMID
   reaches, RouteLink attributes), a second river network with its own toggle.
+- **NWM retrospective** — click any NWM reach (with or without a run loaded)
+  and the hydrograph offers the NWM retrospective 3.0 (1979-02 to 2023-01)
+  for a chosen date range, with its download size measured first, alongside
+  the reach's USGS gage.
 - **Results playback** — scrub or auto-play through timesteps; the flowpaths
   recolor via MapLibre feature-state as reaches stream into view.
 - **Color scales** — linear, log, sqrt, cbrt, symlog, plus quantile / quantile-class
@@ -173,12 +177,14 @@ src/
     usgsdams.js               gages just below a dam / with no dams upstream (usgsdams.json)
     diff.js                   A − B diff of two loaded runs
     nwm.js                    NWM file names, newest cycle, COMID table cache, load plan + run
+    retro.js                  NWM retrospective single-reach series + HEAD-measured estimate
     loader.js                 load orchestration + the parse/merge worker pool
     workers/
       parse.worker.js         module worker hosting the parsers, merge + forcing fetches
       merge.js                mergeDatasets + bounds (worker-side, pure)
       hdf5layout.js           async HDF5 layout reader: forcing files + chunked NWM output (pure)
       nwm.js                  NWM channel_rt hour reads over range requests (pure)
+      retro.js                retrospective zarr chunk reads + column extraction (pure)
       forcing.js              forcing row fetch/decode over range requests (pure)
       hfindex.js              hydrofabric index lookups: catchment id → lon/lat (pure)
       usgscatalog.js          USGS site catalog fetch + station-name normalization (pure)

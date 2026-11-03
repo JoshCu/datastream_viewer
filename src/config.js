@@ -158,6 +158,9 @@ export const SERIES_COLORS = [
 export const SERIES_OVERFLOW_COLOR = "#8899aa";
 export const OBS_COLOR = "#e6edf5";
 export const CURRENT_TIME_COLOR = "#ffba08";
+// The NWM retrospective's line in the hydrograph: outside SERIES_COLORS so
+// it never matches a loaded run's colour.
+export const RETRO_COLOR = "#b39b00";
 
 // t-route writes file_reference_time as "YYYY-MM-DD HH:MM:SS" (sometimes with
 // "_" or "T" as the separator) and no timezone; it is UTC. Returns epoch ms, or
@@ -309,6 +312,25 @@ export const NWM_CONFIGS = {
 export const NWM_CONFIRM_BYTES = 150 * 1024 * 1024;
 // Concurrent hour files in flight (each one is a ~2–4 MB range read).
 export const NWM_FETCH_CONCURRENCY = 6;
+
+// ---- NWM retrospective 3.0 (src/data/retro.js) -------------------------
+//
+// chrtout.zarr: Zarr v2, every array zstd-compressed, (time × feature_id)
+// chunks of 672 h × 30,000 reaches, keys `<var>/<t>.<f>`. Its feature_id is
+// the operational COMID list in the same order (checked 2026-11-03), so a
+// reach's column is its operational file row. Values are int32 × 0.01 with
+// fill −999900, as in the operational files; time is hourly from
+// RETRO_T0_MS. See report.md "Retrospective 3.0".
+export const RETRO_BASE =
+  "https://noaa-nwm-retrospective-3-0-pds.s3.amazonaws.com/CONUS/zarr/chrtout.zarr";
+export const RETRO_VARIABLES = { flow: "streamflow", velocity: "velocity" };
+export const RETRO_T0_MS = Date.UTC(1979, 1, 1, 1); // hours since 1979-02-01T01:00Z
+export const RETRO_N_TIMES = 385704; // through 2023-02-01T00:00Z
+export const RETRO_CHUNK_T = 672;
+export const RETRO_CHUNK_F = 30000;
+// Compressed chunks run ~1–6 MB depending on the feature block and period,
+// so estimates HEAD each chunk rather than guess.
+export const RETRO_FETCH_CONCURRENCY = 4;
 
 // ---- Forcings (src/forcing/) -----------------------------------------
 //

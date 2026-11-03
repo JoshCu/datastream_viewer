@@ -151,7 +151,16 @@ async function dropFeatureIds() {
   await dbPut(IDS_KEY, null);
 }
 
-function rowOf(ids, comid) {
+// The table without a file in hand (the retrospective uses the same
+// order): read it, if it isn't cached, from a short-range file six hours
+// back, which is always published by then.
+export function nwmFeatureTable() {
+  const cycle = new Date(Math.floor(Date.now() / HOUR_MS) * HOUR_MS - 6 * HOUR_MS);
+  return nwmFeatureIds(nwmFileUrl("short_range", cycle, 1, 1));
+}
+
+// A COMID's row in the table, or -1.
+export function nwmRowOf(ids, comid) {
   let lo = 0;
   let hi = ids.length;
   while (lo < hi) {
@@ -180,7 +189,7 @@ export async function planNwmLoad({ files, variables, comids }) {
   if (comids) {
     const pairs = [];
     for (const c of new Set(comids)) {
-      const r = rowOf(ids, c);
+      const r = nwmRowOf(ids, c);
       if (r >= 0) pairs.push(r);
     }
     pairs.sort((a, b) => a - b);

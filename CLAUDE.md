@@ -204,6 +204,17 @@ in `NWM_CONFIGS` apply. File names are built
 from `NWM_CONFIGS`, not listed; the newest cycle is found by HEADing each
 candidate's last file.
 
+### NWM retrospective (`data/retro.js`, `data/workers/retro.js`)
+
+Single-reach series from the retrospective 3.0 `chrtout.zarr` for the
+hydrograph (its "NWM retrospective" section shows for NWM reaches, which can
+be clicked with no run loaded). The zarr's `feature_id` is the operational
+COMID list in the same order, so a reach's column is its row in the cached
+operational table (`nwmFeatureTable()`). A window costs one 672 h × 30,000
+reach chunk per 28 days, 1–8 MB each, so the estimate HEADs every chunk
+rather than guess. The worker decodes with zstddec (wasm, CDN, lazily
+loaded in `parse.worker.js`), one 80 MB chunk at a time.
+
 ### Forcings (`src/forcing/`)
 
 Another mode independent of `state.data`: ngen forcing files painted on the

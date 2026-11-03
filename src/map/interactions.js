@@ -24,6 +24,7 @@ import { catalogMeta } from "../data/usgscatalog.js";
 import { siteFromGageFeature } from "./gages.js";
 import { iconButton, labeledRow, fmtDay } from "../ui/dom.js";
 import { showFeatureInfo } from "../ui/infopanel.js";
+import { openHydrograph } from "../ui/hydrograph.js";
 import { showGageInfo, showSiteInfo } from "../ui/gagepanel.js";
 import { openForcingPlot } from "../ui/forcingplot.js";
 import { hasForcingSource } from "../forcing/loader.js";
@@ -327,11 +328,19 @@ export function refreshTooltip() {
 // ---- Click info panel ----------------------------------------------
 
 export function onFlowpathClick(e) {
-  if (!state.data || !e.features?.length || clickHitsGage(e)) return;
-  // Only the loaded run's network has a hydrograph to show.
+  if (!e.features?.length || clickHitsGage(e)) return;
   const feature = e.features[0];
-  if (reachSetForLayer(feature.layer.id) !== reachSetOf(state.data)) return;
-  showFeatureInfo(feature);
+  const set = reachSetForLayer(feature.layer.id);
+  if (state.data && set === reachSetOf(state.data)) {
+    showFeatureInfo(feature);
+    return;
+  }
+  // An NWM reach off the loaded run (or with none): its hydrograph can
+  // still show the NWM retrospective and its gage. Only the run's own
+  // network gets the info panel.
+  if (set === REACH_SETS.nwm) {
+    openHydrograph({ reachId: feature.id, site: feature.properties?.gages || null, reaches: "nwm" });
+  }
 }
 
 // ---- Gages: hover glow + tooltip, click -> hydrograph panel ---------

@@ -1290,6 +1290,21 @@
               </div>
             </div>
             <aside class="hydro-side">
+              <!-- NWM reaches only (ui/hydrograph.js, data/retro.js). -->
+              <div class="hydro-section" id="hydro-retro-section" style="display: none">
+                <div class="hydro-section-title">NWM retrospective 3.0</div>
+                <div class="hydro-compare-row">
+                  <input type="date" class="hydro-select" id="hydro-retro-from"
+                         min="1979-02-01" max="2023-01-31" title="From (UTC)" />
+                  <span>–</span>
+                  <input type="date" class="hydro-select" id="hydro-retro-to"
+                         min="1979-02-01" max="2023-01-31" title="To (UTC)" />
+                </div>
+                <div class="hydro-compare-row">
+                  <button class="hydro-chip" id="hydro-retro-load">Load</button>
+                  <span class="hydro-compare-hint" id="hydro-retro-note"></span>
+                </div>
+              </div>
               <div class="hydro-window-note">
                 Scores over the visible window <span id="hydro-window"></span>
               </div>
