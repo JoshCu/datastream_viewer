@@ -10,7 +10,18 @@
 // dataset that isn't the active one.
 // ====================================================================
 import { state } from "../state.js";
-import { isValid } from "../config.js";
+import { isValid, VARIABLE_KEYS } from "../config.js";
+
+// Whether a dataset carries `variable`. A run may leave variables out (NWM
+// output has no depth): its `matrices` then simply lacks the key, and every
+// list of variables offered for it goes through datasetVariables().
+export function hasVariable(variable, data = state.data) {
+  return !!data?.matrices?.[variable];
+}
+
+export function datasetVariables(data = state.data) {
+  return VARIABLE_KEYS.filter((v) => hasVariable(v, data));
+}
 
 export function valueAt(variable, row, timeIndex, data = state.data) {
   return data.matrices[variable][row * data.nTimes + timeIndex];
@@ -41,7 +52,7 @@ export function dataTimeRangeMs(data = state.data) {
 // not in what a series is.
 export function seriesAt(dataset, reachId, variable) {
   const row = dataset.index.get(reachId);
-  if (row === undefined || !dataset.timeAbsolute) return null;
+  if (row === undefined || !dataset.timeAbsolute || !hasVariable(variable, dataset)) return null;
   const n = dataset.nTimes;
   const m = dataset.matrices[variable];
   const base = row * n;

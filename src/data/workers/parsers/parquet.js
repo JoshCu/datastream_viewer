@@ -32,7 +32,9 @@ export function parseParquetBuffer(bytes, parquetWasm) {
 
   const timeVec = table.getChild("time");
   const featureVec = table.getChild("feature_id");
-  const vectors = VARIABLE_KEYS.map((v) => [v, table.getChild(v)]);
+  // Only the variables the file has columns for; the rest are left out of
+  // `matrices` rather than filled.
+  const vectors = VARIABLE_KEYS.map((v) => [v, table.getChild(v)]).filter(([, vec]) => vec);
 
   const numRows = table.numRows;
 
@@ -59,7 +61,7 @@ export function parseParquetBuffer(bytes, parquetWasm) {
   const featureIndexMap = new Map(sortedFeatureIds.map((id, i) => [id, i]));
 
   const matrices = Object.fromEntries(
-    VARIABLE_KEYS.map((v) => {
+    vectors.map(([v]) => {
       const a = new Float32Array(numFeatures * numTimes);
       a.fill(FILL_VALUE);
       return [v, a];

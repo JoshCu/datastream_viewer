@@ -58,6 +58,12 @@ where `refTime` is in hand). Nothing downstream branches on file format to
 decide the clock's units. A run whose reference time was unparseable keeps raw
 seconds and sets `timeAbsolute: false`.
 
+A run may leave variables out (NWM output has no depth): its `matrices` then
+lacks the key — parsers, merge and diff only build what's there — and anything
+listing variables for a run goes through `hasVariable` / `datasetVariables`
+(`data/access.js`). The variable picker disables the missing ones and switches
+off a missing current variable before the run is painted.
+
 Bounds, distribution samples, class breaks and per-timestep totals are derived
 from these matrices and cached per (dataset, variable) through
 **`derived(dataset, variable)`** in `data/access.js` — not bolted onto
@@ -87,6 +93,22 @@ or the viewport moves (wired in `map/init.js` via `movestart` / `idle` /
 own view-dirty flag, so there's no global one in `state.js`. When touching
 color scales or painting, preserve this: expression = per-variable,
 feature-state = per-timestep.
+
+**Two reach networks.** `REACH_SETS` in `config.js` lists them: the
+hydrofabric `flowpaths` (wb-N ids) and the NWM v3 `nwm-flowlines` (COMID ids,
+RouteLink v3.1.6 attributes, **MLT** tiles: `encoding: "mlt"` on the source).
+Each has a line layer, a fat invisible hover layer and an id label. A dataset
+names its network in `reaches` (absent = hydrofabric) and `reachSetOf(data)`
+resolves it; `map/paint.js` keeps one painter per network and only the active
+run's has anything to paint, the sourcedata handler only feeds tiles of
+`activeReachSource()`, and hover/click/`reachAt` follow the run's network.
+`flowpathstyle.js` keeps paint per line layer (`setFlowpathPaint(prop, value,
+layer)`). The live sim stays on the hydrofabric. NWM tile facts that matter:
+z0–6 carry only id + `order` (attributes start at z7, so width expressions
+`coalesce`), `lake`/`gages` are omitted when empty, z12 has extent 65,536,
+reaches shorter than a tile unit are missing below z12, and the tiles'
+`upstream_id`/`num_upstreams` are numbered over the NWM `to` tree, so they
+can't be compared with the hydrofabric divides'.
 
 The painter tracks a `paintedAll` flag plus a small delta set rather than a
 per-id `Set`: on a bare timestep change every on-screen feature must be

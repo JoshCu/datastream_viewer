@@ -23,6 +23,7 @@ import {
   SERIES_OVERFLOW_COLOR,
   OBS_COLOR,
   CURRENT_TIME_COLOR,
+  reachSetOf,
 } from "../config.js";
 import { seriesAt } from "../data/access.js";
 import { colormapColors } from "../color/colormaps.js";
@@ -254,13 +255,15 @@ export function openHydrograph({ reachId, site = null }) {
   els.diffToggle.checked = false;
   hoverPx = null;
 
-  els.title.textContent = site ? `USGS-${site}` : `wb-${reachId}`;
-  els.subtitle.textContent = site ? `wb-${reachId}` : "";
+  // The reach's name on the active run's network (wb-N or COMID N).
+  const reachName = reachSetOf(state.data).label(reachId);
+  els.title.textContent = site ? `USGS-${site}` : reachName;
+  els.subtitle.textContent = site ? reachName : "";
   if (site) {
     fetchGageMeta(site)
       .then((meta) => {
         if (view.target?.reachId !== reachId || !meta.name) return;
-        els.subtitle.textContent = `${meta.name} · wb-${reachId}`;
+        els.subtitle.textContent = `${meta.name} · ${reachName}`;
       })
       .catch(() => {});
   }
@@ -443,7 +446,7 @@ function renderLegend() {
   els.empty.style.display = empty ? "" : "none";
   if (empty) {
     els.empty.textContent = view.target
-      ? `No loaded run contains wb-${view.target.reachId}`
+      ? `No loaded run contains ${reachSetOf(state.data).label(view.target.reachId)}`
       : "";
   }
 }

@@ -17,7 +17,19 @@ import {
   FLOOD_LAYER,
   GAGE_ICON,
 } from "../config.js";
-import { BASE_FLOWPATH_PAINT, withHover } from "./flowpathstyle.js";
+import { BASE_FLOWPATH_PAINT, BASE_NWM_PAINT, withHover } from "./flowpathstyle.js";
+
+// Fade orders in progressively instead of popping. Both networks thin by
+// order at low zoom on roughly the same schedule.
+const ORDER_FADE_OPACITY = [
+  "interpolate", ["linear"], ["zoom"],
+  1.3, 0,
+  3,   ["step", ["get", "order"], 0, 6, 1],   // order 6+
+  5,   ["step", ["get", "order"], 0, 4, 1],   // order 4+ (3 starts fading in)
+  6,   ["step", ["get", "order"], 0, 3, 1],   // order 3+; order 2 held at 0 as it appears
+  7,   ["step", ["get", "order"], 0, 2, 1],   // order 2 faded in; order 1 held at 0 as it appears
+  8,   1,                                      // order 1 faded in
+];
 
 export function updateIncomingStyle(previousStyle, nextStyle) {
   const s3_url = "https://communityhydrofabric.s3.us-east-1.amazonaws.com/map/";
@@ -28,6 +40,15 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
       flowpaths: {
         type: "vector",
         url: "pmtiles://" + upstream_index_url + "flowpaths.pmtiles",
+      },
+      // NWM v3 channel network (RouteLink v3.1.6): COMID feature ids, MLT
+      // tiles. z0–6 carry only the id and order; the RouteLink attributes
+      // start at z7. Reaches shorter than one tile unit are missing below
+      // z12. See report.md's flowline PMTiles appendix.
+      "nwm-flowlines": {
+        type: "vector",
+        url: "pmtiles://" + s3_url + "pmtiles/nwm/flowpaths_attrs.pmtiles",
+        encoding: "mlt",
       },
       divides: {
         type: "vector",
@@ -124,16 +145,7 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         paint: {
           "line-color": withHover("line-color", BASE_FLOWPATH_PAINT["line-color"]),
 
-          // Fade orders in progressively instead of popping
-          "line-opacity": [
-            "interpolate", ["linear"], ["zoom"],
-            1.3, 0,
-            3,   ["step", ["get", "order"], 0, 6, 1],   // order 6+
-            5,   ["step", ["get", "order"], 0, 4, 1],   // order 4+ (3 starts fading in)
-            6,   ["step", ["get", "order"], 0, 3, 1],   // order 3+; order 2 held at 0 as it appears
-            7,   ["step", ["get", "order"], 0, 2, 1],   // order 2 faded in; order 1 held at 0 as it appears
-            8,   1,                                      // order 1 faded in
-          ],
+          "line-opacity": ORDER_FADE_OPACITY,
 
           // Hovered reach drawn inverted and wider: see map/flowpathstyle.js.
           "line-width": withHover("line-width", BASE_FLOWPATH_PAINT["line-width"]),
@@ -146,6 +158,32 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         source: "flowpaths",
         "source-layer": "flowpaths",
         layout: { "line-cap": "round" },
+        paint: { "line-width": 14, "line-color": "#000000", "line-opacity": 0 },
+      },
+      {
+        // NWM flowlines: hidden until toggled on (map/interactions.js).
+        id: "nwm-flowlines",
+        type: "line",
+        source: "nwm-flowlines",
+        "source-layer": "flowpaths",
+        layout: {
+          visibility: "none",
+          "line-cap": "round",
+          "line-join": "round",
+          "line-sort-key": ["get", "order"],
+        },
+        paint: {
+          "line-color": withHover("line-color", BASE_NWM_PAINT["line-color"]),
+          "line-opacity": ORDER_FADE_OPACITY,
+          "line-width": withHover("line-width", BASE_NWM_PAINT["line-width"]),
+        },
+      },
+      {
+        id: "nwm-flowlines-hover",
+        type: "line",
+        source: "nwm-flowlines",
+        "source-layer": "flowpaths",
+        layout: { visibility: "none", "line-cap": "round" },
         paint: { "line-width": 14, "line-color": "#000000", "line-opacity": 0 },
       },
       {

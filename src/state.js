@@ -36,7 +36,6 @@ export const state = {
   // diffs, so switching between them keeps each choice.
   colormap: "icefire",
   diffColormap: "rdbu",
-  originalPaint: null, // flowpaths paint to restore on clear
   hoveredId: null,
   lastClickedDivide: null,
   // Live routing sim (src/sim/). While simActive the sim owns the flowpaths

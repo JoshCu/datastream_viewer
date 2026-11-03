@@ -9,6 +9,7 @@
 // touch long-press fires `contextmenu` with no mouse sequence and opens too.
 // ====================================================================
 import { state, map } from "../state.js";
+import { reachSetOf } from "../config.js";
 import { catchmentAt } from "../forcing/viewport.js";
 import { hasForcingSource } from "../forcing/loader.js";
 import { isUpstreamHighlighted, reachAt, toggleUpstreamHighlight } from "../map/interactions.js";
@@ -87,7 +88,7 @@ function itemsAt(point, lngLat) {
     );
   }
   if (reach) {
-    items.push({ label: `Hydrograph for wb-${reach.id}`, action: () => showFeatureInfo(reach) });
+    items.push({ label: `Hydrograph for ${reachSetOf(state.data).label(reach.id)}`, action: () => showFeatureInfo(reach) });
   }
   if (catchment) {
     items.push({

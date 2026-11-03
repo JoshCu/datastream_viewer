@@ -4,6 +4,7 @@
 import { state } from "../state.js";
 import { VARIABLES, SCALE_LABELS } from "../config.js";
 import { colormapGradient } from "../color/colormaps.js";
+import { hasVariable } from "../data/access.js";
 import { fillColormapSelect, runColormapId, runColors } from "./colormap.js";
 import { initialOpenPanels, syncUrl } from "./url.js";
 
@@ -118,11 +119,25 @@ function syncColormapSelect(data) {
   );
 }
 
+// Offer only the variables the run has (NWM output has no depth). If the
+// current one is missing, switch to the first that isn't; this runs before
+// the paint subscriber, so the new run is painted with it.
+function syncVariableButtons(data) {
+  const buttons = [...document.querySelectorAll("#varSelector .var-btn")];
+  for (const btn of buttons) btn.disabled = !hasVariable(btn.dataset.var, data);
+  if (!hasVariable(state.variable, data)) {
+    const first = buttons.find((b) => !b.disabled);
+    if (first) state.variable = first.dataset.var;
+  }
+  for (const btn of buttons) btn.classList.toggle("active", btn.dataset.var === state.variable);
+}
+
 // Reaction to the active run changing. Registered in map/init.js.
 export function syncPanelsToDataset({ data }) {
   syncColormapSelect(data);
   setDataPanels(!!data);
   if (!data) return;
+  syncVariableButtons(data);
   updateDataInfo();
   updateLegend();
 }

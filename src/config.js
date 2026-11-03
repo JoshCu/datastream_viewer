@@ -43,6 +43,35 @@ export function isValid(v) {
   return v > FILL_THRESHOLD;
 }
 export const FLOWPATH_FEATURE = { source: "flowpaths", sourceLayer: "flowpaths" };
+// NWM v3 channel network (RouteLink v3.1.6), one feature per COMID; MLT tiles.
+export const NWM_FLOWLINE_FEATURE = { source: "nwm-flowlines", sourceLayer: "flowpaths" };
+// The reach networks a run can be painted on. A dataset names its network in
+// `reaches` (a key here); a run without one is on the hydrofabric. Each set
+// has its own line layer, an invisible fat hover layer, and an id label.
+export const REACH_SETS = {
+  hydrofabric: {
+    key: "hydrofabric",
+    feature: FLOWPATH_FEATURE,
+    layer: "flowpaths",
+    hoverLayer: "flowpaths-hover",
+    label: (id) => `wb-${id}`,
+  },
+  nwm: {
+    key: "nwm",
+    feature: NWM_FLOWLINE_FEATURE,
+    layer: "nwm-flowlines",
+    hoverLayer: "nwm-flowlines-hover",
+    label: (id) => `COMID ${id}`,
+  },
+};
+// The network a dataset's ids belong to (hydrofabric unless it says otherwise).
+export function reachSetOf(data) {
+  return REACH_SETS[data?.reaches] ?? REACH_SETS.hydrofabric;
+}
+// The set that owns a line or hover layer id, or undefined.
+export function reachSetForLayer(layerId) {
+  return Object.values(REACH_SETS).find((s) => s.layer === layerId || s.hoverLayer === layerId);
+}
 // Current value in feature-state; the fill value means "no data".
 export const RESULT_VALUE = ["coalesce", ["feature-state", "value"], FILL_VALUE];
 // MapLibre-expression form of isValid(): true when the feature-state value is

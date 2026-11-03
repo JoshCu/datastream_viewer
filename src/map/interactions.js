@@ -8,7 +8,9 @@ import {
   GAGE_LAYER,
   NEXRAD_SITE_LAYER,
   GAGE_FEATURE,
-  FLOWPATH_FEATURE,
+  REACH_SETS,
+  reachSetOf,
+  reachSetForLayer,
   USGS_FLOW_PARAM,
   USGS_OBS_TYPES,
   USGS_SITES_SOURCE,
@@ -16,7 +18,7 @@ import {
   VARIABLES,
   isValid,
 } from "../config.js";
-import { valueAt, dataTimeRangeMs } from "../data/access.js";
+import { valueAt, dataTimeRangeMs, hasVariable } from "../data/access.js";
 import { fetchGageMeta, peekGageMeta } from "../data/usgs.js";
 import { catalogMeta } from "../data/usgscatalog.js";
 import { siteFromGageFeature } from "./gages.js";
@@ -112,10 +114,13 @@ export class TerrainControl {
 // menu turns them on (setCatchmentsVisible), since the highlight is drawn by
 // those layers. Both start from map/layerprefs.js; only a button click saves.
 const FLOWPATH_LAYERS = ["flowpaths", "flowpaths-hover"];
+const NWM_LAYERS = [REACH_SETS.nwm.layer, REACH_SETS.nwm.hoverLayer];
 const CATCHMENT_LAYERS = ["divides", "selected-divides", "upstream-divides"];
 let flowpathsVisible = initialLayer("flowpaths");
+let nwmVisible = initialLayer("nwm");
 let catchmentsVisible = initialLayer("catchments");
 let flowpathButton = null;
+let nwmButton = null;
 let catchmentButton = null;
 
 function setLayersVisible(layers, visible) {
@@ -128,12 +133,22 @@ function setLayersVisible(layers, visible) {
 export function setFlowpathsVisible(visible) {
   flowpathsVisible = visible;
   setLayersVisible(FLOWPATH_LAYERS, visible);
-  if (!visible) onFlowpathLeave();
+  if (!visible) onFlowpathLeave(REACH_SETS.hydrofabric);
   // queryRenderedFeatures sees nothing while the layer is hidden, so the
   // painter's on-screen set is stale: requery once it's back.
   else if (state.data) invalidateResultsView();
   syncHydrofabricButtons();
   noteLayer("flowpaths", visible);
+}
+
+// The NWM flowlines (config.REACH_SETS.nwm), off by default.
+export function setNwmVisible(visible) {
+  nwmVisible = visible;
+  setLayersVisible(NWM_LAYERS, visible);
+  if (!visible) onFlowpathLeave(REACH_SETS.nwm);
+  else if (state.data) invalidateResultsView();
+  syncHydrofabricButtons();
+  noteLayer("nwm", visible);
 }
 
 export function setCatchmentsVisible(visible) {
@@ -147,6 +162,10 @@ function syncHydrofabricButtons() {
   if (flowpathButton) {
     flowpathButton.classList.toggle("active", flowpathsVisible);
     flowpathButton.title = flowpathsVisible ? "Hide flowpaths" : "Show flowpaths";
+  }
+  if (nwmButton) {
+    nwmButton.classList.toggle("active", nwmVisible);
+    nwmButton.title = nwmVisible ? "Hide NWM flowlines" : "Show NWM flowlines";
   }
   if (catchmentButton) {
     catchmentButton.classList.toggle("active", catchmentsVisible);
@@ -168,6 +187,16 @@ export class HydrofabricControl {
       setFlowpathsVisible(!flowpathsVisible);
       saveLayer("flowpaths", flowpathsVisible);
     };
+    // "N" beside a river: the NWM channel network.
+    nwmButton = iconButton(
+      "maplibregl-ctrl-nwm",
+      "Show NWM flowlines",
+      "M3,18V6l7,12V6M14,19c2-2,2-5,4-7s2-4,3-6",
+    );
+    nwmButton.onclick = () => {
+      setNwmVisible(!nwmVisible);
+      saveLayer("nwm", nwmVisible);
+    };
     // Irregular polygon: a catchment outline.
     catchmentButton = iconButton(
       "maplibregl-ctrl-catchments",
@@ -178,12 +207,13 @@ export class HydrofabricControl {
       setCatchmentsVisible(!catchmentsVisible);
       saveLayer("catchments", catchmentsVisible);
     };
-    this._container.append(flowpathButton, catchmentButton);
+    this._container.append(flowpathButton, nwmButton, catchmentButton);
     syncHydrofabricButtons();
     // The style's own visibility is the default; apply the starting state
     // once its layers exist.
     map.once("load", () => {
       setFlowpathsVisible(flowpathsVisible);
+      setNwmVisible(nwmVisible);
       setCatchmentsVisible(catchmentsVisible);
     });
     return this._container;
@@ -191,6 +221,7 @@ export class HydrofabricControl {
   onRemove() {
     this._container.remove();
     flowpathButton = null;
+    nwmButton = null;
     catchmentButton = null;
   }
 }
@@ -198,70 +229,109 @@ export class HydrofabricControl {
 // ---- Hover tooltip -------------------------------------------------
 
 // Reach drawn highlighted (map/flowpathstyle.js), with or without a run, so
-// it's clear where one reach ends and the next begins.
-let highlightedReach = null;
+// it's clear where one reach ends and the next begins. { set, id } or null.
+let highlighted = null;
 
-function highlightReach(id) {
-  if (id === highlightedReach) return;
-  if (highlightedReach != null) {
-    map.setFeatureState({ ...FLOWPATH_FEATURE, id: highlightedReach }, { hover: false });
+function highlightReach(set, id) {
+  if (highlighted?.set === set && highlighted?.id === id) return;
+  if (highlighted) {
+    map.setFeatureState({ ...highlighted.set.feature, id: highlighted.id }, { hover: false });
   }
-  highlightedReach = id;
-  if (id != null) map.setFeatureState({ ...FLOWPATH_FEATURE, id }, { hover: true });
+  highlighted = id == null ? null : { set, id };
+  if (highlighted) map.setFeatureState({ ...set.feature, id }, { hover: true });
 }
 
+// The reach under the tooltip: { set, id, properties, withData }, or null.
+let hoveredReach = null;
+
+// Bound to each network's hover layer (map/init.js).
 export function onFlowpathHover(e) {
-  if (!e.features?.length) return;
+  const feature = e.features?.[0];
+  if (!feature) return;
   // A hovered gage owns the cursor: keep the reach tooltip out of its way.
   if (hovered) {
     onFlowpathLeave();
     return;
   }
-  const id = e.features[0].id;
-  highlightReach(id);
-  if (!state.data) return;
-  state.hoveredId = id;
+  const set = reachSetForLayer(feature.layer.id);
+  const active = reachSetOf(state.data);
+  // Both networks on and overlapping: the loaded run's network wins, else
+  // the NWM one (the only one with a tooltip of its own).
+  const preferred = state.data ? active : REACH_SETS.nwm;
+  if (set !== preferred && reachIn(preferred, e.point)) return;
+  highlightReach(set, feature.id);
+
+  // Values when the run is on this network; the NWM tiles' own attributes
+  // are worth a tooltip without one. A bare hydrofabric reach isn't.
+  const withData = !!state.data && set === active;
+  if (!withData && set !== REACH_SETS.nwm) {
+    hideTooltip();
+    return;
+  }
+  hoveredReach = { set, id: feature.id, properties: feature.properties ?? {}, withData };
+  state.hoveredId = withData ? feature.id : null;
 
   const tooltip = document.getElementById("tooltip");
   tooltip.classList.add("visible");
   tooltip.style.left = `${e.point.x + 15}px`;
   tooltip.style.top = `${e.point.y + 15}px`;
-  updateTooltipContent(id);
+  updateTooltipContent();
 }
 
-export function onFlowpathLeave() {
-  highlightReach(null);
+function hideTooltip() {
+  hoveredReach = null;
   state.hoveredId = null;
   document.getElementById("tooltip").classList.remove("visible");
 }
 
-function updateTooltipContent(id) {
-  const row = state.data.index.get(id);
-  document.getElementById("tooltipTitle").textContent = `wb-${id}`;
-  // One row per routed variable, so adding a variable to config.VARIABLES is
-  // all it takes to show up here.
-  document.getElementById("tooltipRows").replaceChildren(
-    ...Object.entries(VARIABLES).map(([key, { label, units }]) => {
+// The cursor left `set`'s hover layer (or everything, with no set): only
+// clears what that network put up, so leaving one of two overlapping
+// networks doesn't blank the other's tooltip.
+export function onFlowpathLeave(set) {
+  if (set && highlighted && highlighted.set !== set) return;
+  highlightReach(null, null);
+  hideTooltip();
+}
+
+function updateTooltipContent() {
+  const { set, id, properties, withData } = hoveredReach;
+  document.getElementById("tooltipTitle").textContent = set.label(id);
+  const rows = [];
+  if (withData) {
+    const row = state.data.index.get(id);
+    // One row per variable the run has, so adding a variable to
+    // config.VARIABLES is all it takes to show up here.
+    for (const [key, { label, units }] of Object.entries(VARIABLES)) {
+      if (!hasVariable(key)) continue;
       const v = row === undefined ? undefined : valueAt(key, row, state.timeIndex);
-      const text =
-        v !== undefined && isValid(v) ? `${v.toFixed(3)} ${units}` : "N/A";
-      return labeledRow(label, text, { prefix: "tooltip" });
-    }),
-  );
+      const text = v !== undefined && isValid(v) ? `${v.toFixed(3)} ${units}` : "N/A";
+      rows.push(labeledRow(label, text, { prefix: "tooltip" }));
+    }
+  }
+  // NWM tiles omit `gages` when the reach has none (and below z7 carry only
+  // the id and order).
+  if (set === REACH_SETS.nwm) {
+    if (properties.gages) rows.push(labeledRow("USGS gage", String(properties.gages), { prefix: "tooltip" }));
+    if (properties.order != null) rows.push(labeledRow("Order", String(properties.order), { prefix: "tooltip" }));
+  }
+  document.getElementById("tooltipRows").replaceChildren(...rows);
 }
 
 export function refreshTooltip() {
-  if (state.hoveredId == null || !state.data) return;
+  if (!hoveredReach?.withData || !state.data) return;
   const tooltip = document.getElementById("tooltip");
   if (!tooltip.classList.contains("visible")) return;
-  updateTooltipContent(state.hoveredId);
+  updateTooltipContent();
 }
 
 // ---- Click info panel ----------------------------------------------
 
 export function onFlowpathClick(e) {
   if (!state.data || !e.features?.length || clickHitsGage(e)) return;
-  showFeatureInfo(e.features[0]);
+  // Only the loaded run's network has a hydrograph to show.
+  const feature = e.features[0];
+  if (reachSetForLayer(feature.layer.id) !== reachSetOf(state.data)) return;
+  showFeatureInfo(feature);
 }
 
 // ---- Gages: hover glow + tooltip, click -> hydrograph panel ---------
@@ -536,8 +606,16 @@ export function onCatchmentClick(e) {
   openForcingPlot(e.features[0].id, e.point);
 }
 
+// A network's reach at a point (its hover layer, when shown), or null.
+function reachIn(set, point) {
+  if (!map.getLayer(set.hoverLayer)) return null;
+  if (map.getLayoutProperty(set.hoverLayer, "visibility") === "none") return null;
+  return map.queryRenderedFeatures(point, { layers: [set.hoverLayer] })[0] ?? null;
+}
+
+// The loaded run's reach at a point, or null.
 export function reachAt(point) {
-  return map.queryRenderedFeatures(point, { layers: ["flowpaths-hover"] })[0] ?? null;
+  return reachIn(reachSetOf(state.data), point);
 }
 
 // ---- Upstream highlight ------------------------------------------------

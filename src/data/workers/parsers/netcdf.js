@@ -47,8 +47,12 @@ export function parseNetCDFBuffer(arrayBuffer, hdf5) {
     timeAbsolute,
     nTimes: time.length,
     featureIds,
+    // A variable the file doesn't have is left out, not an empty matrix.
     matrices: Object.fromEntries(
-      VARIABLE_KEYS.map((v) => [v, toF32(file.get(v)?.value)]),
+      VARIABLE_KEYS.flatMap((v) => {
+        const value = file.get(v)?.value;
+        return value ? [[v, toF32(value)]] : [];
+      }),
     ),
     refTime,
   };

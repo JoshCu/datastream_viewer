@@ -2,9 +2,10 @@
 // App bootstrap: create the map, bind map + DOM event listeners.
 // ====================================================================
 import { state, forcingState, setMap } from "../state.js";
-import { GAGE_LAYER, FORCING_LAYER, USGS_SITES_LAYER } from "../config.js";
+import { GAGE_LAYER, FORCING_LAYER, USGS_SITES_LAYER, REACH_SETS } from "../config.js";
 import { updateIncomingStyle } from "./basemap-style.js";
 import {
+  activeReachSource,
   applyResultsPaint,
   invalidateResultsView,
   scheduleFeatureStateUpdate,
@@ -123,10 +124,13 @@ export function init() {
   map.on("mousemove", FORCING_LAYER, onForcingHover);
   map.on("mouseleave", FORCING_LAYER, onForcingLeave);
 
-  // Flowpath hover tooltip + click info panel (bound to the fat overlay).
-  map.on("mousemove", "flowpaths-hover", onFlowpathHover);
-  map.on("mouseleave", "flowpaths-hover", onFlowpathLeave);
-  map.on("click", "flowpaths-hover", onFlowpathClick);
+  // Reach hover tooltip + click info panel (bound to each network's fat
+  // overlay: the hydrofabric's and the NWM flowlines').
+  for (const set of Object.values(REACH_SETS)) {
+    map.on("mousemove", set.hoverLayer, onFlowpathHover);
+    map.on("mouseleave", set.hoverLayer, () => onFlowpathLeave(set));
+    map.on("click", set.hoverLayer, onFlowpathClick);
+  }
 
   // Gages (only shown for reaches in the loaded run, see map/gages.js).
   map.on("click", GAGE_LAYER, onGageClick);
@@ -160,10 +164,13 @@ export function init() {
       forcingTileLoaded(e.tile.tileID);
       return;
     }
-    if (e.sourceId !== "flowpaths" || !e.tile) return;
-    if (state.data) scheduleTilePaint(e.tile.tileID);
-    // The live sim routes over every loaded tile, so new tiles mean a rebuild.
-    else if (state.simActive) scheduleSimRebuild();
+    if (!e.tile) return;
+    if (state.data) {
+      if (e.sourceId === activeReachSource()) scheduleTilePaint(e.tile.tileID);
+    }
+    // The live sim routes over every loaded hydrofabric tile, so new tiles
+    // mean a rebuild.
+    else if (state.simActive && e.sourceId === "flowpaths") scheduleSimRebuild();
   });
   // Rebuild the live sim's network for the new view. Not on idle: a running
   // sim writes feature-state every frame, so the map may never go idle.
@@ -209,10 +216,13 @@ function setupEventListeners() {
     setTimeIndex(parseInt(e.target.value, 10));
   });
 
-  document.querySelectorAll(".var-btn").forEach((btn) => {
+  // Scoped to the variable picker: other panels (erosion tools) reuse the
+  // .var-btn look for their own buttons.
+  document.querySelectorAll("#varSelector .var-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (btn.disabled) return;
       document
-        .querySelectorAll(".var-btn")
+        .querySelectorAll("#varSelector .var-btn")
         .forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       state.variable = btn.dataset.var;

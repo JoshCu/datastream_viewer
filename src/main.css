@@ -437,6 +437,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 .maplibregl-ctrl-gage span svg path,
 .maplibregl-ctrl-flowpaths span svg path,
+.maplibregl-ctrl-nwm span svg path,
 .maplibregl-ctrl-catchments span svg path {
   fill: none;
   stroke: #000;
@@ -447,6 +448,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 .maplibregl-ctrl-gage.active span svg path,
 .maplibregl-ctrl-flowpaths.active span svg path,
+.maplibregl-ctrl-nwm.active span svg path,
 .maplibregl-ctrl-catchments.active span svg path {
   stroke: #00d4ff;
 }
@@ -804,6 +806,11 @@ input[type="range"]::-webkit-slider-thumb {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
     color: var(--bg-primary);
+}
+
+.var-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
 }
 
 /* Color scale dropdown */

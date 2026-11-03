@@ -4,7 +4,7 @@
 // observations when one sits on it.
 // ====================================================================
 import { state } from "../state.js";
-import { VARIABLES, isValid } from "../config.js";
+import { VARIABLES, isValid, reachSetOf } from "../config.js";
 import { valueAt } from "../data/access.js";
 import { gageSiteForReach } from "../map/gages.js";
 import { labeledRows } from "./dom.js";
@@ -13,7 +13,7 @@ import { openHydrograph } from "./hydrograph.js";
 export function showFeatureInfo(feature) {
   const id = feature.id;
   const row = state.data.index.get(id);
-  document.getElementById("info-id").textContent = `wb-${id}`;
+  document.getElementById("info-id").textContent = reachSetOf(state.data).label(id);
 
   const { label, units } = VARIABLES[state.variable];
   const value =

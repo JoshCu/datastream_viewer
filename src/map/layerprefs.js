@@ -1,6 +1,6 @@
 // ====================================================================
-// The map's layer toggle buttons (terrain, hillshade, flowpaths,
-// catchments, gages, gage labels): where their state starts, and where it's
+// The map's layer toggle buttons (terrain, hillshade, flowpaths, NWM
+// flowlines, catchments, gages, gage labels): where their state starts, and where it's
 // recorded.
 //
 // Starting state: the URL's `layers=` (the keys that are on) when present,
@@ -22,6 +22,7 @@ export const LAYER_DEFAULTS = {
   terrain: false,
   hillshade: false,
   flowpaths: true,
+  nwm: false,
   catchments: false,
   gages: true,
   labels: false,

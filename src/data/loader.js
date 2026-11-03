@@ -157,6 +157,8 @@ function finalizeData(dataset, bounds, options) {
       matrices: dataset.matrices,
       bounds,
       refTime: dataset.refTime,
+      // Which reach network the ids are on (config.REACH_SETS); absent = hydrofabric.
+      reaches: dataset.reaches,
     },
     options,
   );

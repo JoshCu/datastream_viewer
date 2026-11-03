@@ -67,9 +67,9 @@ export function diffDatasets(a, b) {
     return out;
   };
 
-  const matrices = Object.fromEntries(
-    VARIABLE_KEYS.map((v) => [v, diffVariable(v)]),
-  );
+  // Only the variables both runs have.
+  const shared = VARIABLE_KEYS.filter((v) => a.matrices[v] && b.matrices[v]);
+  const matrices = Object.fromEntries(shared.map((v) => [v, diffVariable(v)]));
 
   const featureIdsArr = Float64Array.from(featureIds);
   const index = new Map();
@@ -86,7 +86,7 @@ export function diffDatasets(a, b) {
     index,
     matrices,
     bounds: Object.fromEntries(
-      VARIABLE_KEYS.map((v) => [v, diffBounds(matrices[v])]),
+      shared.map((v) => [v, diffBounds(matrices[v])]),
     ),
     refTime: a.refTime,
   };

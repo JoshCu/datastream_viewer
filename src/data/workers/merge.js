@@ -32,8 +32,10 @@ export function mergeDatasets(datasets) {
   const rowOf = new Map(featureIds.map((id, i) => [id, i]));
   const nF = featureIds.length;
 
+  // A variable no member has stays out of the merged run.
+  const present = VARIABLE_KEYS.filter((v) => datasets.some((d) => d.matrices[v]?.length));
   const matrices = Object.fromEntries(
-    VARIABLE_KEYS.map((v) => {
+    present.map((v) => {
       const a = new Float32Array(nF * nTimes);
       a.fill(FILL_VALUE);
       return [v, a];
@@ -44,7 +46,7 @@ export function mergeDatasets(datasets) {
     // Flat column map for this member, so the innermost loop indexes a typed
     // array instead of walking a JS array of boxed numbers.
     const cols = Int32Array.from(d.time, (t) => timeCol.get(+t));
-    for (const v of VARIABLE_KEYS) {
+    for (const v of present) {
       const src = d.matrices[v];
       if (!src || !src.length) continue;
       const dst = matrices[v]; // hoisted: CONUS runs this ~10^8 times
@@ -82,9 +84,12 @@ export function computeBounds(arr) {
   return { min, max };
 }
 
-// Bounds for every variable of a dataset in one place.
+// Bounds for every variable a dataset has, in one place.
 export function computeAllBounds(dataset) {
   return Object.fromEntries(
-    VARIABLE_KEYS.map((v) => [v, computeBounds(dataset.matrices[v])]),
+    VARIABLE_KEYS.filter((v) => dataset.matrices[v]).map((v) => [
+      v,
+      computeBounds(dataset.matrices[v]),
+    ]),
   );
 }

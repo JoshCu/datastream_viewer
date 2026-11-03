@@ -2,7 +2,7 @@
 // Map painting: results paint expression + per-reach feature-state
 // ====================================================================
 import { state, map } from "../state.js";
-import { FLOWPATH_FEATURE } from "../config.js";
+import { REACH_SETS, reachSetOf } from "../config.js";
 import {
   resultColorExpression,
   resultWidthExpression,
@@ -17,77 +17,104 @@ import { runColors } from "../ui/colormap.js";
 // Feature-state persists once set, so panning to a new area (or a tile
 // streaming in) just paints the reaches not yet done for this timestep; a
 // variable or timestep change forces a full repaint of the on-screen set.
-const painter = createStatePainter({
-  layer: "flowpaths",
-  feature: FLOWPATH_FEATURE,
-  lookup: () => {
-    if (!state.data) return null;
-    const variable = state.variable;
-    const t = state.timeIndex;
-    return {
-      index: state.data.index,
-      key: variable + ":" + t,
-      value: (row) => valueAt(variable, row, t),
-    };
-  },
-  // Called across the paint ↔ interactions cycle, so only ever inside a function.
-  after: () => refreshTooltip(),
-});
+//
+// One painter per reach network (config.REACH_SETS); only the active run's
+// network has anything to paint, so the other's lookup is null.
+const painters = Object.fromEntries(
+  Object.values(REACH_SETS).map((set) => [
+    set.key,
+    createStatePainter({
+      layer: set.layer,
+      feature: set.feature,
+      lookup: () => {
+        if (!state.data || reachSetOf(state.data) !== set) return null;
+        const variable = state.variable;
+        const t = state.timeIndex;
+        return {
+          index: state.data.index,
+          key: variable + ":" + t,
+          value: (row) => valueAt(variable, row, t),
+        };
+      },
+      // Called across the paint ↔ interactions cycle, so only ever inside a function.
+      after: () => refreshTooltip(),
+    }),
+  ]),
+);
 
-export const updateFeatureStates = painter.update;
-export const scheduleFeatureStateUpdate = painter.schedule;
+const activePainter = () => painters[reachSetOf(state.data).key];
 
-// Called from the sourcedata handler when a flowpaths tile finishes loading.
-export const scheduleTilePaint = painter.tileLoaded;
+export const updateFeatureStates = () => activePainter().update();
+export const scheduleFeatureStateUpdate = () => activePainter().schedule();
+
+// The source a run's reaches are drawn from, for the sourcedata handler.
+export function activeReachSource() {
+  return state.data ? reachSetOf(state.data).feature.source : null;
+}
+
+// Called from the sourcedata handler when a tile of the active run's
+// network finishes loading.
+export const scheduleTilePaint = (tileID) => activePainter().tileLoaded(tileID);
 
 // The camera moved: requery the on-screen reaches once it settles.
 export function invalidateResultsView() {
+  const painter = activePainter();
   painter.markViewDirty();
   painter.schedule();
 }
 
+// Pre-run paint of each line layer, saved the first time a run restyles it.
+const originalPaint = {};
+
 // Set once per variable; timestep changes only touch feature-state.
 export function applyResultsPaint() {
-  if (!state.data || !map.getLayer("flowpaths")) return;
+  if (!state.data) return;
+  const { layer } = reachSetOf(state.data);
+  if (!map.getLayer(layer)) return;
 
-  if (!state.originalPaint) {
-    state.originalPaint = {
-      "line-color": flowpathPaint("line-color"),
-      "line-width": flowpathPaint("line-width"),
-    };
-  }
+  originalPaint[layer] ??= {
+    "line-color": flowpathPaint("line-color", layer),
+    "line-width": flowpathPaint("line-width", layer),
+  };
 
   setFlowpathPaint(
     "line-color",
     resultColorExpression(state.data, state.variable, state.scale, runColors()),
+    layer,
   );
-  setFlowpathPaint("line-width", resultWidthExpression(state.data, state.variable));
+  setFlowpathPaint("line-width", resultWidthExpression(state.data, state.variable), layer);
 }
 
-// Restore the flowpaths layer to its pre-data appearance and drop every
+// Restore every line layer to its pre-data appearance and drop every
 // painting cache, so a later load starts from a clean slate instead of
 // skipping ids this run already thinks it painted.
 export function clearResultsPaint() {
-  if (state.originalPaint && map.getLayer("flowpaths")) {
-    setFlowpathPaint("line-color", state.originalPaint["line-color"]);
-    setFlowpathPaint("line-width", state.originalPaint["line-width"]);
+  for (const set of Object.values(REACH_SETS)) {
+    const paint = originalPaint[set.layer];
+    if (!paint) continue;
+    delete originalPaint[set.layer];
+    if (!map.getLayer(set.layer)) continue;
+    setFlowpathPaint("line-color", paint["line-color"], set.layer);
+    setFlowpathPaint("line-width", paint["line-width"], set.layer);
+    // Drop the run's values, so reaches the next run doesn't have aren't
+    // left showing this one's. (Also clears hover; the next mousemove sets it.)
+    map.removeFeatureState(set.feature);
   }
-  painter.reset();
+  for (const painter of Object.values(painters)) painter.reset();
   zoomQueued = false;
 }
 
 // Reaction to the active run changing: repaint for the new data, or restore
 // the pre-data appearance when it was cleared. Registered in map/init.js.
 export function syncPaintToDataset({ data, fitView }) {
-  if (!data) {
-    clearResultsPaint();
-    return;
-  }
+  // Always from a clean slate: the previous run may have been on the other
+  // network, whose layer must go back to its own paint.
+  clearResultsPaint();
+  if (!data) return;
   applyResultsPaint();
   // Force a full-viewport requery for the first paint: the run may already be
   // in view, so we can't rely on zoomToLoadedData moving the camera.
-  painter.markViewDirty();
-  painter.schedule();
+  invalidateResultsView();
   if (fitView) zoomToLoadedData();
 }
 
@@ -133,9 +160,8 @@ export function fitToData(data) {
 }
 
 function fitToLoadedTiles(data) {
-  const features = map.querySourceFeatures("flowpaths", {
-    sourceLayer: "flowpaths",
-  });
+  const { source, sourceLayer } = reachSetOf(data).feature;
+  const features = map.querySourceFeatures(source, { sourceLayer });
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
