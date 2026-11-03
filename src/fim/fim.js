@@ -15,8 +15,9 @@
 //   stream's cells drain to the next reach down.
 // - An NWM run's stage is from flow / velocity. An ngen (hydrofabric) run's
 //   reach is the outlet wb-N of each COMID (the NextGen ↔ NWM crosswalk,
-//   data/nwm.js), and its stage is t-route's own depth where the run has it,
-//   else flow / velocity; either way measured against the NWM channel.
+//   data/nwm.js), and its stage is t-route's own depth where the run has it
+//   (else flow / velocity), or flow / velocity by choice (setFimDepthFrom);
+//   either way measured against the NWM channel.
 // - The NWM tiles are read from an invisible layer (FIM_NWM_LOADER) on
 //   their source, so they load whatever the NWM line layer's toggle says.
 // - The worker is its own instance of flow/flow.worker.js (a "hand"
@@ -63,6 +64,10 @@ const AREA_DELAY_MS = 250;
 
 let active = false;
 let from = "bankfull"; // what the stage is measured from (stage.js)
+// Where an ngen run's channel depth comes from: "troute" (its own `depth`)
+// or "channel" (flow ÷ velocity through the NWM RouteLink channel, as for an
+// NWM run).
+let depthFrom = "troute";
 let worker = null;
 let epoch = 0;
 let timer = null;
@@ -370,6 +375,9 @@ function runMode(data) {
   if (data.reaches === "nwm") {
     return flowVel ? { mode: "flowvel" } : { problem: "The run needs flow and velocity" };
   }
+  if (depthFrom === "channel") {
+    return flowVel ? { mode: "flowvel" } : { problem: "The run needs flow and velocity for a channel stage" };
+  }
   if (hasVariable("depth", data)) return { mode: "depth" };
   return flowVel ? { mode: "flowvel" } : { problem: "The run needs depth, or flow and velocity" };
 }
@@ -589,5 +597,12 @@ export function setupFim() {
 
 export function setFimFrom(value) {
   from = value;
+  paint();
+}
+
+// "troute" or "channel": how an ngen run's channel depth is found (an NWM
+// run always uses its channel).
+export function setFimDepthFrom(value) {
+  depthFrom = value;
   paint();
 }

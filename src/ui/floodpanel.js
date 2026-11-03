@@ -24,7 +24,8 @@ import {
 } from "../config.js";
 import { labeledRow } from "./dom.js";
 import { setStatus } from "./panels.js";
-import { setupFim, setFimActive, setFimFrom, onFimStatus, fimAt } from "../fim/fim.js";
+import { setupFim, setFimActive, setFimFrom, setFimDepthFrom, onFimStatus, fimAt } from "../fim/fim.js";
+import { onActiveDatasetChange } from "../data/sources.js";
 // maplibregl is a global provided by the CDN <script> in index.html.
 
 const $ = (id) => document.getElementById(id);
@@ -272,6 +273,11 @@ export function setupFloodPanel() {
     if (mode === "flat") needsFit = true;
   });
   $("floodStageFrom").addEventListener("change", (e) => setFimFrom(e.target.value));
+  $("floodDepthFrom").addEventListener("change", (e) => setFimDepthFrom(e.target.value));
+  // The depth choice only applies to an ngen run (an NWM run has no depth).
+  onActiveDatasetChange(({ data }) => {
+    $("floodDepthFromRow").style.display = data && data.reaches !== "nwm" && !data.isDiff ? "" : "none";
+  });
   $("floodLevel").addEventListener("input", (e) => setLevel(baseElev() + Number(e.target.value)));
   $("floodLevelInput").addEventListener("change", (e) => {
     if (e.target.value !== "") setLevel(baseElev() + Number(e.target.value));

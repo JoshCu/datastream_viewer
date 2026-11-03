@@ -722,6 +722,14 @@
               </div>
 
               <div id="floodNwm" style="display: none">
+                <div class="nexrad-row flood-row" id="floodDepthFromRow" style="display: none">
+                  <span class="flood-unit">Depth from</span>
+                  <select id="floodDepthFrom" class="select"
+                          title="An ngen run's channel depth: t-route's own depth, or flow ÷ velocity through the reach's NWM RouteLink channel (as for an NWM run)">
+                    <option value="troute">t-route depth</option>
+                    <option value="channel">flow ÷ velocity + channel</option>
+                  </select>
+                </div>
                 <div class="nexrad-row flood-row">
                   <span class="flood-unit">Stage above</span>
                   <select id="floodStageFrom" class="select"
@@ -740,7 +748,8 @@
                   gives each reach a depth: for an NWM run, flow ÷ velocity is a wetted area that the
                   reach's RouteLink channel (trapezoid + floodplain) turns into a depth; an ngen run
                   uses t-route's depth on the flowpath at the reach's outlet (via the NextGen ↔ NWM
-                  crosswalk, 2.4 MB once). Cells whose HAND is below the stage are flooded. Follows
+                  crosswalk, 2.4 MB once), or that flowpath's flow ÷ velocity through the same NWM
+                  channel if you pick it. Cells whose HAND is below the stage are flooded. Follows
                   the time slider.
                 </p>
               </div>
