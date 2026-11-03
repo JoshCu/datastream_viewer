@@ -372,9 +372,12 @@
                 <label class="scale-label" for="nwmConfig">Run</label>
                 <select id="nwmConfig" class="select scale-select"></select>
               </div>
-              <div class="scale-select-wrap" id="nwmMemberRow" hidden>
-                <label class="scale-label" for="nwmMember">Member</label>
-                <select id="nwmMember" class="select scale-select"></select>
+              <!-- Wrapped so `hidden` wins over .scale-select-wrap's display. -->
+              <div id="nwmMemberRow" hidden>
+                <div class="scale-select-wrap">
+                  <label class="scale-label" for="nwmMember">Member</label>
+                  <select id="nwmMember" class="select scale-select"></select>
+                </div>
               </div>
               <div class="scale-select-wrap">
                 <label class="scale-label" for="nwmDate" id="nwmCycleLabel">Cycle</label>
@@ -384,49 +387,14 @@
                 </div>
                 <button class="btn secondary" id="nwmLatestBtn" title="Find the newest complete cycle">Latest</button>
               </div>
-              <div class="scale-select-wrap" id="nwmHoursRow" hidden>
-                <label class="scale-label" for="nwmHours">Past</label>
-                <input type="number" id="nwmHours" class="select scale-select" min="1" max="720" step="1" />
-                <span class="scale-label">hours</span>
-              </div>
-              <div class="scale-select-wrap">
-                <label class="scale-label" for="nwmStride">Every</label>
-                <select id="nwmStride" class="select scale-select" title="Load every Nth file of the run">
-                  <option value="1">file</option>
-                  <option value="2">2nd file</option>
-                  <option value="3">3rd file</option>
-                  <option value="4">4th file</option>
-                  <option value="6">6th file</option>
-                  <option value="12">12th file</option>
-                  <option value="24">24th file</option>
-                </select>
-              </div>
-              <div class="scale-select-wrap">
-                <label class="scale-label" for="nwmReaches">Reaches</label>
-                <select id="nwmReaches" class="select scale-select"
-                        title="In view: the NWM reaches in the flowline tiles loaded for the current view. All CONUS: all 2.78 million (a lot of memory).">
-                  <option value="view">In view</option>
-                  <option value="conus">All CONUS</option>
-                </select>
-              </div>
-              <div class="scale-select-wrap" id="nwmOrderRow">
-                <label class="scale-label" for="nwmMinOrder">Min order</label>
-                <select id="nwmMinOrder" class="select scale-select" title="Smallest Strahler order to load">
-                  <option value="1">1 (all)</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                  <option value="5">5</option>
-                  <option value="6">6</option>
-                </select>
-              </div>
               <label class="usgs-type usgs-active">
                 <input type="checkbox" id="nwmVelocity" />
                 <span>Velocity too (about doubles the download)</span>
               </label>
 
               <div class="forcing-actions">
-                <button class="btn" id="nwmLoadBtn">Load</button>
+                <button class="btn" id="nwmViewBtn" title="The NWM reaches in view (at low zoom, only the bigger rivers the map draws)">Load viewport</button>
+                <button class="btn secondary" id="nwmConusBtn" title="All 2.78 million CONUS reaches (a lot of memory)">Load CONUS</button>
               </div>
 
               <div class="status" id="nwmStatus">

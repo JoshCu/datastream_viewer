@@ -1,9 +1,14 @@
 // ====================================================================
-// NWM Forecast panel: pick a configuration / cycle / member / stride and
-// which reaches, see what it costs, and load it as the active run (on the
-// NWM flowlines). The file logic is in data/nwm.js; this owns the DOM.
+// NWM Forecast panel: pick a configuration / cycle (/ member), then load
+// the reaches in view or all of CONUS as the active run (on the NWM
+// flowlines). The file logic is in data/nwm.js; this owns the DOM.
 //
-// URL: nwm=<config>/<YYYYMMDDHH>/<member>/<stride>[/<hours>]
+// Each configuration's time stride and analysis window are its defaults in
+// config.NWM_CONFIGS, not panel options. A viewport load takes whatever
+// reaches the view's tiles hold, and the tiles already thin by stream order
+// with zoom, so there's no order option either.
+//
+// URL: nwm=<config>/<YYYYMMDDHH>[/<member>]
 // ====================================================================
 import { map } from "../state.js";
 import { NWM_CONFIGS, NWM_CONFIRM_BYTES, REACH_SETS } from "../config.js";
@@ -52,16 +57,14 @@ function settings() {
     config: $("nwmConfig").value,
     cycle: cycleDate(),
     member: cfg.members ? Number($("nwmMember").value) : 1,
-    stride: Number($("nwmStride").value),
-    hours: cfg.analysis ? Math.max(1, Number($("nwmHours").value) || cfg.hours) : undefined,
-    reaches: $("nwmReaches").value,
-    minOrder: Number($("nwmMinOrder").value),
+    stride: cfg.stride,
+    hours: cfg.hours,
     variables: $("nwmVelocity").checked ? ["flow", "velocity"] : ["flow"],
   };
 }
 
 // Rebuild the controls that depend on the configuration.
-function syncConfigControls({ keepStride = false } = {}) {
+function syncConfigControls() {
   const cfg = config();
   $("nwmMemberRow").hidden = !cfg.members;
   if (cfg.members) {
@@ -71,8 +74,6 @@ function syncConfigControls({ keepStride = false } = {}) {
     );
     if (Number(current) <= cfg.members) $("nwmMember").value = current;
   }
-  $("nwmHoursRow").hidden = !cfg.analysis;
-  if (cfg.analysis && !$("nwmHours").value) $("nwmHours").value = String(cfg.hours);
   $("nwmCycleLabel").textContent = cfg.analysis ? "Ending" : "Cycle";
   const hour = $("nwmHour").value;
   $("nwmHour").replaceChildren(
@@ -83,11 +84,6 @@ function syncConfigControls({ keepStride = false } = {}) {
   );
   const h = Number(hour);
   $("nwmHour").value = String(Number.isFinite(h) ? h - (h % cfg.every) : 0);
-  if (!keepStride) $("nwmStride").value = String(cfg.stride);
-}
-
-function syncReachControls() {
-  $("nwmOrderRow").hidden = $("nwmReaches").value !== "view";
 }
 
 function writeUrl() {
@@ -95,13 +91,14 @@ function writeUrl() {
   if (!s.cycle) return;
   const c = s.cycle;
   const stamp = `${c.getUTCFullYear()}${pad(c.getUTCMonth() + 1)}${pad(c.getUTCDate())}${pad(c.getUTCHours())}`;
-  setUrlParam("nwm", [s.config, stamp, s.member, s.stride, ...(s.hours ? [s.hours] : [])].join("/"));
+  const member = config().members ? [s.member] : [];
+  setUrlParam("nwm", [s.config, stamp, ...member].join("/"));
 }
 
 function readUrl() {
   const raw = new URLSearchParams(window.location.search).get("nwm");
   if (!raw) return false;
-  const [key, stamp, member, stride, hours] = raw.split("/");
+  const [key, stamp, member] = raw.split("/");
   if (!NWM_CONFIGS[key] || !/^\d{10}$/.test(stamp ?? "")) return false;
   $("nwmConfig").value = key;
   syncConfigControls();
@@ -110,8 +107,6 @@ function readUrl() {
   );
   setCycle(d);
   if (member) $("nwmMember").value = member;
-  if (stride) $("nwmStride").value = stride;
-  if (hours) $("nwmHours").value = hours;
   return true;
 }
 
@@ -140,8 +135,8 @@ async function findLatest() {
 
 // Make sure the NWM flowline tiles for the view are loaded (turning the
 // layer on, without saving that as the user's choice), then collect the
-// COMIDs in them at or above `minOrder`.
-async function viewComids(minOrder) {
+// COMIDs in them.
+async function viewComids() {
   const { layer, feature } = REACH_SETS.nwm;
   const wasHidden = map.getLayoutProperty(layer, "visibility") === "none";
   if (wasHidden) setNwmVisible(true);
@@ -157,7 +152,7 @@ async function viewComids(minOrder) {
   }
   const ids = new Set();
   for (const f of map.querySourceFeatures(feature.source, { sourceLayer: feature.sourceLayer })) {
-    if (f.id != null && (f.properties.order ?? 0) >= minOrder) ids.add(f.id);
+    if (f.id != null) ids.add(f.id);
   }
   return [...ids];
 }
@@ -169,7 +164,8 @@ function runLabel(s) {
   return `NWM ${s.config}${member} ${when}`;
 }
 
-async function load() {
+// `scope` is "view" (the reaches in the view's tiles) or "conus" (all).
+async function load(scope) {
   if (busy) return;
   const s = settings();
   if (!s.cycle) {
@@ -182,10 +178,10 @@ async function load() {
   try {
     const files = nwmFiles(s);
     let comids = null;
-    if (s.reaches === "view") {
+    if (scope === "view") {
       status("loading", "Collecting the reaches in view…");
-      comids = await viewComids(s.minOrder);
-      if (!comids.length) throw new Error("No NWM reaches in view (zoom in, or lower the min order)");
+      comids = await viewComids();
+      if (!comids.length) throw new Error("No NWM reaches in view");
     }
     status("loading", "Reading the reach list and file layout…");
     const plan = await planNwmLoad({ files, variables: s.variables, comids });
@@ -223,7 +219,8 @@ async function load() {
 }
 
 function syncButtons() {
-  $("nwmLoadBtn").disabled = busy;
+  $("nwmViewBtn").disabled = busy;
+  $("nwmConusBtn").disabled = busy;
   $("nwmLatestBtn").disabled = busy;
 }
 
@@ -232,19 +229,18 @@ export function setupNwmPanel() {
     ...Object.entries(NWM_CONFIGS).map(([key, cfg]) => new Option(cfg.label, key)),
   );
   syncConfigControls();
-  syncReachControls();
   const fromUrl = readUrl();
 
   $("nwmConfig").addEventListener("change", () => {
     syncConfigControls();
     writeUrl();
   });
-  for (const id of ["nwmMember", "nwmDate", "nwmHour", "nwmStride", "nwmHours"]) {
+  for (const id of ["nwmMember", "nwmDate", "nwmHour"]) {
     $(id).addEventListener("change", writeUrl);
   }
-  $("nwmReaches").addEventListener("change", syncReachControls);
   $("nwmLatestBtn").addEventListener("click", findLatest);
-  $("nwmLoadBtn").addEventListener("click", load);
+  $("nwmViewBtn").addEventListener("click", () => load("view"));
+  $("nwmConusBtn").addEventListener("click", () => load("conus"));
 
   // Find the newest cycle the first time the panel opens, unless a link
   // already named one.

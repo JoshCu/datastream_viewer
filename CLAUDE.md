@@ -195,10 +195,12 @@ in `config.js` (`NWM_SCALE`, `NWM_FILL`). `feature_id` is the same sorted
 COMID list in every file: it's read once and cached in IndexedDB, and its
 compressed size is a fingerprint each hour re-checks. The main thread maps
 COMIDs to file rows and sends a sorted row list; the worker fetches only
-the chunks those rows fall in. The panel's default subset is the COMIDs in
+the chunks those rows fall in. "Load viewport" takes the COMIDs in
 the NWM flowline tiles loaded for the view (`querySourceFeatures`, turning
 the layer on with `setNwmVisible`, which doesn't save), so below z12 short
-reaches are left out, as the tiles leave them out. File names are built
+reaches are left out, as the tiles leave them out. The panel has no
+stride / window / order options: each configuration's `stride` and `hours`
+in `NWM_CONFIGS` apply. File names are built
 from `NWM_CONFIGS`, not listed; the newest cycle is found by HEADing each
 candidate's last file.
 
