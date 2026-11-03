@@ -2,7 +2,7 @@
 // S3 browser UI: bucket/folder navigation, breadcrumb, file picker.
 // ====================================================================
 import { s3State } from "../state.js";
-import { fetchS3Folders, listTrouteFileUrls, listGridFileUrls } from "./client.js";
+import { fetchS3Folders, listTrouteFileUrls, listQkrigChoices } from "./client.js";
 import { loadFiles } from "../data/loader.js";
 import { setStatus } from "../ui/panels.js";
 import { escapeHtml } from "../ui/dom.js";
@@ -15,12 +15,17 @@ function clearFileSelection() {
   document.getElementById("fileSection").style.display = "none";
   document.getElementById("loadBtn").disabled = true;
   s3State.vpuFiles = [];
+  s3State.fileChoices = null;
 }
 
 // What "Load Files" loads: every parquet file the VPU lists. A VPU with no
 // parquet output (NetCDF-only runs) falls back to all of its files, so the
 // button is never dead while files are listed.
 function filesToLoad() {
+  // A folder offering alternatives (a qkrig day) loads the one picked.
+  if (s3State.fileChoices) {
+    return s3State.fileChoices[document.getElementById("fileSelect").selectedIndex]?.urls ?? [];
+  }
   const parquet = s3State.vpuFiles.filter((u) => u.toLowerCase().endsWith(".parquet"));
   return parquet.length ? parquet : s3State.vpuFiles;
 }
@@ -109,13 +114,38 @@ async function listS3Folder(prefix) {
   }
 }
 
-// A run's loadable files, listed into the file picker: a VPU's t-route
-// output, or a qkrig day's (or hour's) grids.
-async function listTrouteFiles(vpuPath, { list = listTrouteFileUrls, noun = "T-Route" } = {}) {
-  setStatus("loading", `Loading ${noun} files...`);
+// A qkrig day's or hour's alternatives, listed into the file picker, whose
+// selection is what Load loads (filesToLoad).
+async function listQkrigFiles(path) {
+  setStatus("loading", "Loading qkrig files...");
+  try {
+    const choices = await listQkrigChoices(path);
+    const fileSelect = document.getElementById("fileSelect");
+    fileSelect.replaceChildren(
+      ...choices.map(({ label }) => {
+        const option = document.createElement("option");
+        option.textContent = label;
+        return option;
+      }),
+    );
+    s3State.fileChoices = choices;
+    s3State.vpuFiles = choices.flatMap((c) => c.urls);
+    document.getElementById("loadBtn").disabled = choices.length === 0;
+    document.getElementById("fileCount").textContent = `${choices.length} option${choices.length === 1 ? "" : "s"}`;
+    document.getElementById("fileSection").style.display = "block";
+    setStatus("success", choices.length ? "Pick what to load" : "No qkrig output here");
+  } catch (error) {
+    console.error("Error listing qkrig files:", error);
+    setStatus("error", `Error loading files: ${error.message}`);
+  }
+}
+
+// A VPU's t-route output files, listed into the file picker.
+async function listTrouteFiles(vpuPath) {
+  setStatus("loading", "Loading T-Route files...");
 
   try {
-    const urls = await list(vpuPath);
+    const urls = await listTrouteFileUrls(vpuPath);
     const files = urls.map((u) => ({ name: u.split("/").pop(), url: u }));
 
     const fileSection = document.getElementById("fileSection");
@@ -136,7 +166,7 @@ async function listTrouteFiles(vpuPath, { list = listTrouteFileUrls, noun = "T-R
     fileCount.textContent = `${files.length} files`;
     fileSection.style.display = "block";
 
-    setStatus("success", `Found ${files.length} ${noun} files`);
+    setStatus("success", `Found ${files.length} T-Route files`);
   } catch (error) {
     console.error("Error listing T-Route files:", error);
     setStatus("error", `Error loading files: ${error.message}`);
@@ -189,13 +219,13 @@ function handleFolderClick(path, name) {
   s3State.pathSegments = pathParts;
   const currentSegment = pathParts[currentDepth];
 
-  // A qkrig day (qkrig.YYYYMMDD) or an hour folder inside one: its hourly
-  // grids load as one run.
+  // A qkrig day (qkrig.YYYYMMDD) or an hour folder inside one: its parquet
+  // or its hourly grids load as one run.
   const qkrigDay = pathParts.findIndex((p) => isQkrigDay(p));
   if (qkrigDay >= 0 && qkrigDay >= currentDepth - 1) {
-    listTrouteFiles(path, { list: listGridFileUrls, noun: "qkrig grid" });
+    listQkrigFiles(path);
     document.getElementById("folderList").innerHTML =
-      `<div class="folder-empty">${qkrigDay === currentDepth ? "Day" : "Hour"} selected - load its grids below</div>`;
+      `<div class="folder-empty">${qkrigDay === currentDepth ? "Day" : "Hour"} selected - pick what to load below</div>`;
     s3State.currentPath = path;
     updateBreadcrumb();
   } else if (currentSegment.split("_")[0] === "VPU") {

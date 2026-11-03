@@ -17,6 +17,15 @@ export const VARIABLES = {
 // the worker boundary share it.
 export const VARIABLE_KEYS = Object.keys(VARIABLES);
 
+// Parquet value columns read into a variable's slot under another name, with
+// the label and units they keep (data/workers/parsers/parquet.js). A qkrig
+// day's per-catchment output (outputs/qkrig/qkrig.YYYYMMDD/
+// qkrig_output_YYYYMMDD.parquet: feature_id = cat-N, which is its flowpath
+// wb-N's number) is kriged streamflow normalised by area.
+export const PARQUET_COLUMN_ALIASES = {
+  qkrig_mm_hr: { variable: "flow", label: "Streamflow", units: "mm/h" },
+};
+
 // Colour maps live in color/colormaps.js.
 
 // Short legend suffix per color scale.

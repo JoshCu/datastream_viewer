@@ -96,17 +96,29 @@ export async function listTrouteFileUrls(vpuPath) {
     .map((f) => `${base}/${f}`);
 }
 
-// The hourly grid files (interp_YYYY-MM-DD_HH.nc) anywhere under a qkrig
-// folder: a day (qkrig.YYYYMMDD/, one HH/ folder per hour) or one hour. A day
-// is 48 keys, well inside one listing page.
-export async function listGridFileUrls(path) {
+// What a qkrig folder offers to load, as [{ label, urls }]: a day
+// (qkrig.YYYYMMDD/) has its per-catchment parquet (qkrig_output_YYYYMMDD,
+// 24 hours on the flowpaths) and its hourly grids (HH/interp_*.nc); an hour
+// folder has one grid. A day is ~110 keys (with plots and logs), inside one
+// listing page.
+export async function listQkrigChoices(path) {
   const xml = await listXml(path);
   const base = objectBase(s3State.currentBucket);
-  return Array.from(xml.querySelectorAll("Contents > Key"))
-    .map((k) => k.textContent)
-    .filter((f) => /\/interp_[^/]*\.nc$/.test(f))
-    .sort()
-    .map((f) => `${base}/${f}`);
+  const keys = Array.from(xml.querySelectorAll("Contents > Key"), (k) => k.textContent).sort();
+  const urls = (re) => keys.filter((k) => re.test(k)).map((k) => `${base}/${k}`);
+  const parquet = urls(/\/qkrig_output_[^/]*\.parquet$/);
+  const grids = urls(/\/interp_[^/]*\.nc$/);
+  const choices = [];
+  if (parquet.length) {
+    choices.push({ label: `${parquet[0].split("/").pop()} · per catchment, on the flowpaths`, urls: parquet });
+  }
+  if (grids.length) {
+    choices.push({
+      label: grids.length === 1 ? `${grids[0].split("/").pop()} · grid` : `Hourly grids · ${grids.length} files`,
+      urls: grids,
+    });
+  }
+  return choices;
 }
 
 // One level of `bucket` under `prefix`: its folders plus the files directly

@@ -11,10 +11,11 @@ velocity / depth on the hydrofabric flowpaths over time.
 
 - **S3 browser** — navigate bucket → cycle → VPU folders and pick a t-route
   output file, or load an entire CONUS cycle at once.
-- **qkrig grids** — `outputs/qkrig/qkrig.YYYYMMDD/` holds hourly USGS
-  streamflow kriged onto a 200 × 200 lat/lon grid (mm/h). Picking a day (or
-  one hour folder) loads its grids as one run, drawn as filled cells with the
-  same colour scales, playback, tooltip and hydrograph as a t-route run.
+- **qkrig** — `outputs/qkrig/qkrig.YYYYMMDD/` holds USGS streamflow kriged
+  to every catchment (mm/h, 24 hours, one parquet) and onto a 200 × 200
+  lat/lon grid (one NetCDF per hour). Picking a day offers both: the parquet
+  is painted on the flowpaths like a t-route run, the grids as filled cells
+  with the same colour scales, playback, tooltip and hydrograph.
 - **NWM forecasts** — the NWM Forecast panel loads operational NWM v3
   channel output (short range, medium range per member or blended, long
   range per member, or the last 48 hours of analysis) straight from the

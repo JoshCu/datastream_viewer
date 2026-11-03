@@ -13,6 +13,9 @@ export const s3State = {
   // URLs of the t-route files listed for the selected VPU (the "Load Files"
   // button loads every parquet one among them).
   vpuFiles: [],
+  // [{ label, urls }] when the folder offers alternatives (a qkrig day: its
+  // parquet or its hourly grids); the file picker chooses. Else null.
+  fileChoices: null,
   isLoading: false,
   maxNavigationDepth: 6,
   // The VPU_* folders currently listed, if any (drives the CONUS button).

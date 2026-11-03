@@ -89,7 +89,12 @@ function loadParquetWasm() {
       const module = await wasmModulePromise;
       if (module) pq.initSync({ module });
       else await pq.default(); // preload failed: download per worker.
-      return { readParquet: pq.readParquet, tableFromIPC: arrow.tableFromIPC };
+      return {
+        readParquet: pq.readParquet,
+        ParquetFile: pq.ParquetFile,
+        tableFromIPC: arrow.tableFromIPC,
+        DataType: arrow.DataType,
+      };
     });
   }
   return parquetWasmPromise;

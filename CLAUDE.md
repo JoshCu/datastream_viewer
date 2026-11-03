@@ -182,7 +182,24 @@ the worker a per-catchment (cat-N → wb-N) qlat table per forcing hour; the
 worker floors each reach's qlat at that value before every 5-min step on its
 own clock and loops the series when it runs out.
 
-### Gridded runs: qkrig (`data/workers/parsers/grid.js`, `map/grid.js`)
+### qkrig (`data/workers/parsers/grid.js`, `map/grid.js`)
+
+A qkrig day folder (`outputs/qkrig/qkrig.YYYYMMDD/`) has two loadable
+products, and the S3 browser's file picker chooses between them
+(`s3State.fileChoices`; the parquet is the default):
+
+- `qkrig_output_YYYYMMDD.parquet`: the same long format as t-route parquet
+  (`feature_id`, `time`, `type` = "cat", `qkrig_mm_hr`), ~830k catchments ×
+  24 h ≈ 20M rows, brotli. `feature_id` is cat-N, whose number is its
+  flowpath wb-N's, so it's an ordinary hydrofabric run.
+  `PARQUET_COLUMN_ALIASES` (`config.js`) reads `qkrig_mm_hr` into the `flow`
+  slot and relabels it (`variableInfo`). At that size the parquet parser
+  reads one row group at a time, in two passes (ids/times, then values),
+  with columns as typed arrays: no per-row `get()`, no `Number(bigint)`
+  (64-bit ints are read as word pairs), and the time column's repeating
+  cycle predicted rather than looked up per row. Don't regress those; a
+  qkrig day parses in ~4 s.
+- Hourly grids, below.
 
 `outputs/qkrig/qkrig.YYYYMMDD/HH/interp_YYYY-MM-DD_HH.nc` is one hour of
 USGS streamflow kriged onto a regular 200 × 200 lat/lon grid (`z_interp`,
@@ -198,8 +215,7 @@ builds a GeoJSON square per cell when such a run becomes active (subscribed
 before the paint), and the ordinary painter colours it (`fill: true` on the
 set: `fill-color`, no width). Grid ids collide with wb-N/COMID numbers, so
 anything matching ids across runs (gages, hydrograph series, diffs) checks
-the network first. The S3 browser lists a day's or an hour's grids into the
-file picker.
+the network first.
 
 ### NWM forecasts (`data/nwm.js`, `data/workers/nwm.js`, `ui/nwmpanel.js`)
 
