@@ -79,7 +79,7 @@ export function demSource() {
 // from the centre when the camera is pitched: { inner } is what's on
 // screen, { outer } that plus the MARGIN a new field is built with, so a
 // small move stays inside the field it already has.
-function visibleBox() {
+export function visibleBox() {
   const canvas = map.getCanvas();
   const W = canvas.clientWidth;
   const H = canvas.clientHeight;
@@ -123,7 +123,7 @@ function visibleBox() {
 }
 
 // `box` in global pixels at zoom z: { z, x0, y0, w, h }.
-function boxAt(box, z, tileSize) {
+export function boxAt(box, z, tileSize) {
   const world = tileSize * 2 ** z;
   const x0 = Math.floor(box.x0 * world);
   const y0 = Math.floor(box.y0 * world);

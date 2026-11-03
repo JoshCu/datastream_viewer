@@ -21,6 +21,15 @@ export function setTimeIndex(i) {
   document.getElementById("timeSlider").value = clamped;
   scheduleFeatureStateUpdate();
   updateTimeDisplay();
+  for (const fn of timeListeners) fn(clamped);
+}
+
+// Other things drawn per timestep (the flood map, src/fim/) subscribe here
+// rather than adding a line above. fn(timeIndex), after the repaint is
+// scheduled.
+const timeListeners = new Set();
+export function onTimeChange(fn) {
+  timeListeners.add(fn);
 }
 
 // Step `delta` timesteps, wrapping at either end (playback transport).

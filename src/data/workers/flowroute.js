@@ -45,70 +45,60 @@ const FLAT_EPSILON_M = 1e-5;
 const DX = [1, 1, 0, -1, -1, -1, 0, 1];
 const DY = [0, 1, 1, 1, 0, -1, -1, -1];
 
-// Binary min-heap of cell indices keyed by elevation, preallocated to the
-// grid size (each cell is pushed at most once).
-function makeHeap(capacity) {
-  const keys = new Float64Array(capacity);
-  const vals = new Int32Array(capacity);
-  let size = 0;
-  return {
-    get size() {
-      return size;
-    },
-    topKey() {
-      return keys[0];
-    },
-    push(key, val) {
-      let i = size++;
-      while (i > 0) {
-        const p = (i - 1) >> 1;
-        if (keys[p] <= key) break;
-        keys[i] = keys[p];
-        vals[i] = vals[p];
-        i = p;
-      }
-      keys[i] = key;
-      vals[i] = val;
-    },
-    pop() {
-      const top = vals[0];
-      const key = keys[--size];
-      const val = vals[size];
-      let i = 0;
-      for (;;) {
-        let c = 2 * i + 1;
-        if (c >= size) break;
-        if (c + 1 < size && keys[c + 1] < keys[c]) c++;
-        if (keys[c] >= key) break;
-        keys[i] = keys[c];
-        vals[i] = vals[c];
-        i = c;
-      }
-      keys[i] = key;
-      vals[i] = val;
-      return top;
-    },
-  };
-}
+// The flood's queue is a bucket queue of cell indices keyed by elevation,
+// inlined in drainageTree: O(1) push and pop, where a binary heap's log n
+// made the flood most of the routing time. Keys are binned `width` apart, at
+// least the finest DEM quantum (terrarium's 1/256 m), so the order is a
+// heap's except among cells a quantum apart. Any order keeps the receivers a
+// tree (each cell's filled level is above the one it was flooded from); the
+// binning only lets a fill come out up to `width` off.
+const BUCKET_WIDTH_M = 1 / 256;
+const MAX_BUCKETS = 1 << 21;
+const SQRT1_2 = Math.SQRT1_2;
 
-// `elev`: Float32Array(w*h), metres, NaN for no data. `cellM`: Float32Array(h),
-// metres per cell on each row (Web Mercator's scale varies with latitude).
-// Returns { dir, sqrtSlope, acc, outlet }:
-//   dir       Float32Array(2wh)  unit downhill direction (x right, y down)
-//   sqrtSlope Float32Array(wh)   √(slope), m/m
-//   acc       Float32Array(wh)   upstream area in cells, self included
-//   outlet    Uint8Array(wh)     1 where water leaves the field (sea, no data)
-export function routeFlow(elev, w, h, cellM) {
+// Steps 1–2: the drainage tree of `elev` (Float32Array(w*h), metres, NaN for
+// no data). Returns { filled, receiver, outlet, acc, order }:
+//   filled   Float64Array(wh)  the depression-filled surface
+//   receiver Int32Array(wh)    the cell each drains to; -1 at an outlet or
+//                              the grid edge (it drains off the field)
+//   outlet   Uint8Array(wh)    1 where water leaves the field (sea, no data)
+//   acc      Float32Array(wh)  upstream area in cells, self included
+//   order    Int32Array(wh)    every cell, each before its receiver (so
+//                              read backwards, receivers come first)
+// data/workers/hand.js walks `order` backwards for height above drainage.
+export function drainageTree(elev, w, h) {
   const n = w * h;
   const filled = new Float64Array(n);
-  const receiver = new Int32Array(n).fill(-1);
-  const closed = new Uint8Array(n);
+  // OPEN marks a cell the flood hasn't reached (rather than a separate
+  // "closed" array: 1 byte a cell less).
+  const OPEN = -2;
+  const receiver = new Int32Array(n).fill(OPEN);
   const outlet = new Uint8Array(n);
   for (let i = 0; i < n; i++) outlet[i] = elev[i] > SEA_LEVEL_M ? 0 : 1; // NaN too
-  const heap = makeHeap(n);
+  let lo = SEA_LEVEL_M;
+  let hi = SEA_LEVEL_M;
+  for (let i = 0; i < n; i++) {
+    const e = elev[i];
+    if (e < lo) lo = e;
+    else if (e > hi) hi = e;
+  }
+  const width = Math.max(BUCKET_WIDTH_M, (hi - lo) / (MAX_BUCKETS - 1));
+  const nb = Math.floor((hi - lo) / width) + 1;
+  const head = new Int32Array(nb).fill(-1); // bucket -> last cell pushed
+  const next = new Int32Array(n); // cell -> the cell pushed before it
+  let queued = 0;
+  let cursor = nb; // the lowest bucket that may be non-empty
+  const push = (key, c) => {
+    let b = Math.floor((key - lo) / width);
+    b = b < 0 ? 0 : b >= nb ? nb - 1 : b;
+    next[c] = head[b];
+    head[b] = c;
+    if (b < cursor) cursor = b;
+    queued++;
+  };
   // Cells raised to the level of the cell they were flooded from: they're
-  // inside a pit or flat, so they're processed before anything higher on the
-  // heap (but not before a heap cell at the same level, so each of several
+  // inside a pit or flat, so they're processed before anything higher in the
+  // queue (but not before a queued cell at the same level, so each of several
   // tied outlets floods its own share of a flat).
   const pit = new Int32Array(n);
   let pitHead = 0;
@@ -117,35 +107,46 @@ export function routeFlow(elev, w, h, cellM) {
   // Seed: every edge cell and every sea / no-data cell.
   for (let i = 0; i < n; i++) {
     const x = i % w;
-    const y = (i - x) / w;
-    if (outlet[i] || x === 0 || y === 0 || x === w - 1 || y === h - 1) {
+    if (outlet[i] || x === 0 || i < w || x === w - 1 || i >= n - w) {
       filled[i] = outlet[i] ? SEA_LEVEL_M : elev[i];
-      closed[i] = 1;
-      heap.push(filled[i], i);
+      receiver[i] = -1;
+      push(filled[i], i);
     }
   }
 
-  while (pitHead < pitTail || heap.size) {
-    const fromPit = pitHead < pitTail && !(heap.size && heap.topKey() <= filled[pit[pitHead]]);
-    const c = fromPit ? pit[pitHead++] : heap.pop();
+  // Neighbour offsets, in DX/DY order, for cells off the grid edge.
+  const NB = Int32Array.of(1, w + 1, w, w - 1, -1, -w - 1, -w, -w + 1);
+  for (;;) {
+    let c;
+    if (queued) while (head[cursor] < 0) cursor++;
+    if (pitHead < pitTail && !(queued && lo + cursor * width <= filled[pit[pitHead]])) {
+      c = pit[pitHead++];
+    } else if (queued) {
+      c = head[cursor];
+      head[cursor] = next[c];
+      queued--;
+    } else break;
     const cx = c % w;
-    const cy = (c - cx) / w;
-    const fc = filled[c];
+    const interior = cx > 0 && cx < w - 1 && c >= w && c < n - w;
+    const lift = filled[c] + FLAT_EPSILON_M;
     for (let k = 0; k < 8; k++) {
-      const x = cx + DX[k];
-      const y = cy + DY[k];
-      if (x < 0 || y < 0 || x >= w || y >= h) continue;
-      const j = y * w + x;
-      if (closed[j]) continue;
-      closed[j] = 1;
+      let j;
+      if (interior) j = c + NB[k];
+      else {
+        const x = cx + DX[k];
+        const y = (c - cx) / w + DY[k];
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
+        j = y * w + x;
+      }
+      if (receiver[j] !== OPEN) continue;
       receiver[j] = c;
-      const lift = fc + FLAT_EPSILON_M;
-      if (elev[j] <= lift) {
+      const e = elev[j];
+      if (e <= lift) {
         filled[j] = lift;
         pit[pitTail++] = j;
       } else {
-        filled[j] = elev[j];
-        heap.push(filled[j], j);
+        filled[j] = e;
+        push(e, j);
       }
     }
   }
@@ -155,20 +156,16 @@ export function routeFlow(elev, w, h, cellM) {
   // Re-pick the steepest descent (drop / distance) over the filled surface;
   // on a filled flat, where every drop is ~ε, keep the flood's, which leads
   // to the spill point. Filled elevation strictly falls along either, so the
-  // result is still a tree.
+  // result is still a tree. Only interior cells have a receiver here (the
+  // edge was seeded), so the neighbours need no bounds checks.
   for (let i = 0; i < n; i++) {
     if (receiver[i] < 0 || outlet[i]) continue;
-    const cx = i % w;
-    const cy = (i - cx) / w;
     const fi = filled[i];
     let best = -1;
     let bestS = 0;
     for (let k = 0; k < 8; k++) {
-      const x = cx + DX[k];
-      const y = cy + DY[k];
-      if (x < 0 || y < 0 || x >= w || y >= h) continue;
-      const j = y * w + x;
-      const s = (fi - filled[j]) / (k & 1 ? Math.SQRT2 : 1);
+      const j = i + NB[k];
+      const s = (k & 1 ? SQRT1_2 : 1) * (fi - filled[j]);
       if (s > bestS) {
         bestS = s;
         best = j;
@@ -193,6 +190,19 @@ export function routeFlow(elev, w, h, cellM) {
     acc[r] += acc[i];
     if (--donors[r] === 0) queue[qTail++] = r;
   }
+  return { filled, receiver, outlet, acc, order: queue };
+}
+
+// `elev`: Float32Array(w*h), metres, NaN for no data. `cellM`: Float32Array(h),
+// metres per cell on each row (Web Mercator's scale varies with latitude).
+// Returns { dir, sqrtSlope, acc, outlet }:
+//   dir       Float32Array(2wh)  unit downhill direction (x right, y down)
+//   sqrtSlope Float32Array(wh)   √(slope), m/m
+//   acc       Float32Array(wh)   upstream area in cells, self included
+//   outlet    Uint8Array(wh)     1 where water leaves the field (sea, no data)
+export function routeFlow(elev, w, h, cellM) {
+  const n = w * h;
+  const { filled, receiver, outlet, acc } = drainageTree(elev, w, h);
 
   const raw = new Float32Array(2 * n);
   const sqrtSlope = new Float32Array(n);

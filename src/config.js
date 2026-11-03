@@ -361,6 +361,23 @@ export const FLOOD_LAYER = "flood-water";
 export const FLOOD_DEEP_M = 10;
 export const FLOOD_SHALLOW_COLOR = "rgba(90, 170, 230, 0.55)";
 export const FLOOD_DEEP_COLOR = "rgba(8, 40, 110, 0.85)";
+// Flood mapping from a run (src/fim/): depth = stage − HAND per DEM
+// cell, drawn as an image on its own canvas source and layer.
+export const FIM_SOURCE = "fim-depth";
+export const FIM_LAYER = "fim-depth";
+// An invisible line layer on the NWM flowlines, so their tiles load (and
+// can be read for burning in) whether or not the NWM layer is shown.
+export const FIM_NWM_LOADER = "fim-nwm-loader";
+// The HAND mosaic's zoom (in the DEM source's tiles) follows the map's, at
+// most FIM_MAX_ZOOM, stepped down to fit FIM_MAX_CELLS. Below FIM_MIN_ZOOM
+// (~30 m cells for 512 px tiles at 40°N) the panel asks to zoom in: the
+// reaches' channels are a cell or two wide there, and the tiles carry the
+// channel attributes only from z7 anyway.
+export const FIM_MIN_ZOOM = 7;
+export const FIM_MAX_ZOOM = 14;
+export const FIM_MAX_CELLS = 4_000_000;
+// The image is one WebGL texture, so neither side may pass this.
+export const FIM_MAX_SIDE = 4096;
 // What one extra range request is worth in transferred bytes, when deciding
 // whether to merge nearby rows into one request (data/workers/forcing.js).
 export const FORCING_REQUEST_COST_BYTES = 64 * 1024;

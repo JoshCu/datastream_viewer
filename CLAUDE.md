@@ -465,6 +465,43 @@ since canvas exports are perturbed by fingerprinting protection). So
 view, so served tiles are versioned and stale ones are refreshed on
 `moveend`. Field builds carry `deltasFor()` their box.
 
+### Flood mapping from a run (`src/fim/`, `ui/floodpanel.js`)
+
+The flood panel's "the loaded run" mode (its other mode is the flat
+`FLOOD_LAYER` level). `fim/fim.js` plans a box over the view at a DEM zoom
+tied to the map's (`FIM_MIN_ZOOM`..`FIM_MAX_ZOOM`, stepped down to
+`FIM_MAX_CELLS` and `FIM_MAX_SIDE`), collects every NWM flowline in the loaded
+tiles (`querySourceFeatures`; an invisible `FIM_NWM_LOADER` layer keeps them
+loading whatever the NWM toggle says) and sends a `hand` request to **its own
+instance of `flow/flow.worker.js`** — not the particle field's, which lives
+and dies with the flow panel — sharing the mosaic code (`buildMosaic`), the
+ancestor fallback and the terrain deltas. Above `HAND_PREVIEW_CELLS` the
+worker first replies with a half-resolution field (`preview: true`, z − 1,
+from the same mosaic, so no extra tiles); the request stays pending for the
+full one. `data/workers/hand.js` burns the lines in (lowered `BURN_M`; higher
+order wins a shared cell), routes with `drainageTree()` from `flowroute.js`
+and walks its topological `order` backwards: a burned cell is its own
+drainage, others copy their receiver's. It returns HAND + a per-cell reach
+number, once per view. `drainageTree`'s flood uses an inlined bucket queue
+(1/256 m bins) instead of a heap; it's memory-bound from there (cells are
+visited in elevation order, all over the grid), so the GPU wouldn't help it.
+
+Per timestep (`onTimeChange` in `ui/time.js`, the subscription
+`setTimeIndex` fires) each reach gets a stage (`fim/stage.js`) against its
+RouteLink compound channel (z = 1 / `ChSlp`), less the bankfull depth by
+default: an NWM run's from flow ÷ velocity; an **ngen run's** from t-route's
+`depth` (else flow ÷ velocity) on the reach's **outlet wb-N**, looked up in the
+NextGen ↔ NWM crosswalk (`ngenCrosswalk()` in `data/nwm.js`, parse-worker
+task `crosswalk`, one 2.4 MB GET then IndexedDB; exactly one flowpath per
+COMID is its outlet). The image is drawn by `fim/gpupaint.js` (WebGL2: HAND
+and reach numbers uploaded as textures once per field, the stages as a small
+texture per step, depth + colour in a fragment shader) or, without WebGL2,
+one CPU pass into a 2D canvas. Either canvas backs a runtime canvas source
+(`FIM_SOURCE`, re-added after a style switch; a non-animated canvas uploads
+via `play(); pause()`). The flooded-area readout is counted on the CPU only
+once the clock stops (`AREA_DELAY_MS`). The HAND field doesn't depend on the
+run.
+
 ### Winds aloft (`src/winds/`, `ui/windspanel.js`)
 
 Open-Meteo hourly pressure-level winds for one point, fetched straight from

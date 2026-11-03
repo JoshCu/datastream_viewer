@@ -28,6 +28,16 @@
 //     fallback, failed, ms } }  — arrays
 //     transferred; `fallback` tiles came from an ancestor, `failed` ones
 //     because a fetch failed (worth retrying)
+//   { type: "hand", epoch, id, z, x0, y0, w, h, url, encoding, tileSize,
+//     deltas, lines }
+//       HAND over the same kind of mosaic, for flood mapping (src/fim/):
+//       `lines` are the reaches to burn in, in grid cells (see burnLines in
+//       data/workers/hand.js).
+// Replies (worker → main), continued:
+//   { type: "hand", epoch, id, result: { z, x0, y0, w, h, hand, reach,
+//     preview, tiles, fallback, failed, ms } }  — hand / reach transferred.
+//     A big field first gets a `preview: true` reply at half resolution
+//     (z − 1, possibly half-cell x0 / y0), then the full one.
 //   { type: "error", epoch, id, error }
 // A request whose epoch is no longer the latest is dropped after its tiles
 // load, before the (expensive) routing.
@@ -35,6 +45,7 @@
 import { routeFlow } from "../data/workers/flowroute.js";
 import { packFlowCells } from "../data/workers/flowcells.js";
 import { applyDeltas } from "../data/workers/flowterrain.js";
+import { burnLines, computeHand } from "../data/workers/hand.js";
 import { fetchTile } from "./demio.js";
 
 const CACHE_TILES = 96; // ~1 MB each at 512²
@@ -161,8 +172,10 @@ function rowMetres(z, y0, h, tileSize) {
   return out;
 }
 
-async function buildField({ epoch, z, x0, y0, w, h, url, encoding, tileSize, speedModel, colorBy, deltas }) {
-  const t0 = performance.now();
+// The DEM mosaic over global pixels [x0, x0+w) × [y0, y0+h) at zoom z, with
+// the terrain edits added: { elev, tiles, fallback, failed }, or null once
+// superseded (epoch).
+async function buildMosaic({ epoch, z, x0, y0, w, h, url, encoding, tileSize, deltas }) {
   const n = 2 ** z;
   const tiles = [];
   for (let ty = Math.floor(y0 / tileSize); ty <= Math.floor((y0 + h - 1) / tileSize); ty++) {
@@ -217,35 +230,97 @@ async function buildField({ epoch, z, x0, y0, w, h, url, encoding, tileSize, spe
     blit(elev, x0, y0, w, h, tileSize, t.tx, t.ty, b, b && levels.get(z - b.dz));
   });
   if (deltas?.length) applyDeltas(elev, tileSize * n, x0, y0, w, h, deltas);
+  return { elev, tiles: tiles.length, fallback, failed };
+}
 
+async function buildField(req) {
+  const t0 = performance.now();
+  const { z, x0, y0, w, h, tileSize, speedModel, colorBy } = req;
+  const mosaic = await buildMosaic(req);
+  if (!mosaic) return null;
+  const { elev, ...counts } = mosaic;
   const routed = routeFlow(elev, w, h, rowMetres(z, y0, h, tileSize));
   const packed = packFlowCells({ w, h, elev, ...routed }, speedModel, colorBy);
   return {
-    z, x0, y0, w, h, elev, ...routed, ...packed, speedModel, colorBy,
-    tiles: tiles.length,
-    fallback,
-    failed,
+    z, x0, y0, w, h, elev, ...routed, ...packed, speedModel, colorBy, ...counts,
     ms: Math.round(performance.now() - t0),
   };
 }
+
+// Above this many cells, a HAND request first gets a half-resolution answer
+// from the same mosaic (a quarter of the cells, so ~a quarter of the
+// routing time, and no extra tiles), then the full one.
+const HAND_PREVIEW_CELLS = 1_500_000;
+
+// The mosaic averaged over 2×2 blocks (ignoring no-data cells), and the
+// lines scaled to match.
+function halve(elev, w, h, lines) {
+  const cw = w >> 1;
+  const ch = h >> 1;
+  const out = new Float32Array(cw * ch);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const i = 2 * y * w + 2 * x;
+      let sum = 0;
+      let k = 0;
+      for (const v of [elev[i], elev[i + 1], elev[i + w], elev[i + w + 1]]) {
+        if (v === v) {
+          sum += v;
+          k++;
+        }
+      }
+      out[y * cw + x] = k ? sum / k : NaN;
+    }
+  }
+  const xy = lines.xy.map((v) => v / 2);
+  return { elev: out, w: cw, h: ch, lines: { ...lines, xy } };
+}
+
+// HAND for flood mapping (data/workers/hand.js): the mosaic with `lines`
+// burned in. `preview(result)` gets the half-resolution answer first, for a
+// big field; a request superseded meanwhile isn't finished.
+async function buildHand(req, preview) {
+  const t0 = performance.now();
+  const { z, x0, y0, w, h, lines } = req;
+  const mosaic = await buildMosaic(req);
+  if (!mosaic) return null;
+  const { elev, ...counts } = mosaic;
+  if (w * h > HAND_PREVIEW_CELLS && z > 0) {
+    const c = halve(elev, w, h, lines);
+    const { hand, reach } = computeHand(c.elev, c.w, c.h, burnLines(c.lines, c.w, c.h));
+    // Half-cell origins are fine: the field's corners are computed from them.
+    preview({
+      z: z - 1, x0: x0 / 2, y0: y0 / 2, w: c.w, h: c.h, hand, reach, preview: true, ...counts,
+      ms: Math.round(performance.now() - t0),
+    });
+    // Let a newer request's message in before the full-resolution pass.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (req.epoch !== latestEpoch) return null;
+  }
+  const { hand, reach } = computeHand(elev, w, h, burnLines(lines, w, h));
+  return { z, x0, y0, w, h, hand, reach, ...counts, ms: Math.round(performance.now() - t0) };
+}
+
+// Arrays each reply transfers.
+const TRANSFER = {
+  field: (r) => [r.elev, r.dir, r.sqrtSlope, r.acc, r.outlet, r.cells, r.colour],
+  hand: (r) => [r.hand, r.reach],
+};
 
 self.onmessage = async ({ data }) => {
   // Any message moves the epoch on; "cancel" does only that, so a build in
   // flight is dropped before its routing.
   latestEpoch = Math.max(latestEpoch, data.epoch);
-  if (data.type !== "field") return;
+  if (data.type !== "field" && data.type !== "hand") return;
   try {
-    const result = await buildField(data);
+    const reply = (result) =>
+      self.postMessage(
+        { type: data.type, epoch: data.epoch, id: data.id, result },
+        TRANSFER[data.type](result).map((a) => a.buffer),
+      );
+    const result = await (data.type === "hand" ? buildHand(data, reply) : buildField(data));
     if (!result) return;
-    self.postMessage({ type: "field", epoch: data.epoch, id: data.id, result }, [
-      result.elev.buffer,
-      result.dir.buffer,
-      result.sqrtSlope.buffer,
-      result.acc.buffer,
-      result.outlet.buffer,
-      result.cells.buffer,
-      result.colour.buffer,
-    ]);
+    reply(result);
   } catch (err) {
     self.postMessage({ type: "error", epoch: data.epoch, id: data.id, error: String(err?.message ?? err) });
   }

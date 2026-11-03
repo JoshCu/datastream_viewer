@@ -704,7 +704,7 @@
                 <path d="M2 12c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0" />
                 <path d="M2 17c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0" />
               </svg>
-              Sea Level (fake flood mapping)
+              Flood mapping
               <button class="panel-collapse-toggle" aria-label="Toggle panel">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6 9 12 15 18 9" />
@@ -713,6 +713,39 @@
             </h3>
 
             <div class="panel-body">
+              <div class="nexrad-row flood-row">
+                <span class="flood-unit">Water from</span>
+                <select id="floodMode" class="select" title="Where the water level comes from">
+                  <option value="flat">a flat level</option>
+                  <option value="nwm">the loaded run</option>
+                </select>
+              </div>
+
+              <div id="floodNwm" style="display: none">
+                <div class="nexrad-row flood-row">
+                  <span class="flood-unit">Stage above</span>
+                  <select id="floodStageFrom" class="select"
+                          title="What the DEM's river cells are taken to be: the top of the bank (in-bank flow floods nothing) or the channel bed">
+                    <option value="bankfull">bankfull</option>
+                    <option value="bed">channel bed</option>
+                  </select>
+                </div>
+                <div class="status" id="fimStatus">
+                  <span class="status-dot" id="fimStatusDot"></span>
+                  <span id="fimStatusText">Off</span>
+                </div>
+                <p class="info-text">
+                  Height above nearest drainage (HAND) is computed from the DEM in view, with the NWM
+                  flowlines burned in, so each cell knows which reach it drains to. Each timestep
+                  gives each reach a depth: for an NWM run, flow ÷ velocity is a wetted area that the
+                  reach's RouteLink channel (trapezoid + floodplain) turns into a depth; an ngen run
+                  uses t-route's depth on the flowpath at the reach's outlet (via the NextGen ↔ NWM
+                  crosswalk, 2.4 MB once). Cells whose HAND is below the stage are flooded. Follows
+                  the time slider.
+                </p>
+              </div>
+
+              <div id="floodFlat">
               <div class="speed-control">
                 <label for="floodLevel">Level</label>
                 <input type="range" id="floodLevel" min="0" max="100" step="0.1" value="0" />
@@ -734,17 +767,18 @@
               </div>
               <div class="winds-meta" id="floodRefInfo">No reference point</div>
               <div class="winds-meta" id="floodSurface"></div>
-              <div class="legend">
-                <div class="legend-title">Water depth</div>
-                <div class="legend-gradient" id="floodLegendGradient"></div>
-                <div class="legend-labels"><span>0 m</span><span id="floodLegendMax">-</span></div>
-              </div>
               <p class="info-text">
                 A flat water surface over the terrain: everything below the level is
                 flooded, whether or not it's connected to a river. The slider spans the
                 elevations in view. Pick a reference point (say, a river bank) to set the
                 level as a height above it. Hover the map for elevation and depth.
               </p>
+              </div>
+              <div class="legend">
+                <div class="legend-title">Water depth</div>
+                <div class="legend-gradient" id="floodLegendGradient"></div>
+                <div class="legend-labels"><span>0 m</span><span id="floodLegendMax">-</span></div>
+              </div>
             </div>
           </div>
 

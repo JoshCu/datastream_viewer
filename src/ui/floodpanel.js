@@ -1,9 +1,15 @@
 // ====================================================================
-// Flood mapping panel: a flat water surface raised and lowered over the
-// terrain. Everything whose ground is below the water level is tinted by
-// depth (the FLOOD_LAYER color-relief layer on the DEM, map/basemap-style.js),
-// so moving the level only rewrites that layer's colour ramp.
+// Flood mapping panel, in one of two modes:
 //
+// - "flat": a flat water surface raised and lowered over the terrain.
+//   Everything whose ground is below the water level is tinted by depth (the
+//   FLOOD_LAYER color-relief layer on the DEM, map/basemap-style.js), so
+//   moving the level only rewrites that layer's colour ramp.
+// - "nwm": flooding from the loaded run (NWM, or ngen through the NWM
+//   crosswalk), per reach and per timestep, by HAND (src/fim/fim.js, which
+//   owns its own layer and status).
+//
+// The rest of this comment is about the flat mode.
 // The level is entered relative to sea level or to a reference point picked
 // on the map (its ground elevation). Opening the panel turns the 3D terrain
 // on and tilts the camera; while it's open, hovering the map shows the ground
@@ -17,6 +23,8 @@ import {
   FLOOD_DEEP_COLOR,
 } from "../config.js";
 import { labeledRow } from "./dom.js";
+import { setStatus } from "./panels.js";
+import { setupFim, setFimActive, setFimFrom, onFimStatus, fimAt } from "../fim/fim.js";
 // maplibregl is a global provided by the CDN <script> in index.html.
 
 const $ = (id) => document.getElementById(id);
@@ -25,6 +33,7 @@ const fmt = (m) => `${m.toFixed(1)} m (${(m * FT_PER_M).toFixed(1)} ft)`;
 const signed = (m) => (m < 0 ? m.toFixed(1) : `+${m.toFixed(1)}`);
 
 let open = false;
+let mode = "flat"; // "flat" | "nwm"
 let level = null; // water surface, m above sea level; null until first fit
 let ref = null; // { lngLat, elev }: the picked reference point
 let base = "sea"; // what the level is entered relative to: "sea" | "ref"
@@ -50,7 +59,7 @@ const baseElev = () => (base === "ref" && ref ? ref.elev : 0);
 // clear above it (the last two stops are a hair apart so the shore is sharp).
 function applyWater() {
   if (!map.getLayer(FLOOD_LAYER)) return;
-  const shown = open && level != null;
+  const shown = open && mode === "flat" && level != null;
   map.setLayoutProperty(FLOOD_LAYER, "visibility", shown ? "visible" : "none");
   if (!shown) return;
   map.setPaintProperty(FLOOD_LAYER, "color-relief-color", [
@@ -145,7 +154,7 @@ function setReference(lngLat) {
 }
 
 function showMarker() {
-  if (!ref || !open) {
+  if (!ref || !open || mode !== "flat") {
     marker?.remove();
     return;
   }
@@ -172,17 +181,37 @@ function onClickCapture(e) {
 
 // ---- Hover readout ----------------------------------------------------
 
-function onMouseMove(e) {
-  const tooltip = $("floodTooltip");
-  const elev = open ? elevationAt(e.lngLat) : null;
-  if (elev == null) {
-    tooltip.classList.remove("visible");
-    return;
-  }
+function flatRows(elev) {
   const rows = [labeledRow("Elevation", fmt(elev), { prefix: "tooltip" })];
   if (ref) rows.push(labeledRow("vs reference", `${signed(elev - ref.elev)} m`, { prefix: "tooltip" }));
   if (level != null && elev < level) {
     rows.push(labeledRow("Water depth", fmt(level - elev), { prefix: "tooltip", cls: "flood-depth" }));
+  }
+  return rows;
+}
+
+// HAND, the reach the cell drains to, its stage and the depth there.
+function nwmRows(elev, at) {
+  const row = (label, value, cls) => labeledRow(label, value, { prefix: "tooltip", cls });
+  const rows = [];
+  if (elev != null) rows.push(row("Elevation", fmt(elev)));
+  if (!at) return rows;
+  rows.push(row("Drains to", Number.isFinite(at.wb) ? `wb-${at.wb} · COMID ${at.comid}` : `COMID ${at.comid}`));
+  rows.push(row("HAND", fmt(at.hand)));
+  if (Number.isFinite(at.stage)) {
+    rows.push(row("Stage", fmt(at.stage)));
+    if (at.depth > 0) rows.push(row("Water depth", fmt(at.depth), "flood-depth"));
+  }
+  return rows;
+}
+
+function onMouseMove(e) {
+  const tooltip = $("floodTooltip");
+  const elev = open ? elevationAt(e.lngLat) : null;
+  const rows = !open ? [] : mode === "nwm" ? nwmRows(elev, fimAt(e.lngLat)) : elev == null ? [] : flatRows(elev);
+  if (!rows.length) {
+    tooltip.classList.remove("visible");
+    return;
   }
   tooltip.replaceChildren(...rows);
   // Above-right of the cursor, so it doesn't sit on the reach tooltip
@@ -220,11 +249,29 @@ function onToggle() {
     setPicking(false);
     hideTooltip();
   }
+  applyMode();
+}
+
+// Show the controls for the mode, and switch its layer on (the other's off).
+function applyMode() {
+  $("floodMode").value = mode;
+  $("floodFlat").style.display = mode === "flat" ? "" : "none";
+  $("floodNwm").style.display = mode === "nwm" ? "" : "none";
+  if (mode !== "flat") setPicking(false);
+  setFimActive(open && mode === "nwm");
   applyWater();
   showMarker();
 }
 
 export function setupFloodPanel() {
+  setupFim();
+  onFimStatus(({ kind, text }) => setStatus(kind, text, "fim"));
+  $("floodMode").addEventListener("change", (e) => {
+    mode = e.target.value;
+    applyMode();
+    if (mode === "flat") needsFit = true;
+  });
+  $("floodStageFrom").addEventListener("change", (e) => setFimFrom(e.target.value));
   $("floodLevel").addEventListener("input", (e) => setLevel(baseElev() + Number(e.target.value)));
   $("floodLevelInput").addEventListener("change", (e) => {
     if (e.target.value !== "") setLevel(baseElev() + Number(e.target.value));
@@ -259,7 +306,7 @@ export function setupFloodPanel() {
     if (open) needsFit = true;
   });
   map.on("idle", () => {
-    if (!open || !needsFit) return;
+    if (!open || mode !== "flat" || !needsFit) return;
     needsFit = false;
     fitSlider();
   });

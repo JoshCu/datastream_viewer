@@ -93,6 +93,16 @@ velocity / depth on the hydrofabric flowpaths over time.
   own DEM tiles (3D terrain and hillshade, re-encoded in a worker and served
   through a MapLibre protocol) and the flow is rerouted over it. Brushes
   raise or lower the terrain or rain particles into one spot.
+- **Flood mapping** — either a flat water level over the 3D terrain, or
+  flooding from the loaded run: height above nearest drainage (HAND) is
+  computed for the view from the map's DEM tiles with the NWM flowlines burned
+  in (a half-resolution preview first). Each timestep gives a reach a depth —
+  an NWM run's flow ÷ velocity through its RouteLink channel (trapezoid +
+  floodplain), or an ngen run's t-route depth on the flowpath at the reach's
+  outlet, via the NextGen ↔ NWM crosswalk — and cells whose HAND is below the
+  stage above bankfull (or the bed) are tinted by depth, on the GPU (WebGL2)
+  where available. Follows the time slider; hover for HAND, the reach and the
+  depth.
 - **Winds aloft** — Open-Meteo's hourly pressure-level winds (1000–250 hPa)
   for the map centre or a right-clicked point, as a time–height grid of
   arrows coloured by speed, with an hour's table of height, speed, direction
@@ -176,7 +186,7 @@ src/
     usgscatalog.js            USGS site catalog: IndexedDB cache, river groups, fuzzy search
     usgsdams.js               gages just below a dam / with no dams upstream (usgsdams.json)
     diff.js                   A − B diff of two loaded runs
-    nwm.js                    NWM file names, newest cycle, COMID table cache, load plan + run
+    nwm.js                    NWM file names, newest cycle, COMID table + crosswalk cache, load plan + run
     retro.js                  NWM retrospective single-reach series + HEAD-measured estimate
     loader.js                 load orchestration + the parse/merge worker pool
     workers/
@@ -191,6 +201,8 @@ src/
       nexrad.js               NEXRAD Level II records → per-tilt gate positions + bird profile sums (pure)
       bzip2.js                bzip2 decoder for the Level II records (pure)
       flowroute.js            DEM routing: Priority-Flood fill, accumulation, flow direction (pure)
+      hand.js                 flowline burn-in + height above nearest drainage per cell (pure)
+      crosswalk.js            NextGen ↔ NWM crosswalk: each COMID's outlet wb-N (pure)
       flowcells.js            routed field packed for the particles: per-cell record + colour (pure)
       flowterrain.js          terrain-edit deltas: resampling onto a grid, DEM + PNG encoding (pure)
       parsers/
@@ -214,6 +226,7 @@ src/
     nexradpanel.js            NEXRAD panel: date, per-station scan rows + lock, display controls
     windspanel.js             winds aloft panel: time–height arrow grid + hour table
     flowpanel.js              flow particles panel: count, speed, trail, colour, detail, GPU/CPU
+    floodpanel.js             flood mapping panel: flat level, or flooding from the NWM run
     erosionpanel.js           particle erosion panel: interaction, erosion, brushes, terrain reset
     sliders.js                range inputs bound to settings keys, kept in step across panels
   forcing/
@@ -231,6 +244,10 @@ src/
     terrain.js                terrain-edit store, flowdem:// protocol, map tile refresh
     terrain.worker.js         edited DEM tiles for the map: original + edits → PNG
     brush.js                  raise / lower / rain brushes
+  fim/
+    fim.js                    NWM-run flood map: HAND field per view, depth image per timestep
+    stage.js                  stage from flow / velocity or depth through the RouteLink channel (pure)
+    gpupaint.js               WebGL2 depth image: HAND + reach textures, per-step stage texture
   nexrad/
     source.js                 bucket listings, scan download, worker fan-out + tilt merge
     layer.js                  deck.gl PointCloudLayer per radar (via map/deck.js)

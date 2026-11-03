@@ -30,6 +30,8 @@
 //        null for all; times in epoch ms; values unpacked, fill → FILL_VALUE)
 //   in  { id, type: "retroSeries", name, col, h0, h1 }
 //     -> result { times, values, bytes, chunks }        (data/workers/retro.js)
+//   in  { id, type: "crosswalk" }
+//     -> result { comids, wbs }   each COMID's outlet wb-N (data/workers/crosswalk.js)
 //   in  { id, type: "usgsCatalog" }
 //     -> result { fetchedAt, params, sites }           (data/workers/usgscatalog.js)
 //   out { id, ok: true,  result }
@@ -46,6 +48,7 @@ import { scanCatchmentIndex, readIndexRow } from "./hfindex.js";
 import { fetchUsgsCatalog } from "./usgscatalog.js";
 import { readNwmFeatureIds, readNwmSizes, readNwmHour } from "./nwm.js";
 import { readRetroSeries } from "./retro.js";
+import { readCrosswalk } from "./crosswalk.js";
 
 let hdf5Promise = null;
 let parquetWasmPromise = null;
@@ -189,6 +192,12 @@ self.onmessage = async (e) => {
     }
     if (type === "usgsCatalog") {
       self.postMessage({ id, ok: true, result: await fetchUsgsCatalog() });
+      return;
+    }
+    if (type === "crosswalk") {
+      const [hyparquet, zstd] = await Promise.all([loadHyparquet(), loadZstd()]);
+      const result = await readCrosswalk(hyparquet, zstd);
+      self.postMessage({ id, ok: true, result }, [result.comids.buffer, result.wbs.buffer]);
       return;
     }
     if (type === "hfIndex") {

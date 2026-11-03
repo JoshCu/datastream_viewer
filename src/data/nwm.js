@@ -171,6 +171,36 @@ export function nwmRowOf(ids, comid) {
   return ids[lo] === comid ? lo : -1;
 }
 
+// ---- NextGen crosswalk ----------------------------------------------------
+
+const CROSSWALK_KEY = "ngen-nwm-crosswalk";
+let crosswalk = null; // Promise<{ comids, wbs }>
+
+// Each COMID's outlet hydrofabric flowpath (data/workers/crosswalk.js):
+// { comids: Float64Array (ascending), wbs: Float64Array }. 2.4 MB the first
+// time, then IndexedDB.
+export function ngenCrosswalk() {
+  if (!crosswalk) {
+    crosswalk = (async () => {
+      const cached = await dbGet(CROSSWALK_KEY);
+      if (cached?.comids?.length) return cached;
+      const table = await runTask({ type: "crosswalk" });
+      dbPut(CROSSWALK_KEY, { ...table, savedAt: Date.now() });
+      return table;
+    })();
+    crosswalk.catch(() => {
+      crosswalk = null;
+    });
+  }
+  return crosswalk;
+}
+
+// The N of the wb-N at a COMID's outlet, or undefined.
+export function outletWbOf(table, comid) {
+  const i = nwmRowOf(table.comids, comid);
+  return i < 0 ? undefined : table.wbs[i];
+}
+
 // ---- Plan and load ------------------------------------------------------
 
 const fileVariables = (variables) =>
