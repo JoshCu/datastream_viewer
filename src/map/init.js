@@ -27,7 +27,7 @@ import {
   TerrainControl,
   HydrofabricControl,
 } from "./interactions.js";
-import { GageControl, updateGageFilter, addGageIcon } from "./gages.js";
+import { GageControl, updateGageFilter, addGageIcon, scheduleNwmGageHarvest } from "./gages.js";
 import { SearchControl } from "./search.js";
 import { setupUsgsSites } from "./usgssites.js";
 import { loadUsgsCatalog } from "../data/usgscatalog.js";
@@ -168,6 +168,8 @@ export function init() {
     if (!e.tile) return;
     if (state.data) {
       if (e.sourceId === activeReachSource()) scheduleTilePaint(e.tile.tileID);
+      // An NWM run learns its gages from the flowline tiles (map/gages.js).
+      if (e.sourceId === REACH_SETS.nwm.feature.source) scheduleNwmGageHarvest();
     }
     // The live sim routes over every loaded hydrofabric tile, so new tiles
     // mean a rebuild.

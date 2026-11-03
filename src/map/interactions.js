@@ -21,7 +21,7 @@ import {
 import { valueAt, dataTimeRangeMs, hasVariable } from "../data/access.js";
 import { fetchGageMeta, peekGageMeta } from "../data/usgs.js";
 import { catalogMeta } from "../data/usgscatalog.js";
-import { siteFromGageFeature } from "./gages.js";
+import { siteFromGageFeature, runReachOfGage } from "./gages.js";
 import { iconButton, labeledRow, fmtDay } from "../ui/dom.js";
 import { showFeatureInfo } from "../ui/infopanel.js";
 import { openHydrograph } from "../ui/hydrograph.js";
@@ -379,7 +379,7 @@ export function onGageHover(e) {
   hoverGage(
     { target: GAGE_FEATURE, id: feature.id },
     `USGS-${siteFromGageFeature(feature)}`,
-    feature.properties.id,
+    runReachName(feature),
     e.point,
   );
 }
@@ -390,12 +390,19 @@ export function onUsgsSiteHover(e) {
   hoverGage({ target: USGS_SITE_FEATURE, id: feature.id }, feature.properties.id, null, e.point);
 }
 
-function hoverGage(next, locationId, reachId, point) {
+// The run's reach a gage dot sits on, as its network names it, or null.
+function runReachName(feature) {
+  const reachId = runReachOfGage(feature);
+  return reachId == null ? null : reachSetOf(state.data).label(reachId);
+}
+
+// `reachName` labels the run's reach under the gage (null for a catalog dot).
+function hoverGage(next, locationId, reachName, point) {
   if (next.target !== hovered?.target || next.id !== hovered?.id) {
     setGageHover(hovered, false);
     setGageHover(next, true);
     hovered = next;
-    showGageTooltip(locationId, reachId);
+    showGageTooltip(locationId, reachName);
   }
   hoveredGagePoint = point;
   positionGageTooltip();
@@ -458,10 +465,10 @@ function positionGageTooltip() {
 // The site's catalog entry renders at once. A gage the catalog doesn't have
 // (or before it loads) shows its id and reach immediately; the station name
 // and USGS metadata fill in once the (cached) lookup resolves, provided this
-// gage is still the hovered one. `reachId` is null for a catalog dot.
-function showGageTooltip(locationId, reachId) {
+// gage is still the hovered one. `reachName` is null for a catalog dot.
+function showGageTooltip(locationId, reachName) {
   const tooltip = document.getElementById("gageTooltip");
-  const reachText = reachId != null ? `wb-${reachId}` : "";
+  const reachText = reachName ?? "";
   document.getElementById("gageTooltipTitle").textContent = locationId;
   document.getElementById("gageTooltipName").textContent = reachText;
   tooltip.classList.add("visible");
@@ -471,7 +478,7 @@ function showGageTooltip(locationId, reachId) {
   clearTimeout(metaTimer);
   const fromCatalog = catalogMeta(locationId);
   if (fromCatalog) {
-    applyGageMeta(Promise.resolve(fromCatalog), token, reachId);
+    applyGageMeta(Promise.resolve(fromCatalog), token, reachName);
     return;
   }
   document.getElementById("gageTooltipMeta").innerHTML =
@@ -480,22 +487,22 @@ function showGageTooltip(locationId, reachId) {
   // A gage looked up earlier in the session renders without the debounce.
   const known = peekGageMeta(site);
   if (known) {
-    applyGageMeta(known, token, reachId);
+    applyGageMeta(known, token, reachName);
   } else {
     metaTimer = setTimeout(
-      () => applyGageMeta(fetchGageMeta(site), token, reachId),
+      () => applyGageMeta(fetchGageMeta(site), token, reachName),
       META_HOVER_DELAY_MS,
     );
   }
 }
 
-function applyGageMeta(promise, token, reachId) {
+function applyGageMeta(promise, token, reachName) {
   promise
     .then((meta) => {
       if (token !== hoverToken || !hovered) return;
       document.getElementById("gageTooltipName").textContent =
-        meta.name || (reachId != null ? `wb-${reachId}` : "");
-      renderGageMeta(meta, reachId);
+        meta.name || (reachName ?? "");
+      renderGageMeta(meta, reachName);
     })
     .catch(() => {
       if (token !== hoverToken || !hovered) return;
@@ -505,9 +512,9 @@ function applyGageMeta(promise, token, reachId) {
     });
 }
 
-function renderGageMeta(meta, reachId) {
+function renderGageMeta(meta, reachName) {
   const rows = [];
-  if (reachId != null) rows.push(["Reach", `wb-${reachId}`]);
+  if (reachName != null) rows.push(["Reach", reachName]);
   // Stream is the norm; anything else (reservoir, canal, tidal) changes how
   // comparable the observations are to routed flow, so call it out.
   if (meta.siteType && meta.siteType !== "Stream") rows.push(["Type", meta.siteType]);

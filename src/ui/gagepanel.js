@@ -2,10 +2,11 @@
 // Gage click panel: the gage's USGS station details. Observed discharge is
 // charted against every loaded run in the hydrograph dock.
 // ====================================================================
-import { siteFromGageFeature } from "../map/gages.js";
+import { siteFromGageFeature, runReachOfGage } from "../map/gages.js";
+import { state } from "../state.js";
 import { fetchGageMeta } from "../data/usgs.js";
 import { getCatalog, siteTypes } from "../data/usgscatalog.js";
-import { USGS_OBS_TYPES } from "../config.js";
+import { USGS_OBS_TYPES, reachSetOf } from "../config.js";
 import { labeledRow, fmtDay } from "./dom.js";
 import { openHydrograph } from "./hydrograph.js";
 
@@ -15,12 +16,13 @@ let requestSeq = 0;
 
 export async function showGageInfo(feature) {
   const site = siteFromGageFeature(feature);
-  const reachId = feature.properties.id;
+  const reachId = runReachOfGage(feature);
+  if (reachId == null) return;
   const seq = ++requestSeq;
 
   document.getElementById("info-id").textContent = `USGS-${site}`;
   const content = document.getElementById("info-content");
-  content.replaceChildren(labeledRow("Reach", `wb-${reachId}`));
+  content.replaceChildren(labeledRow("Reach", reachSetOf(state.data).label(reachId)));
   document.getElementById("info-panel").classList.add("visible");
 
   openHydrograph({ reachId, site });

@@ -16,6 +16,7 @@ import {
   GAGE_FEATURE,
   USGS_SITES_LAYER,
   USGS_SITES_LABEL_LAYER,
+  NWM_FLOWLINE_FEATURE,
 } from "../config.js";
 import { iconButton } from "../ui/dom.js";
 import { initialLayer, noteLayer, saveLayer } from "./layerprefs.js";
@@ -119,18 +120,77 @@ export function setGageLabelsVisible(on) {
   applyGageVisibility();
 }
 
-// Show the gages whose flowpath (`id` property) is in the loaded dataset, or
-// hide the layer entirely when nothing is loaded. `match` is used rather than
+// ---- An NWM run's gages ------------------------------------------------
+// The gage tiles name hydrofabric reaches, so an NWM run finds its gages the
+// other way round: a reach's USGS site is the NWM tiles' `gages` attribute
+// (z7+, omitted when blank). Only loaded tiles can be read, so the site ->
+// COMID table grows as tiles stream in, like a "Load viewport" run's reaches.
+let nwmSites = new Map(); // site number -> COMID
+let nwmSitesFor = null; // the dataset nwmSites was gathered for
+let harvestTimer = null;
+
+function harvestNwmGages() {
+  const data = state.data;
+  if (data?.reaches !== "nwm" || !map.getSource(NWM_FLOWLINE_FEATURE.source)) return false;
+  if (nwmSitesFor !== data) {
+    nwmSites = new Map();
+    nwmSitesFor = data;
+  }
+  const before = nwmSites.size;
+  for (const f of map.querySourceFeatures(NWM_FLOWLINE_FEATURE.source, {
+    sourceLayer: NWM_FLOWLINE_FEATURE.sourceLayer,
+    filter: ["has", "gages"],
+  })) {
+    const site = f.properties.gages;
+    if (site && !nwmSites.has(String(site)) && data.index.has(f.id)) nwmSites.set(String(site), f.id);
+  }
+  return nwmSites.size !== before;
+}
+
+// Called for each NWM tile that loads while an NWM run is on; coalesced, as
+// a pan delivers tiles in bursts and each pass reads every loaded tile.
+export function scheduleNwmGageHarvest() {
+  if (state.data?.reaches !== "nwm" || harvestTimer) return;
+  harvestTimer = setTimeout(() => {
+    harvestTimer = null;
+    if (harvestNwmGages()) updateGageFilter();
+  }, 300);
+}
+
+// The COMID an NWM run's gage sits on, or undefined.
+export function nwmReachForSite(site) {
+  return nwmSitesFor === state.data ? nwmSites.get(site) : undefined;
+}
+
+// The loaded run's reach id a gage dot sits on, or null.
+export function runReachOfGage(feature) {
+  if (!state.data) return null;
+  if (state.data.reaches === "nwm") return nwmReachForSite(siteFromGageFeature(feature)) ?? null;
+  return feature.properties.id ?? null;
+}
+
+// Which of the gage tiles' points belong to the loaded run: by reach id for a
+// hydrofabric run, by site number for an NWM one.
+function runGageFilter() {
+  if (!state.data) return HIDDEN_FILTER;
+  if (state.data.reaches === "nwm") {
+    harvestNwmGages();
+    // match needs at least one label.
+    return nwmSites.size ? ["match", SITE_NO, [...nwmSites.keys()], true, false] : HIDDEN_FILTER;
+  }
+  // index keys are de-duplicated; match rejects repeated labels.
+  return ["match", ["get", "id"], Array.from(state.data.index.keys()), true, false];
+}
+
+// Show the gages on a reach in the loaded dataset, or hide the layer
+// entirely when nothing is loaded. `match` is used rather than
 // `in` because MapLibre compiles its label list into a hash lookup, which
 // keeps a CONUS-sized id list cheap to evaluate per feature.
 export function updateGageFilter() {
   if (!map?.getLayer(GAGE_LAYER)) return;
   const groups = shownSiteGroups();
   styledFor = groups;
-  // index keys are de-duplicated; match rejects repeated labels.
-  const onRun = state.data
-    ? ["match", ["get", "id"], Array.from(state.data.index.keys()), true, false]
-    : HIDDEN_FILTER;
+  const onRun = runGageFilter();
   if (!state.data || !groups) currentFilter = onRun;
   else if (!groups.length) currentFilter = HIDDEN_FILTER;
   else {
