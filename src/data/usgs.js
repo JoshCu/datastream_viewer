@@ -9,10 +9,14 @@
 // ====================================================================
 import { USGS_API, USGS_FLOW_PARAM, CFS_TO_CMS } from "../config.js";
 
-const CACHE_NAME = "usgs-continuous-v1";
+const CACHE_NAME = "usgs-continuous-v2"; // v2: per-year windows, trimmed properties
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CACHED_AT_HEADER = "x-cached-at";
-const MAX_PAGES = 20; // 50k rows/page; 15-min data is ~35k rows/year
+const MAX_PAGES = 20; // per window (a year): 50k rows/page; 15-min data is ~35k rows/year
+const OBS_CONCURRENCY = 3; // windows in flight at once
+const FETCH_TIMEOUT_MS = 90_000; // per request; a year's page takes ~5 s
+const RETRIES = 3; // after the first try, for timeouts, 429 and 5xx
+const RETRY_BASE_MS = 1000; // doubled per retry, unless Retry-After says
 
 const seriesMemo = new Map(); // url -> Promise<series>
 const metaMemo = new Map(); // site -> Promise<meta>
@@ -149,10 +153,79 @@ function numberOrNull(v) {
 
 // Fetch discharge observations for a USGS site number over [startMs, endMs].
 // Resolves to { site, times: Float64Array (epoch ms), values: Float32Array
-// (m³/s), units, fromCache } with points sorted by time.
-export function fetchGageFlow(site, startMs, endMs) {
-  const url = itemsUrl(site, startMs, endMs);
-  return memo(seriesMemo, url, () => loadSeries(site, url));
+// (m³/s), units, fromCache, failed } with points sorted by time.
+//
+// The API rejects a time envelope over 1100 days (HTTP 400), and a multi-year
+// page chain is slow enough to time out, so the range is split into
+// calendar-year windows (~35k rows of 15-min data, one ~1 MB page each),
+// fetched a few at a time and joined. Each window is memoised and cached on
+// its own: windows are aligned to the year, so a later request that overlaps
+// reuses every whole year it shares. A window that still fails after its
+// retries is left out and counted in `failed` (windows), rather than losing
+// the years that did arrive; only all of them failing is an error.
+// `onProgress(done, total)` reports finished windows.
+export async function fetchGageFlow(site, startMs, endMs, { onProgress } = {}) {
+  const windows = splitWindows(startMs, endMs);
+  let done = 0;
+  let failed = 0;
+  let firstError = null;
+  const parts = new Array(windows.length);
+  const queue = windows.map((w, i) => i);
+  async function worker() {
+    while (queue.length) {
+      const i = queue.shift();
+      const [a, b] = windows[i];
+      const url = itemsUrl(site, a, b);
+      try {
+        parts[i] = await memo(seriesMemo, url, () => loadSeries(url));
+      } catch (err) {
+        failed++;
+        firstError ??= err;
+      }
+      onProgress?.(++done, windows.length);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(OBS_CONCURRENCY, windows.length) }, worker));
+  if (failed === windows.length) throw firstError;
+  return { site, ...joinWindows(parts.filter(Boolean)), failed, windows: windows.length };
+}
+
+// [startMs, endMs] as UTC calendar-year windows, clipped to the range.
+function splitWindows(startMs, endMs) {
+  const out = [];
+  let a = startMs;
+  while (a < endMs) {
+    const next = Date.UTC(new Date(a).getUTCFullYear() + 1, 0, 1);
+    const b = Math.min(next, endMs);
+    out.push([a, b]);
+    a = b;
+  }
+  return out.length ? out : [[startMs, endMs]];
+}
+
+// The windows' points in time order. Windows share their boundary instant
+// (the API's interval is closed), so a point no later than the last kept one
+// is a repeat.
+function joinWindows(parts) {
+  const total = parts.reduce((n, p) => n + p.times.length, 0);
+  const times = new Float64Array(total);
+  const values = new Float32Array(total);
+  let n = 0;
+  for (const p of parts) {
+    for (let i = 0; i < p.times.length; i++) {
+      if (n && p.times[i] <= times[n - 1]) continue;
+      times[n] = p.times[i];
+      values[n] = p.values[i];
+      n++;
+    }
+  }
+  return {
+    times: times.subarray(0, n),
+    values: values.subarray(0, n),
+    units: "m³/s",
+    rawUnits: parts.find((p) => p.rawUnits)?.rawUnits ?? null,
+    fromCache: parts.length > 0 && parts.every((p) => p.fromCache),
+  };
 }
 
 function itemsUrl(site, startMs, endMs) {
@@ -160,6 +233,9 @@ function itemsUrl(site, startMs, endMs) {
     monitoring_location_id: `USGS-${site}`,
     parameter_code: USGS_FLOW_PARAM,
     time: `${new Date(startMs).toISOString()}/${new Date(endMs).toISOString()}`,
+    // Only what's read: a third of the payload, and the server answers ~3×
+    // faster than for whole features.
+    properties: "time,value,unit_of_measure",
     skipGeometry: "true",
     limit: "50000",
     f: "json",
@@ -167,7 +243,7 @@ function itemsUrl(site, startMs, endMs) {
   return `${USGS_API}/collections/continuous/items?${params}`;
 }
 
-async function loadSeries(site, firstUrl) {
+async function loadSeries(firstUrl) {
   const ts = [];
   const vs = [];
   let ordered = true;
@@ -206,7 +282,7 @@ async function loadSeries(site, firstUrl) {
     times[i] = ts[j];
     values[i] = vs[j] * toCms;
   }
-  return { site, times, values, units: "m³/s", rawUnits: units, fromCache };
+  return { times, values, rawUnits: units, fromCache };
 }
 
 // GET a JSON URL, serving from the Cache API when a fresh-enough copy exists.
@@ -221,9 +297,7 @@ async function fetchJsonCached(url) {
     }
   }
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`USGS API ${res.status}`);
-  const body = await res.text();
+  const body = await fetchTextRetrying(url);
   if (cache) {
     const headers = new Headers({
       "content-type": "application/json",
@@ -234,10 +308,35 @@ async function fetchJsonCached(url) {
   return { json: JSON.parse(body), cached: false };
 }
 
+// GET a URL's body, with a timeout per attempt and retries (backing off) for
+// what a retry can fix: timeouts, network errors, 429 and 5xx. Any other
+// status (a 400 for a bad query) fails at once.
+async function fetchTextRetrying(url) {
+  for (let attempt = 0; ; attempt++) {
+    let retryAfterMs = null;
+    let error;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (res.ok) return await res.text();
+      error = new Error(`USGS API ${res.status}`);
+      if (res.status !== 429 && res.status < 500) throw Object.assign(error, { final: true });
+      const after = Number(res.headers.get("retry-after"));
+      if (after > 0) retryAfterMs = after * 1000;
+    } catch (err) {
+      if (err.final) throw err;
+      error = err.name === "TimeoutError" ? new Error("USGS API timed out") : err;
+    }
+    if (attempt >= RETRIES) throw error;
+    await new Promise((r) => setTimeout(r, retryAfterMs ?? RETRY_BASE_MS * 2 ** attempt));
+  }
+}
+
 async function openCache() {
   // Cache API is only exposed in secure contexts (https / localhost).
   if (typeof caches === "undefined") return null;
   try {
+    // v1's pages are keyed by URLs nothing asks for any more.
+    caches.delete("usgs-continuous-v1").catch(() => {});
     return await caches.open(CACHE_NAME);
   } catch {
     return null;

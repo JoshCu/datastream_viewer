@@ -470,7 +470,14 @@ async function rebuild() {
   if (!site || view.variable !== "flow" || !view.full) return;
   let obs;
   try {
-    obs = await fetchGageFlow(site, view.full[0], view.full[1]);
+    obs = await fetchGageFlow(site, view.full[0], view.full[1], {
+      // A multi-year window is fetched a year at a time.
+      onProgress: (done, total) => {
+        if (seq !== requestSeq || total < 2 || done === total) return;
+        view.obsStatus = `Fetching USGS observations… ${done} / ${total} years`;
+        renderStatus();
+      },
+    });
   } catch (err) {
     if (seq !== requestSeq) return;
     view.obsStatus = `USGS: ${err.message}`;
@@ -491,7 +498,8 @@ async function rebuild() {
     });
     view.obsStatus =
       `${obs.times.length.toLocaleString()} observations` +
-      (obs.fromCache ? " (cached)" : "");
+      (obs.fromCache ? " (cached)" : "") +
+      (obs.failed ? ` · ${obs.failed} of ${obs.windows} years failed to load` : "");
   } else {
     view.obsStatus = "No USGS observations in this window";
   }

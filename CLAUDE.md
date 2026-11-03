@@ -319,6 +319,13 @@ own the hover/click where they overlap, since only they know the reach for
 the hydrograph. Gage tooltips use `catalogMeta()` when the site is in the
 catalog and fall back to `fetchGageMeta()`.
 
+Gage observations for the hydrograph (`fetchGageFlow` in `data/usgs.js`)
+come from the `continuous` collection, which rejects a time envelope over
+1100 days. The range is split into UTC calendar-year windows (one ~1 MB page
+of 15-min data each), fetched three at a time with a timeout and retries for
+timeouts / 429 / 5xx, each memoised and Cache-API cached on its own; a window
+that still fails is counted in `failed` instead of sinking the rest.
+
 ### Search (`map/search.js`)
 
 The magnifier button at the top right pops out a box with a suggestion
