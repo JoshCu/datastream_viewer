@@ -55,6 +55,7 @@ import { setupSimRain } from "../sim/rain.js";
 import { forcingTileLoaded, invalidateForcingView } from "../forcing/paint.js";
 import { setupForcingPanel, onForcingHover, onForcingLeave } from "../ui/forcingpanel.js";
 import { setupForcingPlot } from "../ui/forcingplot.js";
+import { setupNwmPanel } from "../ui/nwmpanel.js";
 import { setupContextMenu } from "../ui/contextmenu.js";
 import { setupNexradPanel } from "../ui/nexradpanel.js";
 import { setupWindsPanel } from "../ui/windspanel.js";
@@ -196,6 +197,7 @@ export function init() {
   initCollapsiblePanels();
   setupS3Browser();
   setupUploadPanel();
+  setupNwmPanel();
   setupHydrograph();
   setupForcingPanel();
   setupForcingPlot();

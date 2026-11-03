@@ -11,6 +11,14 @@ velocity / depth on the hydrofabric flowpaths over time.
 
 - **S3 browser** — navigate bucket → cycle → VPU folders and pick a t-route
   output file, or load an entire CONUS cycle at once.
+- **NWM forecasts** — the NWM Forecast panel loads operational NWM v3
+  channel output (short range, medium range per member or blended, long
+  range per member, or the last N hours of analysis) straight from the
+  public `noaa-nwm-pds` bucket. It finds the newest complete cycle, range-reads
+  only the flow (and optionally velocity) chunks of each hourly file, keeps
+  the reaches in view (or all of CONUS), and shows the download and memory
+  cost before a big load. The run is painted on the NWM flowlines (COMID
+  reaches, RouteLink attributes), a second river network with its own toggle.
 - **Results playback** — scrub or auto-play through timesteps; the flowpaths
   recolor via MapLibre feature-state as reaches stream into view.
 - **Color scales** — linear, log, sqrt, cbrt, symlog, plus quantile / quantile-class
@@ -164,11 +172,13 @@ src/
     usgscatalog.js            USGS site catalog: IndexedDB cache, river groups, fuzzy search
     usgsdams.js               gages just below a dam / with no dams upstream (usgsdams.json)
     diff.js                   A − B diff of two loaded runs
+    nwm.js                    NWM file names, newest cycle, COMID table cache, load plan + run
     loader.js                 load orchestration + the parse/merge worker pool
     workers/
       parse.worker.js         module worker hosting the parsers, merge + forcing fetches
       merge.js                mergeDatasets + bounds (worker-side, pure)
-      hdf5layout.js           async HDF5 layout reader for forcing files (pure)
+      hdf5layout.js           async HDF5 layout reader: forcing files + chunked NWM output (pure)
+      nwm.js                  NWM channel_rt hour reads over range requests (pure)
       forcing.js              forcing row fetch/decode over range requests (pure)
       hfindex.js              hydrofabric index lookups: catchment id → lon/lat (pure)
       usgscatalog.js          USGS site catalog fetch + station-name normalization (pure)
@@ -191,6 +201,7 @@ src/
     gagepanel.js              gage click info panel (USGS station details)
     usgspanel.js              USGS Gages panel: catalog status, per-type show/hide
     hydrograph.js             D3 hydrograph dock: runs vs obs, zoom, metrics
+    nwmpanel.js               NWM Forecast panel: run, cycle, member, stride, reaches, estimate
     forcingpanel.js           forcings sidebar panel: source, load buttons, controls
     forcingplot.js            per-catchment forcing small multiples (dock)
     contextmenu.js            map right-click menu

@@ -24,7 +24,7 @@ import { createBlockReader, readForcingLayout } from "./hdf5layout.js";
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 const RETRIES = 3;
 
-function rangeFetcher(source) {
+export function rangeFetcher(source) {
   if (source.file) {
     return (start, end) => source.file.slice(start, end + 1).arrayBuffer();
   }

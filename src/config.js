@@ -234,6 +234,82 @@ export const FLOW_LIFT_M = 3;
 // 3D terrain's and the hillshade's.
 export const FLOW_EDIT_SOURCES = ["terrainSource", "hillshadeSource"];
 
+// ---- NWM operational output (src/data/nwm.js) -------------------------
+//
+// One NetCDF-4 file per (configuration, cycle, member, valid hour) on the
+// public AWS mirror, each covering every CONUS reach. Read with Range
+// requests: the metadata (~110 kB) and then only the chunks of the
+// variables asked for. See report.md "Operational NWM output".
+export const NWM_BUCKET = "noaa-nwm-pds";
+export const NWM_BASE = "https://noaa-nwm-pds.s3.amazonaws.com";
+// Our variable → the file's. NWM has no depth.
+export const NWM_VARIABLES = { flow: "streamflow", velocity: "velocity" };
+// Every channel_rt variable is packed int32 × 0.01 with this fill. The
+// attributes sit in dense attribute storage the HDF5 reader doesn't walk,
+// so these come from ncdump (identical in every configuration).
+export const NWM_SCALE = 0.01;
+export const NWM_FILL = -999900;
+// Configurations. `folder`/`file` build the object key (see data/nwm.js):
+//   nwm.YYYYMMDD/<folder>/nwm.tHHz.<product>.<file>.<step>.conus.nc
+// `{m}` is the ensemble member. `steps` lists the step suffixes, `every` is
+// the cycle interval in hours, `stride` the default time stride.
+export const NWM_CONFIGS = {
+  short_range: {
+    label: "Short range (18 h)",
+    folder: "short_range",
+    product: "short_range",
+    file: "channel_rt",
+    every: 1,
+    steps: { first: 1, last: 18, by: 1 },
+    stride: 1,
+  },
+  medium_range: {
+    label: "Medium range (10 d)",
+    folder: "medium_range_mem{m}",
+    product: "medium_range",
+    file: "channel_rt_{m}",
+    members: 6,
+    every: 6,
+    // Member 1 runs 240 h, members 2–6 204 h.
+    steps: (m) => ({ first: 1, last: m === 1 ? 240 : 204, by: 1 }),
+    stride: 3,
+  },
+  medium_range_blend: {
+    label: "Medium range blend (10 d)",
+    folder: "medium_range_blend",
+    product: "medium_range_blend",
+    file: "channel_rt",
+    every: 6,
+    steps: { first: 1, last: 240, by: 1 },
+    stride: 3,
+  },
+  long_range: {
+    label: "Long range (30 d)",
+    folder: "long_range_mem{m}",
+    product: "long_range",
+    file: "channel_rt_{m}",
+    members: 4,
+    every: 6,
+    steps: { first: 6, last: 720, by: 6 },
+    stride: 4,
+  },
+  analysis_assim: {
+    label: "Analysis (recent past)",
+    folder: "analysis_assim",
+    product: "analysis_assim",
+    file: "channel_rt",
+    every: 1,
+    // Not a forecast: the tm00 file of each of the last `hours` cycles.
+    analysis: true,
+    hours: 48,
+    stride: 1,
+  },
+};
+// Loads estimated above this ask first.
+export const NWM_CONFIRM_BYTES = 150 * 1024 * 1024;
+// Concurrent hour files in flight (each one is a ~2–4 MB range read).
+export const NWM_FETCH_CONCURRENCY = 6;
+
 // ---- Forcings (src/forcing/) -----------------------------------------
 //
 // ngen forcing files hold one (catchment × time) float64 matrix per

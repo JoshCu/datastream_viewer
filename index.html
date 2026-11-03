@@ -350,6 +350,98 @@
             </div>
           </div>
 
+          <!-- NWM operational output (src/data/nwm.js, src/ui/nwmpanel.js):
+               channel_rt files on noaa-nwm-pds, range-read for the reaches
+               in view and painted on the NWM flowlines. -->
+          <div class="panel collapsed" id="nwmPanel" data-url-key="nwm">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3,18V6l7,12V6" />
+                <path d="M14,19c2-2,2-5,4-7s2-4,3-6" />
+              </svg>
+              NWM Forecast
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="nwmConfig">Run</label>
+                <select id="nwmConfig" class="select scale-select"></select>
+              </div>
+              <div class="scale-select-wrap" id="nwmMemberRow" hidden>
+                <label class="scale-label" for="nwmMember">Member</label>
+                <select id="nwmMember" class="select scale-select"></select>
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="nwmDate" id="nwmCycleLabel">Cycle</label>
+                <div class="usgs-range">
+                  <input type="date" id="nwmDate" class="select" title="Cycle date (UTC)" />
+                  <select id="nwmHour" class="select" title="Cycle hour (UTC)"></select>
+                </div>
+                <button class="btn secondary" id="nwmLatestBtn" title="Find the newest complete cycle">Latest</button>
+              </div>
+              <div class="scale-select-wrap" id="nwmHoursRow" hidden>
+                <label class="scale-label" for="nwmHours">Past</label>
+                <input type="number" id="nwmHours" class="select scale-select" min="1" max="720" step="1" />
+                <span class="scale-label">hours</span>
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="nwmStride">Every</label>
+                <select id="nwmStride" class="select scale-select" title="Load every Nth file of the run">
+                  <option value="1">file</option>
+                  <option value="2">2nd file</option>
+                  <option value="3">3rd file</option>
+                  <option value="4">4th file</option>
+                  <option value="6">6th file</option>
+                  <option value="12">12th file</option>
+                  <option value="24">24th file</option>
+                </select>
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="nwmReaches">Reaches</label>
+                <select id="nwmReaches" class="select scale-select"
+                        title="In view: the NWM reaches in the flowline tiles loaded for the current view. All CONUS: all 2.78 million (a lot of memory).">
+                  <option value="view">In view</option>
+                  <option value="conus">All CONUS</option>
+                </select>
+              </div>
+              <div class="scale-select-wrap" id="nwmOrderRow">
+                <label class="scale-label" for="nwmMinOrder">Min order</label>
+                <select id="nwmMinOrder" class="select scale-select" title="Smallest Strahler order to load">
+                  <option value="1">1 (all)</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                </select>
+              </div>
+              <label class="usgs-type usgs-active">
+                <input type="checkbox" id="nwmVelocity" />
+                <span>Velocity too (about doubles the download)</span>
+              </label>
+
+              <div class="forcing-actions">
+                <button class="btn" id="nwmLoadBtn">Load</button>
+              </div>
+
+              <div class="status" id="nwmStatus">
+                <span class="status-dot" id="nwmStatusDot"></span>
+                <span id="nwmStatusText">Idle</span>
+              </div>
+
+              <p class="info-text">
+                Each file is one hour of every CONUS reach; only the flow (and velocity) chunks are
+                fetched, about 1.7 MB per file each. A view's reaches are spread through every
+                chunk, so zooming in saves memory, not download. Painted on the NWM flowlines.
+              </p>
+            </div>
+          </div>
+
           <!-- Forcings (src/forcing/, src/ui/forcingpanel.js): ngen forcing
                files painted on the catchments, fetched on demand with range
                requests from an S3 cycle or read from dropped files. -->

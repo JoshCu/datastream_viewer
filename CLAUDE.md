@@ -182,6 +182,26 @@ the worker a per-catchment (cat-N → wb-N) qlat table per forcing hour; the
 worker floors each reach's qlat at that value before every 5-min step on its
 own clock and loops the series when it runs out.
 
+### NWM forecasts (`data/nwm.js`, `data/workers/nwm.js`, `ui/nwmpanel.js`)
+
+An NWM run is an ordinary dataset with `reaches: "nwm"` and no `depth`,
+assembled on the main thread from one worker task per valid hour
+(`nwmHour`). Every `channel_rt` file covers all 2,776,734 CONUS reaches,
+each variable a 1-D int32 array (×0.01, fill −999900) in three
+deflate + shuffle chunks; `hdf5layout.js` reads the chunked layout (layout
+v3, v1 B-tree) and `decodeChunk()` undoes the filters. Variable attributes
+are in dense storage the reader doesn't walk, so scale/fill are constants
+in `config.js` (`NWM_SCALE`, `NWM_FILL`). `feature_id` is the same sorted
+COMID list in every file: it's read once and cached in IndexedDB, and its
+compressed size is a fingerprint each hour re-checks. The main thread maps
+COMIDs to file rows and sends a sorted row list; the worker fetches only
+the chunks those rows fall in. The panel's default subset is the COMIDs in
+the NWM flowline tiles loaded for the view (`querySourceFeatures`, turning
+the layer on with `setNwmVisible`, which doesn't save), so below z12 short
+reaches are left out, as the tiles leave them out. File names are built
+from `NWM_CONFIGS`, not listed; the newest cycle is found by HEADing each
+candidate's last file.
+
 ### Forcings (`src/forcing/`)
 
 Another mode independent of `state.data`: ngen forcing files painted on the

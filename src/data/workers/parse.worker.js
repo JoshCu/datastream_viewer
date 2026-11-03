@@ -20,6 +20,14 @@
 //     -> result { nums, rows }                          (data/workers/hfindex.js)
 //   in  { id, type: "hfIndexRow", row }
 //     -> result { lon, lat, vpuid }
+//   in  { id, type: "nwmIds", url }
+//     -> result { ids: Float64Array, fingerprint, stats }   (data/workers/nwm.js)
+//   in  { id, type: "nwmSizes", url, variables }
+//     -> result { sizes: { key: compressed bytes }, stats }
+//   in  { id, type: "nwmHour", url, variables, rows, fingerprint }
+//     -> result { time, refTime, values: { key: Float32Array }, stats }
+//        (one channel_rt file; `rows` = sorted Int32Array of file rows or
+//        null for all; times in epoch ms; values unpacked, fill → FILL_VALUE)
 //   in  { id, type: "usgsCatalog" }
 //     -> result { fetchedAt, params, sites }           (data/workers/usgscatalog.js)
 //   out { id, ok: true,  result }
@@ -34,6 +42,7 @@ import { scanForcingLayout, fetchForcingRows } from "./forcing.js";
 import { decodeRecords } from "./nexrad.js";
 import { scanCatchmentIndex, readIndexRow } from "./hfindex.js";
 import { fetchUsgsCatalog } from "./usgscatalog.js";
+import { readNwmFeatureIds, readNwmSizes, readNwmHour } from "./nwm.js";
 
 let hdf5Promise = null;
 let parquetWasmPromise = null;
@@ -135,6 +144,20 @@ self.onmessage = async (e) => {
       const transfer = result.cuts.flatMap((c) => [c.x.buffer, c.y.buffer, c.z.buffer, c.v.buffer]);
       if (result.profile) transfer.push(result.profile.buffer);
       self.postMessage({ id, ok: true, result }, transfer);
+      return;
+    }
+    if (type === "nwmIds") {
+      const result = await readNwmFeatureIds(e.data.url);
+      self.postMessage({ id, ok: true, result }, [result.ids.buffer]);
+      return;
+    }
+    if (type === "nwmSizes") {
+      self.postMessage({ id, ok: true, result: await readNwmSizes(e.data.url, e.data.variables) });
+      return;
+    }
+    if (type === "nwmHour") {
+      const result = await readNwmHour(e.data);
+      self.postMessage({ id, ok: true, result }, Object.values(result.values).map((v) => v.buffer));
       return;
     }
     if (type === "usgsCatalog") {

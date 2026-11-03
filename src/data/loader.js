@@ -164,6 +164,15 @@ function finalizeData(dataset, bounds, options) {
   );
 }
 
+// Register and promote a dataset assembled on the main thread (data/nwm.js),
+// in the parsers' shape ({ time, timeAbsolute, nTimes, featureIds, matrices,
+// refTime, reaches }), under hydrograph source `key`.
+export function showAssembled(key, label, dataset, bounds, options) {
+  const data = finalizeData(dataset, bounds, options);
+  registerSource(key, label, data);
+  return data;
+}
+
 // Promote a dataset already computed by data/diff.js.
 export function showDiff(diffData, options) {
   return promote(diffData, options);

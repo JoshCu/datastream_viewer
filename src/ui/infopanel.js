@@ -4,7 +4,7 @@
 // observations when one sits on it.
 // ====================================================================
 import { state } from "../state.js";
-import { VARIABLES, isValid, reachSetOf } from "../config.js";
+import { VARIABLES, REACH_SETS, isValid, reachSetOf } from "../config.js";
 import { valueAt } from "../data/access.js";
 import { gageSiteForReach } from "../map/gages.js";
 import { labeledRows } from "./dom.js";
@@ -38,5 +38,11 @@ export function showFeatureInfo(feature) {
   document.getElementById("info-content").replaceChildren(labeledRows(rows));
   document.getElementById("info-panel").classList.add("visible");
 
-  openHydrograph({ reachId: id, site: gageSiteForReach(id) });
+  // An NWM reach names its USGS gage in the tile (`gages`, omitted when it
+  // has none); hydrofabric gages come from the gage layer.
+  const site =
+    reachSetOf(state.data) === REACH_SETS.nwm
+      ? feature.properties?.gages || null
+      : gageSiteForReach(id);
+  openHydrograph({ reachId: id, site });
 }

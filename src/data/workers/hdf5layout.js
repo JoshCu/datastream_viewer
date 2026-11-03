@@ -1,5 +1,6 @@
 // ====================================================================
-// HDF5 byte-layout reader for ngen forcing files (worker-side, pure).
+// HDF5 byte-layout reader for ngen forcing files and NWM channel_rt output
+// (worker-side, pure).
 //
 // Walks just enough HDF5 metadata, over async range reads, to find where each
 // 2-D variable's bytes live and what the catchment ids are — so rows can then
@@ -10,8 +11,12 @@
 //   superblock v2/v3 → root object header (v1 or v2 headers, with
 //   continuations) → links, either compact (Link messages) or dense (Link
 //   Info → fractal heap + name-index v2 B-tree) → each dataset's dataspace,
-//   datatype, contiguous layout and filter pipeline → the `ids` variable's
-//   variable-length strings from the global heap.
+//   datatype, layout (contiguous, or chunked with a layout-v3 v1 B-tree
+//   index), filter pipeline and compact numeric attributes → the `ids`
+//   variable's variable-length strings from the global heap.
+//
+// Chunked data (the NWM files) is listed by chunkList() and decoded by
+// decodeChunk(): deflate via DecompressionStream, then unshuffle.
 //
 // Anything outside that subset throws an "unsupported" error rather than
 // guessing, and the caller falls back to downloading the whole file.
@@ -190,6 +195,7 @@ const MSG = {
   LINK: 0x06,
   LAYOUT: 0x08,
   FILTERS: 0x0b,
+  ATTRIBUTE: 0x0c,
   CONTINUATION: 0x10,
 };
 
@@ -462,6 +468,22 @@ function parseDatatype(bytes) {
   return null;
 }
 
+// Chunked layout (layout message v3, class 2): the v1 B-tree address and the
+// chunk shape, without the trailing element-size dimension. Null otherwise.
+function parseChunkedLayout(bytes, ctx) {
+  const c = new Cursor(bytes);
+  const version = c.u8();
+  // Layout v4 (other chunk indexes) isn't read; chunkList() then reports
+  // the dataset as not chunked.
+  if (version !== 3) return null;
+  if (c.u8() !== 2) return null;
+  const dimensionality = c.u8();
+  const btree = c.uint(ctx.O);
+  const dims = [];
+  for (let i = 0; i < dimensionality; i++) dims.push(c.u32());
+  return { btree, chunk: dims.slice(0, -1), elementSize: dims.at(-1) };
+}
+
 // { addr, size } of a contiguous layout, null for chunked/compact storage.
 function parseLayout(bytes, ctx) {
   const c = new Cursor(bytes);
@@ -481,6 +503,72 @@ function filterCount(bytes) {
   return new Cursor(bytes, 1).u8();
 }
 
+// Filter ids in pipeline order (1 = deflate, 2 = shuffle, ...), with their
+// client values.
+function parseFilters(bytes) {
+  const c = new Cursor(bytes);
+  const version = c.u8();
+  const n = c.u8();
+  if (version === 1) c.skip(6);
+  else if (version !== 2) throw unsupported(`filter pipeline v${version}`);
+  const filters = [];
+  for (let i = 0; i < n; i++) {
+    const id = c.u16();
+    const nameLen = version === 1 || id >= 256 ? c.u16() : 0;
+    c.u16(); // flags
+    const nValues = c.u16();
+    if (nameLen) c.skip(version === 1 ? Math.ceil(nameLen / 8) * 8 : nameLen);
+    const values = [];
+    for (let k = 0; k < nValues; k++) values.push(c.u32());
+    if (version === 1 && nValues % 2) c.skip(4);
+    filters.push({ id, values });
+  }
+  return filters;
+}
+
+// Read one element of a numeric dtype ("<f4", "<i8", ...) from a cursor.
+function readNumber(c, dtype) {
+  const little = dtype[0] === "<";
+  const kind = dtype[1];
+  const size = Number(dtype.slice(2));
+  const v = c.v;
+  const p = c.p;
+  c.skip(size);
+  if (kind === "f") return size === 4 ? v.getFloat32(p, little) : v.getFloat64(p, little);
+  if (size === 1) return kind === "i" ? v.getInt8(p) : v.getUint8(p);
+  if (size === 2) return kind === "i" ? v.getInt16(p, little) : v.getUint16(p, little);
+  if (size === 4) return kind === "i" ? v.getInt32(p, little) : v.getUint32(p, little);
+  return Number(kind === "i" ? v.getBigInt64(p, little) : v.getBigUint64(p, little));
+}
+
+// A compact attribute: { name, value }, where value is a number (or an array
+// for a short vector) for numeric types, else null. Strings and other types
+// aren't needed and are left as null rather than misread.
+function parseAttribute(bytes, ctx) {
+  const c = new Cursor(bytes);
+  const version = c.u8();
+  c.skip(1);
+  const nameSize = c.u16();
+  const typeSize = c.u16();
+  const spaceSize = c.u16();
+  if (version === 3) c.skip(1); // name encoding
+  else if (version !== 1 && version !== 2) throw unsupported(`attribute v${version}`);
+  const pad = (n) => (version === 1 ? Math.ceil(n / 8) * 8 : n);
+  const name = new TextDecoder().decode(c.bytes(nameSize)).replace(/\0+$/, "");
+  c.skip(pad(nameSize) - nameSize);
+  const typeBytes = c.bytes(typeSize);
+  c.skip(pad(typeSize) - typeSize);
+  const spaceBytes = c.bytes(spaceSize);
+  c.skip(pad(spaceSize) - spaceSize);
+  const dtype = parseDatatype(typeBytes);
+  if (!dtype || !/^[<>][fiu]\d$/.test(dtype)) return { name, value: null };
+  const shape = parseDataspace(spaceBytes, ctx);
+  const count = shape.reduce((a, b) => a * b, 1);
+  const values = [];
+  for (let i = 0; i < count && c.p < bytes.length; i++) values.push(readNumber(c, dtype));
+  return { name, value: shape.length === 0 ? values[0] : values };
+}
+
 async function readDataset(read, ctx, addr) {
   const messages = await readObjectHeader(read, ctx, addr);
   const find = (t) => messages.find((m) => m.type === t);
@@ -489,12 +577,128 @@ async function readDataset(read, ctx, addr) {
   const layout = find(MSG.LAYOUT);
   if (!space || !type || !layout) return null; // not a dataset
   const filters = find(MSG.FILTERS);
+  // Attributes and filter details are extras on top of what the forcing
+  // reader always needed: one the reader can't parse is dropped, not fatal.
+  const attrs = {};
+  for (const m of messages) {
+    if (m.type !== MSG.ATTRIBUTE) continue;
+    try {
+      const a = parseAttribute(m.data, ctx);
+      attrs[a.name] = a.value;
+    } catch {
+      // unsupported attribute encoding
+    }
+  }
+  let filterList = [];
+  try {
+    filterList = filters ? parseFilters(filters.data) : [];
+  } catch {
+    filterList = null; // decodeChunk refuses a dataset whose filters are unknown
+  }
   return {
     shape: parseDataspace(space.data, ctx),
     dtype: parseDatatype(type.data),
     layout: parseLayout(layout.data, ctx),
+    chunked: parseChunkedLayout(layout.data, ctx),
     filtered: !!filters && filterCount(filters.data) > 0,
+    filters: filterList,
+    attrs,
   };
+}
+
+// ---- Chunked datasets ---------------------------------------------------
+
+// Every chunk of a chunked dataset, from its v1 B-tree (node type 1), sorted
+// by file address: { start: [element offset per dim], addr, size, mask }.
+export async function chunkList(read, ctx, ds) {
+  if (!ds.chunked) throw unsupported("dataset is not chunked");
+  const rank = ds.chunked.chunk.length;
+  const keySize = 8 + 8 * (rank + 1);
+  const chunks = [];
+  const visit = async (addr) => {
+    const head = new Cursor(await read(addr, 8 + 2 * ctx.O));
+    head.sig("TREE");
+    if (head.u8() !== 1) throw unsupported("B-tree node is not a chunk index");
+    const level = head.u8();
+    const entries = head.u16();
+    const c = new Cursor(await read(addr + 8 + 2 * ctx.O, entries * (keySize + ctx.O) + keySize));
+    const children = [];
+    for (let i = 0; i < entries; i++) {
+      const size = c.u32();
+      const mask = c.u32();
+      const start = [];
+      for (let d = 0; d < rank; d++) start.push(c.uint(8));
+      c.skip(8); // element-size dimension, always 0
+      const child = c.uint(ctx.O);
+      if (level === 0) chunks.push({ start, addr: child, size, mask });
+      else children.push(child);
+    }
+    await Promise.all(children.map(visit));
+  };
+  if (ds.chunked.btree !== UNDEFINED) await visit(ds.chunked.btree);
+  return chunks.sort((a, b) => a.addr - b.addr);
+}
+
+async function inflate(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function unshuffle(bytes, elementSize) {
+  const n = Math.floor(bytes.length / elementSize);
+  const out = new Uint8Array(bytes.length);
+  for (let b = 0; b < elementSize; b++) {
+    const from = b * n;
+    for (let i = 0; i < n; i++) out[i * elementSize + b] = bytes[from + i];
+  }
+  // Any trailing partial element is stored unshuffled.
+  out.set(bytes.subarray(n * elementSize), n * elementSize);
+  return out;
+}
+
+// Raw bytes of one chunk → its elements' bytes, undoing the filter pipeline
+// in reverse (the chunk's mask bit i set means filter i was skipped). Only
+// deflate (1) and shuffle (2) are supported.
+export async function decodeChunk(bytes, ds, mask = 0) {
+  if (!ds.filters) throw unsupported("filter pipeline");
+  let out = bytes;
+  for (let i = ds.filters.length - 1; i >= 0; i--) {
+    if (mask & (1 << i)) continue;
+    const { id } = ds.filters[i];
+    if (id === 1) out = await inflate(out);
+    else if (id === 2) out = unshuffle(out, ds.chunked.elementSize);
+    else throw unsupported(`filter ${id}`);
+  }
+  return out;
+}
+
+// Typed view of decoded chunk bytes for a dtype. int64 is narrowed to a
+// Float64Array (COMIDs and minute counts fit in 2^53).
+export function typedElements(bytes, dtype) {
+  if (dtype[0] !== "<") throw unsupported(`big-endian ${dtype}`);
+  const buf = bytes.byteOffset % 8 === 0 ? bytes : bytes.slice();
+  const n = (size) => Math.floor(buf.byteLength / size);
+  switch (dtype.slice(1)) {
+    case "f4": return new Float32Array(buf.buffer, buf.byteOffset, n(4));
+    case "f8": return new Float64Array(buf.buffer, buf.byteOffset, n(8));
+    case "i2": return new Int16Array(buf.buffer, buf.byteOffset, n(2));
+    case "i4": return new Int32Array(buf.buffer, buf.byteOffset, n(4));
+    case "u4": return new Uint32Array(buf.buffer, buf.byteOffset, n(4));
+    case "i8": return Float64Array.from(new BigInt64Array(buf.buffer, buf.byteOffset, n(8)), Number);
+    default: throw unsupported(`dtype ${dtype}`);
+  }
+}
+
+// Superblock, root links and every root dataset's header, for files whose
+// variables are all in the root group (netCDF-4 output). { ctx, datasets }
+// with datasets keyed by name.
+export async function readRootDatasets(read) {
+  const ctx = await readSuperblock(read);
+  const links = await groupLinks(read, ctx, await readObjectHeader(read, ctx, ctx.root));
+  const entries = await Promise.all(
+    links.map(async (l) => [l.name, await readDataset(read, ctx, l.addr)]),
+  );
+  return { ctx, datasets: Object.fromEntries(entries.filter(([, ds]) => ds)) };
 }
 
 // ---- Variable-length strings (global heap) ----------------------------
