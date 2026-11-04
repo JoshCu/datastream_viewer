@@ -4,8 +4,11 @@
 //     -> Tombigbee River, its gages listed under it; Enter frames them all
 //   - USGS sites by fuzzy name or by site-number prefix
 //   - the catchment, for cat-N / wb-N / a short bare number
+//   - hydrologic units by name or code (data/hucindex.js); "huc 1027" or
+//     "huc8 kansas" asks for nothing else
 // A catchment flies there, is outlined, and opens its forcings when a
-// forcing source is set; a gage is ringed, and opens its panel.
+// forcing source is set; a gage is ringed, and opens its panel; a hydrologic
+// unit is framed and outlined.
 //
 // A catchment in a divides tile that's already loaded is framed from its
 // geometry straight away. Anything else is looked up in the hydrofabric
@@ -30,6 +33,8 @@ import {
 import { runTask } from "../data/loader.js";
 import { fetchGageMeta } from "../data/usgs.js";
 import { getCatalog, searchCatalog, siteTypes, loadUsgsCatalog } from "../data/usgscatalog.js";
+import { hucBounds, hucIndexError, hucIndexLoaded, loadHucIndex, parseHucQuery, searchHucs } from "../data/hucindex.js";
+import { markHuc } from "./huc.js";
 import { hasForcingSource } from "../forcing/loader.js";
 import { openForcingPlot } from "../ui/forcingplot.js";
 import { showGageInfo, showSiteInfo } from "../ui/gagepanel.js";
@@ -125,6 +130,7 @@ function setSearchPoints(points) {
 function clearMarks() {
   if (map.getLayer(SEARCH_LAYER)) map.setFilter(SEARCH_LAYER, HIDDEN_FILTER);
   setSearchPoints([]);
+  markHuc();
 }
 
 export function clearSearch() {
@@ -224,21 +230,52 @@ export function showGroup(group) {
   map.fitBounds(bounds, { ...GROUP_FIT_OPTIONS, offset: sidebarFitOffset() });
 }
 
+// Frame a hydrologic unit and outline it. Resolves false if a newer search took
+// over while its bounds were being read.
+export async function showHuc(unit) {
+  const seq = ++searchSeq;
+  clearMarks();
+  const bounds = await hucBounds(unit);
+  if (seq !== searchSeq) return false;
+  markHuc(unit.level.key, unit.huc);
+  // The sidebar as padding, not an offset: an offset moves the camera without
+  // shrinking the fit, and a unit is framed tight enough that it would run off
+  // the far edge.
+  const pad = FIT_OPTIONS.padding;
+  const left = pad + sidebarFitOffset()[0] * 2;
+  map.fitBounds(bounds, { maxZoom: FIT_OPTIONS.maxZoom, padding: { top: pad, right: pad, bottom: pad, left } });
+  return true;
+}
+
 // ---- Suggestions ------------------------------------------------------------
 
 // The dropdown's rows for a query, in display order. Each is
 //   { kind: "group", group } | { kind: "site", site, member? }
-//   | { kind: "catchment", num } | { kind: "lookup", id } | { kind: "note", text }
+//   | { kind: "catchment", num } | { kind: "huc", unit } | { kind: "lookup", id }
+//   | { kind: "note", text }
 // The best river group comes first with its gages listed under it, so
-// "tom bigbee" shows the whole river and Enter frames it.
+// "tom bigbee" shows the whole river and Enter frames it. Hydrologic units
+// follow those gages, or an exact site number when the query is digits.
 function suggestionsFor(text) {
+  const hucQuery = parseHucQuery(text);
+  if (hucQuery) {
+    if (hucIndexError()) return [{ kind: "note", text: `HUC list failed to load: ${hucIndexError().message}` }];
+    if (!hucIndexLoaded()) return [{ kind: "note", text: "HUC list loading…" }];
+    if (!hucQuery.query) return [{ kind: "note", text: "Type a HUC code or name" }];
+    const units = searchHucs(hucQuery.query, { level: hucQuery.level });
+    if (!units.length) return [{ kind: "note", text: "No matching hydrologic units" }];
+    return units.map((unit) => ({ kind: "huc", unit }));
+  }
+
   const out = [];
   const parsed = parseSearch(text);
   const explicitCatchment = /^\s*(cat|wb)/i.test(text);
   if (parsed?.catchment != null) out.push({ kind: "catchment", num: parsed.catchment });
   if (explicitCatchment) return out;
+  const hucRows = searchHucs(text).map((unit) => ({ kind: "huc", unit }));
 
   if (!getCatalog()) {
+    out.push(...hucRows);
     if (parsed?.site) out.push({ kind: "lookup", id: `USGS-${parsed.site}` });
     out.push({ kind: "note", text: "USGS site list loading…" });
     return out;
@@ -253,6 +290,12 @@ function suggestionsFor(text) {
       listed.add(site);
     }
   }
+  const exactSite = sites.find((s) => s.no === parsed?.site);
+  if (exactSite) {
+    out.push({ kind: "site", site: exactSite });
+    listed.add(exactSite);
+  }
+  out.push(...hucRows);
   for (const group of otherGroups) out.push({ kind: "group", group });
   for (const site of sites) if (!listed.has(site)) out.push({ kind: "site", site });
   // A full site number the catalog doesn't have: it may still exist without
@@ -298,6 +341,12 @@ function optionRow(item) {
   } else if (item.kind === "catchment") {
     main.textContent = `Catchment cat-${item.num}`;
     row.append(main);
+  } else if (item.kind === "huc") {
+    const { level, huc, name } = item.unit;
+    main.textContent = name || `${level.label} ${huc}`;
+    sub.textContent = name ? `${level.label} · ${huc}` : level.name;
+    row.title = `${level.name} ${huc}`;
+    row.append(dot(level.color), main, sub);
   } else if (item.kind === "lookup") {
     main.textContent = `Look up ${item.id}`;
     sub.textContent = "USGS";
@@ -319,7 +368,7 @@ export class SearchControl {
 
     this._button = iconButton(
       "maplibregl-ctrl-search",
-      "Search gages, rivers and catchments",
+      "Search gages, rivers, catchments and HUCs",
       "M10.5,4a6.5,6.5,0,1,0,0,13a6.5,6.5,0,1,0,0-13ZM15.2,15.2L20,20",
     );
     this._button.setAttribute("aria-expanded", "false");
@@ -330,8 +379,8 @@ export class SearchControl {
     const form = document.createElement("form");
     this._input = document.createElement("input");
     this._input.type = "search";
-    this._input.placeholder = "Gage, river, site no. or cat-123";
-    this._input.setAttribute("aria-label", "Search gages, rivers and catchments");
+    this._input.placeholder = "Gage, river, site no., cat-123, huc 1027";
+    this._input.setAttribute("aria-label", "Search gages, rivers, catchments and HUCs");
     this._input.setAttribute("role", "combobox");
     this._input.setAttribute("aria-autocomplete", "list");
     this._input.spellcheck = false;
@@ -410,9 +459,23 @@ export class SearchControl {
       this._input.focus();
       // In case the startup load failed or hasn't begun: searching wants it.
       if (!getCatalog()) loadUsgsCatalog();
+      this._loadHucs();
     } else {
       this._renderList([]);
     }
+  }
+
+  // Once it's in, whatever's already typed gets its HUC rows. After a failure,
+  // opening the box again retries, rather than every keystroke.
+  _loadHucs() {
+    if (hucIndexLoaded()) return;
+    const refresh = () => {
+      if (this._open && this._input.value && !this._input.disabled) this._suggest();
+    };
+    loadHucIndex().then(refresh, (err) => {
+      console.error("HUC list failed to load:", err);
+      refresh();
+    });
   }
 
   _suggest() {
@@ -485,6 +548,17 @@ export class SearchControl {
       this._input.value = item.group.label;
       showGroup(item.group);
       this._setStatus(`${item.group.sites.length} gages on the ${item.group.label}`);
+      return;
+    }
+    if (item.kind === "huc") {
+      const { level, huc, name } = item.unit;
+      this._input.value = name || huc;
+      try {
+        if (await showHuc(item.unit)) this._setStatus(`${level.label} · ${level.name} · ${huc}`);
+      } catch (err) {
+        console.error("Map search error:", err);
+        this._setStatus(`Search failed: ${err.message}`, true);
+      }
       return;
     }
     if (item.kind === "site") this._input.value = item.site.name;

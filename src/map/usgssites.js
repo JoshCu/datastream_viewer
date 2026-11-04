@@ -7,8 +7,9 @@
 //
 // Which of a site's series count is decided here, per series: the period
 // (reporting recently / any time / overlapping or spanning a date range) and
-// a minimum record length; a drainage-area range and the dams setting (from
-// the station descriptions, data/usgsdams.js) then apply per site.
+// a minimum record length; a drainage-area range, the dams setting (from
+// the station descriptions, data/usgsdams.js) and the routing network
+// (data/networkgages.js) then apply per site.
 // Each feature carries `f`, the observation-type bitmask of its series that
 // pass, so toggling a type only rebuilds the filter and colour expressions,
 // while a period/area change recomputes `f` and resets the source data.
@@ -24,6 +25,7 @@ import {
 } from "../config.js";
 import { onCatalogChange, getCatalog } from "../data/usgscatalog.js";
 import { damBelowMi, hasNoDams, MAX_BELOW_MI } from "../data/usgsdams.js";
+import { isOnNetwork } from "../data/networkgages.js";
 
 const SETTINGS_KEY = "usgs-sites-settings";
 const DAY_MS = 86400000;
@@ -41,10 +43,11 @@ const listeners = new Set();
 //   dams: "any" | "below" (just below a dam, within belowMi) | "notBelow" |
 //     "noDams" (none anywhere upstream)
 //   belowMi: how far below a dam still counts, in miles
+//   network: "any" | "nextgen" | "nwm" (on a reach of that routing network)
 const settings = loadSettings();
 
 function loadSettings() {
-  const defaults = { hidden: [], period: "recent", from: "", to: "", cover: false, minYears: 0, minArea: null, maxArea: null, dams: "any", belowMi: 1 };
+  const defaults = { hidden: [], period: "recent", from: "", to: "", cover: false, minYears: 0, minArea: null, maxArea: null, dams: "any", belowMi: 1, network: "any" };
   try {
     const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
     // Before periods there was only the "active only" switch.
@@ -68,11 +71,11 @@ export function isTypeShown(i) {
   return !settings.hidden.includes(USGS_OBS_TYPES[i].key);
 }
 
-// { period, from, to, cover, minYears, minArea, maxArea, dams, belowMi },
-// for the panel.
+// { period, from, to, cover, minYears, minArea, maxArea, dams, belowMi,
+// network }, for the panel.
 export function periodSettings() {
-  const { period, from, to, cover, minYears, minArea, maxArea, dams, belowMi } = settings;
-  return { period, from, to, cover, minYears, minArea, maxArea, dams, belowMi };
+  const { period, from, to, cover, minYears, minArea, maxArea, dams, belowMi, network } = settings;
+  return { period, from, to, cover, minYears, minArea, maxArea, dams, belowMi, network };
 }
 
 // fn() whenever the type toggles or the period settings change.
@@ -93,7 +96,7 @@ export function setAllTypesShown(shown) {
 }
 
 // Any subset of { period, from, to, cover, minYears, minArea, maxArea, dams,
-// belowMi }.
+// belowMi, network }.
 export function setPeriod(patch) {
   Object.assign(settings, patch);
   settings.minYears = Math.max(0, Number(settings.minYears) || 0);
@@ -124,12 +127,12 @@ function dayMs(text) {
   return Number.isNaN(ms) ? null : ms;
 }
 
-// Everything the period, area and dams settings change, as a cache key.
+// Everything the period, area, dams and network settings change, as a cache key.
 function periodKey() {
-  const { period, from, to, cover, minYears, minArea, maxArea, dams, belowMi } = settings;
+  const { period, from, to, cover, minYears, minArea, maxArea, dams, belowMi, network } = settings;
   const range = period === "range" ? `${from}|${to}|${cover}` : "";
   const below = dams === "below" || dams === "notBelow" ? belowMi : "";
-  return `${period}|${range}|${minYears}|${minArea}|${maxArea}|${dams}|${below}`;
+  return `${period}|${range}|${minYears}|${minArea}|${maxArea}|${dams}|${below}|${network}`;
 }
 
 // Whether a site passes the dams setting.
@@ -146,8 +149,8 @@ let maskCache = { catalog: null, key: "", masks: null };
 
 // Per catalog site (same order as catalog.sites), the bitmask of observation
 // types with at least one series passing the period settings (0 for a site
-// outside the drainage-area range or failing the dams setting). Null before
-// the catalog has loaded.
+// outside the drainage-area range or failing the dams or network setting).
+// Null before the catalog has loaded.
 export function filteredMasks() {
   const catalog = getCatalog();
   if (!catalog) return null;
@@ -166,7 +169,7 @@ export function filteredMasks() {
   if (to != null && cover) to = Math.min(to, fetchedAt - USGS_ACTIVE_WINDOW_MS);
   const minMs = settings.minYears * YEAR_MS;
   const ranged = from != null || to != null;
-  const { minArea, maxArea } = settings;
+  const { minArea, maxArea, network } = settings;
   const areaBound = minArea != null || maxArea != null;
 
   const masks = new Uint16Array(sites.length);
@@ -176,6 +179,7 @@ export function filteredMasks() {
       if (area == null || (minArea != null && area < minArea) || (maxArea != null && area > maxArea)) return;
     }
     if (!damsPass(site)) return;
+    if (network !== "any" && !isOnNetwork(site.no, network)) return;
     let mask = 0;
     for (const [p, begin, end] of site.series) {
       if (since != null && !(end != null && end >= since)) continue;

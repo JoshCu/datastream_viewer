@@ -1,6 +1,6 @@
 // ====================================================================
 // The map's layer toggle buttons (terrain, hillshade, flowpaths, NWM
-// flowlines, catchments, gages, gage labels): where their state starts, and where it's
+// flowlines, catchments, gages, gage labels, the gage density checkbox, the HUC levels): where their state starts, and where it's
 // recorded.
 //
 // Starting state: the URL's `layers=` (the keys that are on) when present,
@@ -26,6 +26,13 @@ export const LAYER_DEFAULTS = {
   catchments: false,
   gages: true,
   labels: false,
+  density: false,
+  huc2: false,
+  huc4: false,
+  huc6: false,
+  huc8: false,
+  huc10: false,
+  huc12: false,
 };
 
 function readSaved() {

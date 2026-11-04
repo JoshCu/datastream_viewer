@@ -180,7 +180,7 @@ hide by **opacity**, not `visibility`: `FORCING_LAYER` must stay rendered for
 catchment clicks and viewport queries. The live sim's icon only stops it, since
 starting clears the loaded run.
 
-`ui/overlaytooltip.js` is the forcing/rain hover tooltip, up while the panel is
+`ui/overlaytooltip.js` is the forcing/rain/HUC hover tooltip, up while the panel is
 open and its layer showing. The catchment outline is a line layer on `divides`
 driven by feature-state, because a `setFilter` per hover would reload its tiles.
 
@@ -401,7 +401,12 @@ each site's station description (`waterdata.usgs.gov/manuscripts/<id>`, the
 LOCATION / REMARKS text): one request per site and no CORS header, so the
 browser can't. "No dams upstream" is GAGES-II `NDAMS_2009 = 0` (NID dams in
 the watershed), else the description saying "no regulation". Retune the
-regexes against a `--cache` dir rather than refetching. Changing those resets the source data; type
+regexes against a `--cache` dir rather than refetching. The network setting
+(on a NextGen flowpath / NWM reach) is built offline too, by
+`scripts/network-gages.js` into `data/networkgages.json`: the browser only sees
+network gages tile by tile, and a CONUS density needs them all. A site on a
+network but with no continuous record isn't in the catalog, so it can't show.
+Changing those resets the source data; type
 toggles rebuild just the filter and colour expressions (bit tests via
 `%`/`floor`, since expressions have no bitwise ops). Both persist in
 localStorage. The run's own gages
@@ -410,6 +415,18 @@ own the hover/click where they overlap, since only they know the reach for
 the hydrograph. Gage tooltips use `catalogMeta()` when the site is in the
 catalog and fall back to `fetchGageMeta()`.
 
+The density heatmap (`map/usgsdensity.js`, `layers=density`) draws the same
+filtered sites as a MapLibre heatmap in real units: `heatmap-density` 1 means
+the panel's full scale in sites per 1000 km². The kernel's radius is fixed on
+the ground, the intensity follows from MapLibre's shader (peak =
+weight × intensity × 0.3989, so the integral is known), and each point's weight
+undoes Mercator's area stretch. It has its own source with `maxzoom: 3`, since
+a heatmap only draws the points of tiles in view and a kernel can be wider than
+a tile. Below the zoom where the radius would be under 16 px it stays 16 px
+(the kernels are drawn at ¼ resolution and alias) and the intensity drops to
+match, so a colour keeps its meaning. With terrain on MapLibre draws each tile
+separately, so kernels clip at the z3 tile edges (seams at 90°W and 41°N).
+
 Gage observations for the hydrograph (`fetchGageFlow` in `data/usgs.js`)
 come from the `continuous` collection, which rejects a time envelope over
 1100 days. The range is split into UTC calendar-year windows (one ~1 MB page
@@ -417,13 +434,33 @@ of 15-min data each), fetched three at a time with a timeout and retries for
 timeouts / 429 / 5xx, each memoised and Cache-API cached on its own; a window
 that still fails is counted in `failed` instead of sinking the rest.
 
+### HUC boundaries (`map/huc.js`, `ui/hucpanel.js`)
+
+`huc.pmtiles` has one source-layer per level, each with `huc` (string, keeps
+leading zeros) and `name`. A level starts at its own zoom (`HUC_LEVELS` in
+`config.js`) and runs to the tiles' z12. Each level is a line layer plus an
+invisible fill, the fill being what the tooltip queries, and is its own key in
+`layers=`. The source fetches no tiles while every level is off. The title icon
+hides all levels and restores the same set.
+
+Search (`data/hucindex.js`, `data/workers/hucindex.js`) can't use the tiles,
+which can only be read by place, and USGS's WBD service is too unreliable to
+query live. So `scripts/huc-index.js` builds `hucindex.parquet` offline from the
+z8 tiles (~56 MB of range reads; z8 is the first zoom holding every level), to be
+uploaded by hand to `map/index/hucindex.parquet`. Rebuild it if `huc.pmtiles`
+changes. Name search needs every name in the browser, so opening search reads the
+`huc` and `name` columns (~1 MB) through the parse pool; a unit's bounds are one row
+group (~50 kB), read when it's picked. A found unit is outlined by its level's
+`hucSearchLayer`, kept separate from the toggles.
+
 ### Search (`map/search.js`)
 
 The magnifier button at the top right pops out a box with a suggestion
 dropdown: the best-matching river group with its gages listed under it,
-other groups, then sites (fuzzy on normalized names — abbreviations expanded,
-spaces ignored, trigram fallback for typos — or by site-number prefix), and
-the catchment for `cat-N` / `wb-N` / a short bare number. Enter takes the
+hydrologic units, other groups, then sites (fuzzy on normalized names —
+abbreviations expanded, spaces ignored, trigram fallback for typos — or by
+site-number prefix), and the catchment for `cat-N` / `wb-N` / a short bare number.
+`huc 1027` / `huc8 kansas` lists only hydrologic units. Enter takes the
 highlighted row, else the first; a group frames and rings all its gages.
 A gage is placed from the catalog, else loaded gage tiles, else the USGS
 station metadata (`fetchGageMeta(site).lonLat`), and ringed by

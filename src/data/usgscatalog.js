@@ -287,8 +287,9 @@ function trigramScore(q, text) {
 }
 
 // How well normalized query words match a name (0 = not at all). Spaces are
-// ignored for the main test, so "TOM BIGBEE" finds "TOMBIGBEE RIVER".
-function matchScore(qWords, qCompact, words, compactName) {
+// ignored for the main test, so "TOM BIGBEE" finds "TOMBIGBEE RIVER". Without
+// `fuzzy` the typo test, by far the slowest part, is skipped.
+export function matchScore(qWords, qCompact, words, compactName, fuzzy = true) {
   const at = compactName.indexOf(qCompact);
   if (at === 0) return 4;
   if (at > 0) return 3;
@@ -296,6 +297,7 @@ function matchScore(qWords, qCompact, words, compactName) {
   if (qWords.every((q) => words.some((w) => w.startsWith(q)))) {
     return words[0].startsWith(qWords[0]) ? 2.5 : 2;
   }
+  if (!fuzzy) return 0;
   const tri = trigramScore(qCompact, compactName);
   return tri >= 0.7 ? tri : 0;
 }

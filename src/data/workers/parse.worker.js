@@ -20,6 +20,10 @@
 //     -> result { nums, rows }                          (data/workers/hfindex.js)
 //   in  { id, type: "hfIndexRow", row }
 //     -> result { lon, lat, vpuid }
+//   in  { id, type: "hucIndex" }
+//     -> result { huc, name }                           (data/workers/hucindex.js)
+//   in  { id, type: "hucIndexRow", row }
+//     -> result [west, south, east, north]
 //   in  { id, type: "nwmIds", url }
 //     -> result { ids: Float64Array, fingerprint, stats }   (data/workers/nwm.js)
 //   in  { id, type: "nwmSizes", url, variables }
@@ -51,6 +55,7 @@ import { mergeDatasets, computeAllBounds } from "./merge.js";
 import { scanForcingLayout, fetchForcingRows } from "./forcing.js";
 import { decodeRecords } from "./nexrad.js";
 import { scanCatchmentIndex, readIndexRow } from "./hfindex.js";
+import { readHucNames, readHucBounds } from "./hucindex.js";
 import { fetchUsgsCatalog } from "./usgscatalog.js";
 import { readNwmFeatureIds, readNwmSizes, readNwmHour } from "./nwm.js";
 import { readRetroSeries } from "./retro.js";
@@ -248,6 +253,16 @@ self.onmessage = async (e) => {
     }
     if (type === "hfIndexRow") {
       self.postMessage({ id, ok: true, result: await readIndexRow(await loadHyparquet(), e.data.row) });
+      return;
+    }
+    if (type === "hucIndex") {
+      const [hyparquet, zstd] = await Promise.all([loadHyparquet(), loadZstd()]);
+      self.postMessage({ id, ok: true, result: await readHucNames(hyparquet, zstd) });
+      return;
+    }
+    if (type === "hucIndexRow") {
+      const [hyparquet, zstd] = await Promise.all([loadHyparquet(), loadZstd()]);
+      self.postMessage({ id, ok: true, result: await readHucBounds(hyparquet, zstd, e.data.row) });
       return;
     }
     let dataset;

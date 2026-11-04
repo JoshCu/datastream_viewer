@@ -649,6 +649,16 @@
                   <span class="scale-label">mi</span>
                 </div>
               </div>
+              <!-- From the hydrofabric's gage tiles and NWM's gage_id
+                   (src/data/networkgages.json, scripts/network-gages.js). -->
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="usgsNetwork">Network</label>
+                <select id="usgsNetwork" class="select scale-select" title="Only sites on a reach of this routing network">
+                  <option value="any">Any site</option>
+                  <option value="nextgen">On NextGen flowpaths</option>
+                  <option value="nwm">On NWM reaches</option>
+                </select>
+              </div>
               <div class="usgs-list-row">
                 <span class="usgs-shown" id="usgsShown"></span>
                 <button class="btn secondary usgs-icon-btn" id="usgsCopyBtn" title="Copy the shown sites to the clipboard (tab-separated)" aria-label="Copy site list">
@@ -665,6 +675,42 @@
                   </svg>
                 </button>
               </div>
+              <!-- The shown sites as a heatmap (src/map/usgsdensity.js). -->
+              <label class="usgs-type">
+                <input type="checkbox" id="usgsDensityOn" />
+                <span>Density heatmap</span>
+              </label>
+              <div id="usgsDensityControls" hidden>
+                <div class="scale-select-wrap">
+                  <label class="scale-label" for="usgsDensityRadius">Radius</label>
+                  <select id="usgsDensityRadius" class="select scale-select" title="How far each site's influence reaches. Zoomed far out it grows, so the kernels stay smooth on screen; the colours still mean the same density">
+                    <option value="10">10 km</option>
+                    <option value="25">25 km</option>
+                    <option value="50">50 km</option>
+                    <option value="100">100 km</option>
+                  </select>
+                </div>
+                <div class="scale-select-wrap">
+                  <label class="scale-label" for="usgsDensityMax">Full scale</label>
+                  <select id="usgsDensityMax" class="select scale-select" title="The density at the top of the colour ramp">
+                    <option value="2">2 per 1000 km²</option>
+                    <option value="5">5 per 1000 km²</option>
+                    <option value="10">10 per 1000 km²</option>
+                    <option value="20">20 per 1000 km²</option>
+                    <option value="50">50 per 1000 km²</option>
+                  </select>
+                </div>
+                <div class="legend">
+                  <div class="legend-title">Shown sites per 1000 km²</div>
+                  <div class="legend-gradient" id="usgsDensityBar"></div>
+                  <div class="legend-labels">
+                    <span>0</span>
+                    <span id="usgsDensityMid"></span>
+                    <span id="usgsDensityTop"></span>
+                  </div>
+                  <div class="usgs-shown" id="usgsDensityLone"></div>
+                </div>
+              </div>
               <p class="info-text">
                 Every USGS site with a continuous record, from the Water Data API
                 (cached in the browser, refreshed daily). Period and record length
@@ -672,8 +718,36 @@
                 known); sites with no drainage area drop out once a bound is set.
                 The counts and the copied/saved list follow the filters. A dot takes the colour of
                 the first shown type it observes; larger, dark-ringed dots are gages
-                on the loaded run's reaches, filtered and coloured the same way. Search names, rivers or site numbers with the
+                on the loaded run's reaches, filtered and coloured the same way. The heatmap
+                follows the same filters, so set Network to find where a network's gages
+                cluster; it's for regional patterns and fades out by zoom 12. Search names, rivers or site numbers with the
                 magnifier at the top right.
+              </p>
+            </div>
+          </div>
+
+          <!-- Hydrologic unit boundaries (src/map/huc.js, src/ui/hucpanel.js). -->
+          <div class="panel collapsed" id="hucPanel" data-url-key="huc">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+                <path d="M4 7l6-3 9 2 2 8-5 6-8-1-5-5z" />
+                <path d="M10 4l1 8-8 1M11 12l6 2 4 0M11 12l-1 7" />
+              </svg>
+              HUC Boundaries
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <!-- One row per level, built by hucpanel.js. -->
+              <div class="usgs-types" id="hucLevels"></div>
+              <p class="info-text">
+                Hydrologic unit boundaries. A level appears once the map is zoomed in
+                to the zoom beside it. While this panel is open, hover the map for the
+                code and name of each shown level's unit.
               </p>
             </div>
           </div>

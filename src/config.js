@@ -137,6 +137,23 @@ export const USGS_ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 export const USGS_SITES_SOURCE = "usgs-sites";
 export const USGS_SITES_LAYER = "usgs-sites";
 export const USGS_SITES_LABEL_LAYER = "usgs-sites-label";
+// Their density heatmap (map/usgsdensity.js).
+export const USGS_DENSITY_SOURCE = "usgs-density";
+export const USGS_DENSITY_LAYER = "usgs-density";
+// Hydrologic unit boundaries (map/huc.js). `key` is the level's source-layer
+// and its toggle in map/layerprefs.js; `minzoom` is where its tiles start.
+export const HUC_SOURCE = "huc";
+export const HUC_LEVELS = [
+  { key: "huc2", label: "HUC 2", name: "Region", minzoom: 0, color: "#6a1b9a", width: 3 },
+  { key: "huc4", label: "HUC 4", name: "Subregion", minzoom: 3, color: "#ad1457", width: 2.5 },
+  { key: "huc6", label: "HUC 6", name: "Basin", minzoom: 4, color: "#d84315", width: 2 },
+  { key: "huc8", label: "HUC 8", name: "Subbasin", minzoom: 5, color: "#2e7d32", width: 1.5 },
+  { key: "huc10", label: "HUC 10", name: "Watershed", minzoom: 7, color: "#00838f", width: 1 },
+  { key: "huc12", label: "HUC 12", name: "Subwatershed", minzoom: 8, color: "#546e7a", width: 0.75 },
+];
+export const hucLineLayer = (key) => `${key}-line`;
+export const hucFillLayer = (key) => `${key}-fill`;
+export const hucSearchLayer = (key) => `${key}-search`; // the searched-for unit's outline
 // What a site observes, in priority order: a dot takes the colour of the
 // first shown type it has. A parameter belongs to the first type whose
 // `match` its name hits ("other" catches the rest), so order matters there

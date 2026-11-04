@@ -32,8 +32,11 @@ import {
 import { GageControl, updateGageFilter, addGageIcon, scheduleNwmGageHarvest } from "./gages.js";
 import { SearchControl } from "./search.js";
 import { setupUsgsSites } from "./usgssites.js";
+import { setupUsgsDensity } from "./usgsdensity.js";
 import { loadUsgsCatalog } from "../data/usgscatalog.js";
 import { setupUsgsPanel } from "../ui/usgspanel.js";
+import { setupHuc } from "./huc.js";
+import { setupHucPanel } from "../ui/hucpanel.js";
 import { setupS3Browser } from "../s3/browser.js";
 import { setupUploadPanel } from "../ui/upload.js";
 import { loadConus, preloadParquetWasm } from "../data/loader.js";
@@ -212,6 +215,8 @@ export function init() {
   // Likewise the USGS site catalog: instant from IndexedDB after the first
   // visit, ~6 MB from the API (in a worker) when missing or a day old.
   setupUsgsSites();
+  setupUsgsDensity();
+  setupHuc();
   map.once("idle", () => loadUsgsCatalog());
 
   setupEventListeners();
@@ -233,6 +238,7 @@ export function init() {
   setupFlowPanel();
   setupErosionPanel();
   setupUsgsPanel();
+  setupHucPanel();
   setupSimPanel();
   setupBrush();
   setupSimRain();

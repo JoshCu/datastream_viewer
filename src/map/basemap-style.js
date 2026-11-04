@@ -16,6 +16,13 @@ import {
   USGS_SITES_SOURCE,
   USGS_SITES_LAYER,
   USGS_SITES_LABEL_LAYER,
+  USGS_DENSITY_SOURCE,
+  USGS_DENSITY_LAYER,
+  HUC_SOURCE,
+  HUC_LEVELS,
+  hucLineLayer,
+  hucFillLayer,
+  hucSearchLayer,
   FORCING_FILL_OPACITY,
   NO_DATA_COLOR,
   FLOOD_LAYER,
@@ -34,6 +41,29 @@ const ORDER_FADE_OPACITY = [
   7,   ["step", ["get", "order"], 0, 2, 1],   // order 2 faded in; order 1 held at 0 as it appears
   8,   1,                                      // order 1 faded in
 ];
+
+// One HUC level's boundary, plus an invisible fill so the hover tooltip can
+// find the unit under the cursor. Hidden until map/huc.js shows them, and with
+// them hidden the source fetches no tiles.
+function hucLayers({ key, minzoom, color, width }) {
+  const common = { source: HUC_SOURCE, "source-layer": key, minzoom };
+  return [
+    {
+      ...common,
+      id: hucFillLayer(key),
+      type: "fill",
+      layout: { visibility: "none" },
+      paint: { "fill-color": "#000000", "fill-opacity": 0 },
+    },
+    {
+      ...common,
+      id: hucLineLayer(key),
+      type: "line",
+      layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": color, "line-width": width, "line-opacity": 0.85 },
+    },
+  ];
+}
 
 export function updateIncomingStyle(previousStyle, nextStyle) {
   const s3_url = "https://communityhydrofabric.s3.us-east-1.amazonaws.com/map/";
@@ -80,6 +110,11 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         // ("gages-<site>") so hover feature-state can target one gage.
         promoteId: "hl_uri",
       },
+      // Hydrologic unit polygons, one source-layer per level (map/huc.js).
+      [HUC_SOURCE]: {
+        type: "vector",
+        url: "pmtiles://" + s3_url + "pmtiles/huc.pmtiles",
+      },
       // Every USGS site with a continuous record (map/usgssites.js); empty
       // until the catalog loads. promoteId so hover feature-state can target
       // one site by its monitoring-location id.
@@ -87,6 +122,15 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
         promoteId: "id",
+      },
+      // The same sites for the density heatmap (map/usgsdensity.js), empty
+      // until it's on. Its own source for the low maxzoom: a heatmap only
+      // draws the points of tiles in view, so at this source's z3 a kernel
+      // only goes missing near a z3 tile's edge.
+      [USGS_DENSITY_SOURCE]: {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+        maxzoom: 3,
       },
       // Where the searched-for gage is (map/search.js); empty until then.
       [SEARCH_POINT_SOURCE]: {
@@ -139,6 +183,19 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         "source-layer": "vpu",
         paint: { "fill-color": "#000000", "fill-opacity": 0 },
       },
+      {
+        // Gage density (map/usgsdensity.js), under the rivers so the network
+        // reads through it. Paint and filter are set from the panel.
+        id: USGS_DENSITY_LAYER,
+        type: "heatmap",
+        source: USGS_DENSITY_SOURCE,
+        maxzoom: 12,
+        filter: HIDDEN_FILTER,
+        layout: { visibility: "none" },
+      },
+      // HUC boundaries, under the rivers, with the coarsest on top where
+      // levels share a line.
+      ...HUC_LEVELS.toReversed().flatMap(hucLayers),
       {
         id: "flowpaths",
         type: "line",
@@ -255,6 +312,19 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         filter: HIDDEN_FILTER,
         paint: { "line-color": "#ffaa00", "line-width": 3, "line-dasharray": [2, 1] },
       },
+      // The hydrologic unit found by the search box, one layer per level's
+      // source-layer. Hidden until used, so the search fetches no HUC tiles
+      // before someone picks a unit (map/huc.js).
+      ...HUC_LEVELS.map(({ key, minzoom }) => ({
+        id: hucSearchLayer(key),
+        type: "line",
+        source: HUC_SOURCE,
+        "source-layer": key,
+        minzoom,
+        filter: HIDDEN_FILTER,
+        layout: { visibility: "none" },
+        paint: { "line-color": "#ffaa00", "line-width": 3, "line-dasharray": [2, 1] },
+      })),
       {
         // Hidden until the first hover needs it, so a session that never
         // uses it doesn't lay out a line for every catchment.

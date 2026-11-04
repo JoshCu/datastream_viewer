@@ -51,13 +51,23 @@ velocity / depth on the hydrofabric flowpaths over time.
   the map by period (reporting in the last 30 days, any time, or active
   during / spanning a date range), minimum record length, drainage area and
   dams (stream gages just below a dam, within a chosen distance, or with no
-  dams anywhere upstream), and copies or saves the shown sites as a table. Hover for station details,
+  dams anywhere upstream) and routing network (sites on a NextGen flowpath or
+  an NWM reach), copies or saves the shown sites as a table, and can draw them
+  as a density heatmap in sites per 1000 km². Hover for station details,
   click for its record per type. The site list comes from the USGS Water Data
   API (~6 MB, ~5 s) on the first visit and is cached in the browser,
   refreshed daily in the background. The dam data isn't in that API; it's
   built offline by `bun scripts/usgs-dams.js` from the USGS station
   descriptions ("500 ft downstream of powerhouse (dam)") and GAGES-II's count
-  of NID dams per watershed, into `src/data/usgsdams.json`.
+  of NID dams per watershed, into `src/data/usgsdams.json`. Each network's gage
+  list is built the same way by `bun scripts/network-gages.js`, into
+  `src/data/networkgages.json`.
+- **HUC boundaries** — the HUC Boundaries panel draws hydrologic unit outlines,
+  with a toggle per level from HUC 2 to HUC 12. Hover with the panel open for
+  each shown level's code and name. The search box finds units by name or code;
+  `huc 1027` or `huc8 kansas` asks for nothing else. The list is built offline
+  by `bun scripts/huc-index.js` into `hucindex.parquet`, hosted on S3 at
+  `map/index/hucindex.parquet`.
 - **Search** — the magnifier at the top right pops out a search box with
   suggestions as you type. Gage names match fuzzily (`fish river fort kent`,
   typos too), site numbers by prefix, and rivers as groups: `tom bigbee`
@@ -172,6 +182,9 @@ split into focused ES modules.
 index.html                    markup + CDN scripts; loads src/main.js as a module
 scripts/
   usgs-dams.js                builds src/data/usgsdams.json (gages below dams / with none upstream)
+  huc-index.js                builds hucindex.parquet (every HUC's code, name, bounds) for S3
+  network-gages.js            builds src/data/networkgages.json (gages on each routing network)
+  export-gages.js             exports the USGS gage layer to a GeoPackage for desktop GIS
 src/
   main.js                     entry point — calls init() once the DOM is ready
   config.js                   shared constants (palette, variables, sentinels)
@@ -187,6 +200,7 @@ src/
     credits.js                the map's attribution, plus a credit per overlay on show
     search.js                 search box + suggestions: gages, river groups, catchments
     usgssites.js              always-on USGS catalog gage layer, filtered/coloured by type
+    huc.js                    HUC boundary layers per level, and the units under a point
   color/
     colormaps.js              shared colour maps (sequential, diverging)
     scales.js                 continuous transforms (log, sqrt, symlog, …), signed for diffs
@@ -202,6 +216,7 @@ src/
     usgs.js                   USGS gage metadata + observed discharge client
     usgscatalog.js            USGS site catalog: IndexedDB cache, river groups, fuzzy search
     usgsdams.js               gages just below a dam / with no dams upstream (usgsdams.json)
+    hucindex.js               hydrologic units by name or code, for search
     diff.js                   A − B diff of two loaded runs
     nwm.js                    NWM file names, newest cycle, COMID table + crosswalk cache, load plan + run
     retro.js                  NWM retrospective single-reach series + HEAD-measured estimate
@@ -236,12 +251,13 @@ src/
     panels.js                 data-info summary, legend, status lines
     panelsettings.js          show/hide + reorder the panels, saved in a cookie
     panellayers.js            panel icons: glow while the panel's layer shows, click to toggle it
-    overlaytooltip.js         forcing / rainfall hover tooltip + catchment / cell outline
+    overlaytooltip.js         forcing / rainfall / HUC hover tooltip + catchment / cell outline
     colormap.js               colour-map picker shared by the run and forcing panels
     time.js                   setTimeIndex() + current-timestep readout
     infopanel.js              reach click info panel
     gagepanel.js              gage click info panel (USGS station details)
     usgspanel.js              USGS Gages panel: catalog status, per-type show/hide
+    hucpanel.js               HUC Boundaries panel: per-level show/hide
     hydrograph.js             D3 hydrograph dock: runs vs obs, zoom, metrics
     nwmpanel.js               NWM Forecast panel: run, cycle, member; load viewport or CONUS
     forcingpanel.js           forcings sidebar panel: source, load buttons, controls
