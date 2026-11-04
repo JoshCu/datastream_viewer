@@ -14,6 +14,8 @@ import { map } from "../state.js";
 import { NWM_CONFIGS, NWM_CONFIRM_BYTES, REACH_SETS } from "../config.js";
 import { latestNwmCycle, loadNwmRun, nwmFiles, planNwmLoad } from "../data/nwm.js";
 import { setNwmVisible } from "../map/interactions.js";
+import { layerOn, saveLayer } from "../map/layerprefs.js";
+import { registerPanelLayer } from "./panellayers.js";
 import { setStatus } from "./panels.js";
 import { setUrlParam } from "./url.js";
 
@@ -241,6 +243,15 @@ export function setupNwmPanel() {
   $("nwmLatestBtn").addEventListener("click", findLatest);
   $("nwmViewBtn").addEventListener("click", () => load("view"));
   $("nwmConusBtn").addEventListener("click", () => load("conus"));
+
+  registerPanelLayer("nwmPanel", {
+    name: "NWM flowlines",
+    isShowing: () => layerOn("nwm"),
+    toggle: () => {
+      setNwmVisible(!layerOn("nwm"));
+      saveLayer("nwm", layerOn("nwm"));
+    },
+  });
 
   // Find the newest cycle the first time the panel opens, unless a link
   // already named one.

@@ -11,9 +11,9 @@
 //
 // The rest of this comment is about the flat mode.
 // The level is entered relative to sea level or to a reference point picked
-// on the map (its ground elevation). Opening the panel turns the 3D terrain
-// on and tilts the camera; while it's open, hovering the map shows the ground
-// elevation, plus the water depth where it's flooded.
+// on the map (its ground elevation). Opening the panel, or turning it on from
+// its icon, turns the 3D terrain on and tilts the camera; while it's on, hovering
+// the map shows the ground elevation, plus the water depth where it's flooded.
 // ====================================================================
 import { map } from "../state.js";
 import {
@@ -23,6 +23,7 @@ import {
   FLOOD_DEEP_COLOR,
 } from "../config.js";
 import { labeledRow } from "./dom.js";
+import { registerPanelLayer, syncPanelLayers } from "./panellayers.js";
 import { setStatus } from "./panels.js";
 import { setupFim, setFimActive, setFimFrom, setFimDepthFrom, onFimStatus, fimAt } from "../fim/fim.js";
 import { onActiveDatasetChange } from "../data/sources.js";
@@ -33,7 +34,7 @@ const FT_PER_M = 3.28084;
 const fmt = (m) => `${m.toFixed(1)} m (${(m * FT_PER_M).toFixed(1)} ft)`;
 const signed = (m) => (m < 0 ? m.toFixed(1) : `+${m.toFixed(1)}`);
 
-let open = false;
+let active = false; // the panel is open, or its icon turned this on
 let mode = "flat"; // "flat" | "nwm"
 let level = null; // water surface, m above sea level; null until first fit
 let ref = null; // { lngLat, elev }: the picked reference point
@@ -60,7 +61,7 @@ const baseElev = () => (base === "ref" && ref ? ref.elev : 0);
 // clear above it (the last two stops are a hair apart so the shore is sharp).
 function applyWater() {
   if (!map.getLayer(FLOOD_LAYER)) return;
-  const shown = open && mode === "flat" && level != null;
+  const shown = active && mode === "flat" && level != null;
   map.setLayoutProperty(FLOOD_LAYER, "visibility", shown ? "visible" : "none");
   if (!shown) return;
   map.setPaintProperty(FLOOD_LAYER, "color-relief-color", [
@@ -155,7 +156,7 @@ function setReference(lngLat) {
 }
 
 function showMarker() {
-  if (!ref || !open || mode !== "flat") {
+  if (!ref || !active || mode !== "flat") {
     marker?.remove();
     return;
   }
@@ -208,8 +209,8 @@ function nwmRows(elev, at) {
 
 function onMouseMove(e) {
   const tooltip = $("floodTooltip");
-  const elev = open ? elevationAt(e.lngLat) : null;
-  const rows = !open ? [] : mode === "nwm" ? nwmRows(elev, fimAt(e.lngLat)) : elev == null ? [] : flatRows(elev);
+  const elev = active ? elevationAt(e.lngLat) : null;
+  const rows = !active ? [] : mode === "nwm" ? nwmRows(elev, fimAt(e.lngLat)) : elev == null ? [] : flatRows(elev);
   if (!rows.length) {
     tooltip.classList.remove("visible");
     return;
@@ -235,14 +236,15 @@ function enter3d() {
   if (map.getPitch() < 30) map.easeTo({ pitch: 60, duration: 800 });
 }
 
-function onToggle() {
-  open = !$("floodPanel").classList.contains("collapsed");
+function setActive(on) {
+  active = on;
+  syncPanelLayers();
   // A shared link can open the panel before the style has loaded.
   if (!map.getLayer(FLOOD_LAYER)) {
-    map.once("styledata", onToggle);
+    map.once("styledata", () => setActive(active));
     return;
   }
-  if (open) {
+  if (active) {
     enter3d();
     needsFit = true;
     map.triggerRepaint(); // so an idle follows even if nothing moves
@@ -253,13 +255,17 @@ function onToggle() {
   applyMode();
 }
 
+function onToggle() {
+  setActive(!$("floodPanel").classList.contains("collapsed"));
+}
+
 // Show the controls for the mode, and switch its layer on (the other's off).
 function applyMode() {
   $("floodMode").value = mode;
   $("floodFlat").style.display = mode === "flat" ? "" : "none";
   $("floodNwm").style.display = mode === "nwm" ? "" : "none";
   if (mode !== "flat") setPicking(false);
-  setFimActive(open && mode === "nwm");
+  setFimActive(active && mode === "nwm");
   applyWater();
   showMarker();
 }
@@ -309,12 +315,19 @@ export function setupFloodPanel() {
   map.on("mousemove", onMouseMove);
   map.getCanvas().addEventListener("mouseleave", hideTooltip);
   map.on("moveend", () => {
-    if (open) needsFit = true;
+    if (active) needsFit = true;
   });
   map.on("idle", () => {
-    if (!open || mode !== "flat" || !needsFit) return;
+    if (!active || mode !== "flat" || !needsFit) return;
     needsFit = false;
     fitSlider();
+  });
+
+  registerPanelLayer("floodPanel", {
+    name: "the flood map",
+    isShowing: () => active,
+    toggle: () => setActive(!active),
+    stop: () => setActive(false),
   });
 
   $("floodPanel").querySelector(".panel-title").addEventListener("click", onToggle);

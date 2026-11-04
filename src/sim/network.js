@@ -30,6 +30,7 @@ import { resultColorStops } from "../color/expressions.js";
 import { DEFAULT_COLORMAP, colormapColors, colormapGradient } from "../color/colormaps.js";
 import { flowpathPaint, mapWidthStops, setFlowpathPaint } from "../map/flowpathstyle.js";
 import { clearData } from "../data/loader.js";
+import { registerPanelLayer, syncPanelLayers } from "../ui/panellayers.js";
 import { setStatus } from "../ui/panels.js";
 
 let worker = null;
@@ -471,6 +472,7 @@ function resetWater() {
 // ---- Panel ----------------------------------------------------------
 
 function syncControls() {
+  syncPanelLayers();
   const active = state.simActive;
   document.getElementById("simStartBtn").textContent = active
     ? "Stop simulation"
@@ -517,6 +519,15 @@ function updateStats() {
 }
 
 export function setupSimPanel() {
+  // Stop only: starting clears the loaded run, so that stays the panel's
+  // button (with nothing running, the icon just opens the panel).
+  registerPanelLayer("simPanel", {
+    name: "the live routing sim",
+    offVerb: "Stop",
+    isShowing: () => state.simActive,
+    canToggle: () => state.simActive,
+    toggle: stopSim,
+  });
   document.getElementById("simStartBtn").addEventListener("click", () => {
     if (state.simActive) stopSim();
     else startSim();

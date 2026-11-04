@@ -17,6 +17,8 @@ import {
   onFlowpathHover,
   onFlowpathLeave,
   onFlowpathClick,
+  runLayerVisible,
+  toggleRunLayer,
   onGageClick,
   onGageHover,
   onGageLeave,
@@ -70,6 +72,8 @@ import { writeUrl as writeLayersUrl } from "./layerprefs.js";
 import { syncCredits } from "./credits.js";
 import { invalidateRainView, rainDivideTileLoaded, restoreRainAfterStyle } from "../rain/rain.js";
 import { setupRainPanel } from "../ui/rainpanel.js";
+import { registerPanelLayer, syncPanelLayers } from "../ui/panellayers.js";
+import { setupOverlayTooltip } from "../ui/overlaytooltip.js";
 
 
 // maplibregl and pmtiles are globals provided by CDN scripts in index.html.
@@ -95,6 +99,7 @@ export function init() {
   onActiveDatasetChange(syncGridToDataset); // before paint: it adds the layer painted
   onActiveDatasetChange(syncPaintToDataset);
   onActiveDatasetChange(updateGageFilter);
+  onActiveDatasetChange(syncPanelLayers);
 
   const protocol = new pmtiles.Protocol({ metadata: true });
   maplibregl.addProtocol("pmtiles", protocol.tile);
@@ -235,6 +240,13 @@ export function init() {
   setupSimPanel();
   setupBrush();
   setupSimRain();
+  setupOverlayTooltip();
+  registerPanelLayer("dataPanel", {
+    name: "the run",
+    isShowing: runLayerVisible,
+    canToggle: () => !!state.data,
+    toggle: toggleRunLayer,
+  });
 }
 
 function setupEventListeners() {

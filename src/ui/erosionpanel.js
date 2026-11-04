@@ -5,6 +5,8 @@
 // Particles panel, whose speed and momentum sliders it shares.
 // ====================================================================
 import { flowState, erosionState } from "../state.js";
+import { registerPanelLayer, syncPanelLayers } from "./panellayers.js";
+import { setFlowActive } from "./flowpanel.js";
 import { setStatus } from "./panels.js";
 import { bindSlider } from "./sliders.js";
 import { setBrushTool, setupFlowBrush } from "../flow/brush.js";
@@ -30,17 +32,26 @@ function selectTool(tool) {
   }
 }
 
-function onToggle() {
-  const open = !$("erosionPanel").classList.contains("collapsed");
-  if (open === erosionState.active) return;
-  erosionState.active = open;
-  if (open) {
-    // The particles are what erode.
-    if (!flowState.active) $("flowPanel").querySelector(".panel-title").click();
-  } else {
+function setErosionActive(on) {
+  // The particles are what erode.
+  if (on) setFlowActive(true);
+  if (on === erosionState.active) return;
+  erosionState.active = on;
+  if (!on) {
     commitFlowErosion();
     selectTool("none");
   }
+  syncPanelLayers();
+}
+
+function onToggle() {
+  const open = !$("erosionPanel").classList.contains("collapsed");
+  // Opening this one brings up the flow panel it shares its sliders with.
+  const flow = $("flowPanel");
+  if (open && !flowState.active && flow.classList.contains("collapsed")) {
+    flow.querySelector(".panel-title").click();
+  }
+  setErosionActive(open);
 }
 
 export function setupErosionPanel() {
@@ -65,6 +76,14 @@ export function setupErosionPanel() {
   });
   onTerrainChange(showEdits);
   showEdits();
+
+  const eroding = () => erosionState.active && flowState.active;
+  registerPanelLayer("erosionPanel", {
+    name: "erosion",
+    isShowing: eroding,
+    toggle: () => setErosionActive(!eroding()),
+    stop: () => setErosionActive(false),
+  });
 
   $("erosionPanel").querySelector(".panel-title").addEventListener("click", onToggle);
   // A shared link can open the panel at load.

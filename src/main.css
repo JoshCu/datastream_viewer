@@ -180,6 +180,35 @@ body {
     height: var(--space-md);
 }
 
+/* A panel's icon as its map layer's switch (ui/panellayers.js). */
+.panel-layer-toggle {
+    background: none;
+    border: none;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    color: inherit;
+    cursor: inherit;
+    transition: color var(--transition-fast);
+}
+
+.panel-layer-toggle.can-toggle {
+    cursor: pointer;
+}
+
+.panel-layer-toggle.can-toggle:hover {
+    color: var(--text-primary);
+}
+
+.panel-layer-toggle.on,
+.panel-layer-toggle.on:hover {
+    color: #4da6ff;
+}
+
+.panel-layer-toggle.on svg {
+    filter: drop-shadow(0 0 2px #4da6ff) drop-shadow(0 0 5px #1f8bff);
+}
+
 /* Collapsible panels (S3 browser, upload) */
 .panel-collapse-toggle {
     margin-left: auto;
@@ -854,6 +883,16 @@ input[type="range"]::-webkit-slider-thumb {
     font-weight: 600;
     color: var(--accent-secondary);
     margin-bottom: 6px;
+}
+
+/* Forcings and rainfall together: one section each. */
+#overlayTooltip .tooltip-title:not(:first-child) {
+    margin-top: 10px;
+}
+
+/* Its width is measured to hang it left of the cursor. */
+#overlayTooltip {
+    white-space: nowrap;
 }
 
 .tooltip-sub {

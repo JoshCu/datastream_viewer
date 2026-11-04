@@ -13,6 +13,14 @@ const LAYER = REACH_SETS.grid.layer;
 const BELOW = ["flowpaths", "nwm-flowlines"]; // drawn under the first present
 
 let shownFor = null; // the dataset the source holds
+let visible = true;
+
+export const gridVisible = () => visible;
+
+export function setGridVisible(on) {
+  visible = on;
+  if (map.getLayer(LAYER)) map.setLayoutProperty(LAYER, "visibility", on ? "visible" : "none");
+}
 
 // Cell edges from the centres: halfway between neighbours, half a step out
 // at the ends.
@@ -93,6 +101,7 @@ export function syncGridToDataset({ data }) {
   const grid = data?.reaches === "grid" && data.grid ? data : null;
   if (grid === shownFor && (!grid || map.getLayer(LAYER))) return;
   shownFor = grid;
+  visible = true;
   if (grid) addLayer(grid);
   else removeLayer();
 }

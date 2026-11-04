@@ -139,7 +139,7 @@ function layerOf(deck, radar) {
 // Redraw every radar that has points, with the current display settings
 // (size, opacity, exaggeration). Also how a removed radar disappears.
 export async function renderNexrad() {
-  if (!nexradState.radars.some((r) => r.points)) {
+  if (nexradState.hidden || !nexradState.radars.some((r) => r.points)) {
     setDeckLayers(OWNER, []);
     return;
   }

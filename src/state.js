@@ -58,6 +58,7 @@ export const forcingState = {
   files: new Map(),
   sourceLabel: null, // the cycle path or the dropped file names
   run: null, // the ForcingRun (forcing/store.js) once any rows have loaded
+  visible: true, // off: the panel's icon has hidden the colours
   variable: null,
   scale: "linear",
   colormap: "icefire",
@@ -76,6 +77,7 @@ export const nexradState = {
   // came from; `points` is its built point cloud (nexrad/layer.js).
   radars: [],
   locked: false, // stepping one radar snaps the others to its time
+  hidden: false, // the panel's icon has hidden the point clouds
   product: "REF",
   threshold: 20,
   tilt: null, // elevation angle (each radar draws its nearest cut), or null for every tilt
@@ -136,6 +138,7 @@ export const rainState = {
   variable: "precipitation_surface",
   colormap: "icefire",
   display: "cells", // "cells" | "catchments"
+  visible: true, // off: the panel's icon has hidden the layer
   // The load on the map: { product, variable, info, time (epoch ms), nT, ny,
   // nx, frames: Float32Array [t][row][col], lat0, dLat, lon0, dLon (the grid's
   // first row and column centres and steps) }, or null.

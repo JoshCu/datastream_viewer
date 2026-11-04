@@ -34,6 +34,8 @@ export function onRainChange(fn) {
 }
 const emit = (kind) => listeners.forEach((fn) => fn({ kind }));
 
+const fillOpacity = () => (rainState.visible ? RAIN_FILL_OPACITY : 0);
+
 // ---- Colour --------------------------------------------------------------
 
 function parseHex(hex) {
@@ -124,7 +126,7 @@ function ensureCellLayer() {
         paint: {
           "raster-fade-duration": 0,
           "raster-resampling": "nearest",
-          "raster-opacity": RAIN_FILL_OPACITY,
+          "raster-opacity": fillOpacity(),
         },
       },
       map.getLayer(FORCING_LAYER) ? FORCING_LAYER : undefined,
@@ -208,7 +210,7 @@ function ensureCatchmentLayer() {
       "source-layer": DIVIDE_FEATURE.sourceLayer,
       paint: {
         "fill-color": NO_DATA_COLOR,
-        "fill-opacity": RAIN_FILL_OPACITY,
+        "fill-opacity": fillOpacity(),
         "fill-antialias": false,
       },
     },
@@ -380,6 +382,7 @@ function applyDisplay() {
 export function showRainGrid(grid) {
   removeCatchmentLayer(); // the last load's values mustn't outlive it
   rainState.grid = grid;
+  rainState.visible = true;
   rainState.timeIndex = 0;
   prepareImage(grid);
   applyDisplay();
@@ -389,10 +392,21 @@ export function showRainGrid(grid) {
 
 export function clearRain() {
   rainState.grid = null;
+  rainState.visible = true;
   rainState.timeIndex = 0;
   applyDisplay();
   setMapCredit("rain", null);
   emit("grid");
+}
+
+// Show or hide the load without dropping it. By opacity, so the catchment
+// layer stays queryable and its painter doesn't need waking on the way back.
+export function setRainVisible(on) {
+  rainState.visible = on;
+  if (map.getLayer(RAIN_LAYER)) map.setPaintProperty(RAIN_LAYER, "raster-opacity", fillOpacity());
+  if (map.getLayer(RAIN_CATCHMENT_LAYER)) map.setPaintProperty(RAIN_CATCHMENT_LAYER, "fill-opacity", fillOpacity());
+  // The credit is on the map only while the layer is.
+  setMapCredit("rain", on && rainState.grid ? RAIN_PRODUCTS[rainState.grid.product].credit : null);
 }
 
 export function setRainDisplay(display) {
@@ -430,6 +444,35 @@ export function rainValueAt(lng, lat) {
   if (!grid) return undefined;
   const at = cellAt(grid, lng, lat);
   return at < 0 ? undefined : grid.frames[rainState.timeIndex * grid.ny * grid.nx + at];
+}
+
+// The cell under a point, for the hover tooltip: { key, value, lat, lng, ring
+// (its outline) }, or null off the grid.
+export function rainCellAt(lng, lat) {
+  const grid = rainState.grid;
+  if (!grid) return null;
+  const key = cellAt(grid, lng, lat);
+  if (key < 0) return null;
+  const row = Math.floor(key / grid.nx);
+  const col = key % grid.nx;
+  const cy = grid.lat0 + row * grid.dLat;
+  const cx = grid.lon0 + col * grid.dLon;
+  const hy = Math.abs(grid.dLat) / 2;
+  const hx = Math.abs(grid.dLon) / 2;
+  return {
+    key,
+    value: grid.frames[rainState.timeIndex * grid.ny * grid.nx + key],
+    lat: cy,
+    lng: cx,
+    ring: [[cx - hx, cy - hy], [cx + hx, cy - hy], [cx + hx, cy + hy], [cx - hx, cy + hy], [cx - hx, cy - hy]],
+  };
+}
+
+// A catchment's mean at the current time, while drawn by catchment: undefined
+// if it isn't in the table, negative if none of its cells had data.
+export function rainCatchmentValue(id) {
+  const row = table.index.get(id);
+  return row === undefined ? undefined : table.rows[row][rainState.timeIndex];
 }
 
 // A basemap switch drops the runtime source and layers.

@@ -8,7 +8,7 @@
 // Feature-state is per source, so it can't collide with the flowpaths'.
 // ====================================================================
 import { forcingState, map } from "../state.js";
-import { DIVIDE_FEATURE, FORCING_LAYER, NO_DATA_COLOR } from "../config.js";
+import { DIVIDE_FEATURE, FORCING_FILL_OPACITY, FORCING_LAYER, NO_DATA_COLOR } from "../config.js";
 import { resultColorExpression } from "../color/expressions.js";
 import { colormapColors } from "../color/colormaps.js";
 import { createStatePainter } from "../map/statepainter.js";
@@ -67,6 +67,16 @@ export function clearForcingPaint() {
   if (!map.getLayer(FORCING_LAYER)) return;
   map.removeFeatureState({ source: DIVIDE_FEATURE.source, sourceLayer: DIVIDE_FEATURE.sourceLayer });
   map.setPaintProperty(FORCING_LAYER, "fill-color", NO_DATA_COLOR);
+}
+
+// Show or hide the colours. By opacity rather than the layer's visibility: the
+// layer stays rendered so catchment clicks and viewport queries keep hitting it,
+// and painting carries on underneath.
+export function setForcingVisible(on) {
+  forcingState.visible = on;
+  if (map.getLayer(FORCING_LAYER)) {
+    map.setPaintProperty(FORCING_LAYER, "fill-opacity", on ? FORCING_FILL_OPACITY : 0);
+  }
 }
 
 // The only way to change the forcing timestep (the forcing counterpart of

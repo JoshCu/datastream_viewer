@@ -9,6 +9,10 @@ import {
   SEARCH_LAYER,
   SEARCH_POINT_SOURCE,
   SEARCH_POINT_LAYER,
+  HOVER_CELL_SOURCE,
+  HOVER_CELL_LAYER,
+  HOVER_DIVIDE_LAYER,
+  HOVER_DIVIDE_STATE,
   USGS_SITES_SOURCE,
   USGS_SITES_LAYER,
   USGS_SITES_LABEL_LAYER,
@@ -86,6 +90,10 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
       },
       // Where the searched-for gage is (map/search.js); empty until then.
       [SEARCH_POINT_SOURCE]: {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      },
+      [HOVER_CELL_SOURCE]: {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       },
@@ -246,6 +254,26 @@ export function updateIncomingStyle(previousStyle, nextStyle) {
         "source-layer": "divides",
         filter: HIDDEN_FILTER,
         paint: { "line-color": "#ffaa00", "line-width": 3, "line-dasharray": [2, 1] },
+      },
+      {
+        // Hidden until the first hover needs it, so a session that never
+        // uses it doesn't lay out a line for every catchment.
+        id: HOVER_DIVIDE_LAYER,
+        type: "line",
+        source: "divides",
+        "source-layer": "divides",
+        layout: { visibility: "none" },
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": 2,
+          "line-opacity": ["case", ["boolean", ["feature-state", HOVER_DIVIDE_STATE], false], 1, 0],
+        },
+      },
+      {
+        id: HOVER_CELL_LAYER,
+        type: "line",
+        source: HOVER_CELL_SOURCE,
+        paint: { "line-color": "#ffffff", "line-width": 2 },
       },
       {
         id: "hills",

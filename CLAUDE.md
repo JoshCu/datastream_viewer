@@ -167,6 +167,23 @@ DOM nodes, so panels stay direct children of `.sidebar-content` and each needs a
 cookie takes its `index.html` place. `.panel-hidden` only applies to a collapsed
 panel, so code that opens a panel (`open=`, `showWindsAt`) still reveals it.
 
+### Panel icons as layer switches (`ui/panellayers.js`)
+
+A panel with something on the map calls `registerPanelLayer(panelId, { name,
+isShowing, canToggle, toggle, stop })`. Its title icon then glows while the
+layer shows, and a click toggles the layer without moving the panel; with
+nothing to toggle the click falls through and opens the panel. Code that changes
+a layer calls `syncPanelLayers()` (changes through `map/layerprefs.js` are
+picked up). So flow particles, erosion and the flood map can now run with the
+panel collapsed, though the title still starts and stops them. Forcings and rain
+hide by **opacity**, not `visibility`: `FORCING_LAYER` must stay rendered for
+catchment clicks and viewport queries. The live sim's icon only stops it, since
+starting clears the loaded run.
+
+`ui/overlaytooltip.js` is the forcing/rain hover tooltip, up while the panel is
+open and its layer showing. The catchment outline is a line layer on `divides`
+driven by feature-state, because a `setFilter` per hover would reload its tiles.
+
 ### Module dependency notes
 
 Keep `state.js` / `config.js` as leaves to avoid cycles. `ui/dom.js` is also a
@@ -451,7 +468,8 @@ re-decodes); the profile only uses 5–40 km.
 ### Flow particles (`src/flow/`, `ui/flowpanel.js`)
 
 A fourth independent mode: wind-map-style particles running down the DEM.
-Opening the panel starts it, collapsing stops it; settings are `flowState`
+Opening the panel starts it, collapsing stops it, its icon does either without
+moving the panel; settings are `flowState`
 (`state.js`). Three layers:
 
 - **`flow/field.js`** decides what to route: one mosaic over the view plus a

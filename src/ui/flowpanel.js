@@ -1,10 +1,12 @@
 // ====================================================================
 // Flow particles panel: opening it starts the particles over the view,
-// collapsing it stops them. The settings live in flowState (state.js).
+// collapsing it stops them, and its icon does either without moving the panel.
+// The settings live in flowState (state.js).
 // ====================================================================
 import { map, flowState } from "../state.js";
 import { colormapColors, colormapGradient } from "../color/colormaps.js";
 import { fillColormapSelect } from "./colormap.js";
+import { registerPanelLayer, syncPanelLayers } from "./panellayers.js";
 import { setStatus } from "./panels.js";
 import { bindSlider } from "./sliders.js";
 import {
@@ -43,16 +45,16 @@ function bindSelect(id, key, apply, parse = String) {
   });
 }
 
-function onToggle() {
-  const open = !$("flowPanel").classList.contains("collapsed");
-  if (open === flowState.active) return;
-  flowState.active = open;
-  if (open) {
+export function setFlowActive(on) {
+  if (on === flowState.active) return;
+  flowState.active = on;
+  if (on) {
     startFlowParticles().catch((err) => {
       // deck.gl didn't load (offline, CDN blocked): nothing would draw.
       flowState.active = false;
       clearFlowField();
       setStatus("error", `${err.message}. Close and reopen to retry.`, "flow");
+      syncPanelLayers();
     });
     refreshFlowField();
   } else {
@@ -60,6 +62,11 @@ function onToggle() {
     clearFlowField();
   }
   applyFlowDebug();
+  syncPanelLayers();
+}
+
+function onToggle() {
+  setFlowActive(!$("flowPanel").classList.contains("collapsed"));
 }
 
 export function setupFlowPanel() {
@@ -93,6 +100,13 @@ export function setupFlowPanel() {
   });
   map.on("resize", () => {
     if (flowState.active) rebuildSpawnGrid();
+  });
+
+  registerPanelLayer("flowPanel", {
+    name: "flow particles",
+    isShowing: () => flowState.active,
+    toggle: () => setFlowActive(!flowState.active),
+    stop: () => setFlowActive(false),
   });
 
   $("flowPanel").querySelector(".panel-title").addEventListener("click", onToggle);

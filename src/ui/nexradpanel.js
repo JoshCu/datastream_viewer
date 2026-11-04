@@ -9,6 +9,7 @@
 // it's already on, since the radars don't scan in step.
 // ====================================================================
 import { map, nexradState } from "../state.js";
+import { registerPanelLayer, syncPanelLayers } from "./panellayers.js";
 import { setStatus } from "./panels.js";
 import { PRODUCTS, legendCss } from "../nexrad/products.js";
 import { listStations, listScans, loadVolume, forgetStation, SAME_TILT_DEG } from "../nexrad/source.js";
@@ -186,6 +187,7 @@ function summary() {
 }
 
 function renderStatus() {
+  syncPanelLayers();
   renderProfiles();
   if (progress.size) status("loading", [...progress.values()].join("\n"));
   else if (errors.size) status("error", [...errors.values()].join("\n"));
@@ -339,6 +341,7 @@ async function showScan(radar, url) {
       return;
     }
     const first = !radars.some((r) => r.volume);
+    nexradState.hidden = false; // asking for a scan is asking to see it
     radar.volume = volume;
     radar.url = url;
     errors.delete(radar.key);
@@ -581,6 +584,15 @@ function bindSlider(id, key, fmt, apply) {
 
 export function setupNexradPanel() {
   const panel = $("nexradPanel");
+  registerPanelLayer("nexradPanel", {
+    name: "radar scans",
+    isShowing: () => !nexradState.hidden,
+    canToggle: () => radars.some((r) => r.points),
+    toggle: () => {
+      nexradState.hidden = !nexradState.hidden;
+      renderNexrad();
+    },
+  });
   $("nexradDate").value = isoDate(Date.now());
   $("nexradDate").max = isoDate(Date.now());
 

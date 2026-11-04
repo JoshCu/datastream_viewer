@@ -377,6 +377,13 @@ export const FORCING_LAYER = "forcing-divides";
 export const VPU_LAYER = "forcing-vpus";
 // Outline of the catchment found by the search box (map/search.js).
 export const SEARCH_LAYER = "catchment-search";
+// Outlines of what the forcing / rainfall tooltip is reading
+// (ui/overlaytooltip.js). The catchment's goes through feature-state, as a
+// filter change would reload the divides tiles on every hover.
+export const HOVER_DIVIDE_LAYER = "hover-divide";
+export const HOVER_DIVIDE_STATE = "hoverOutline";
+export const HOVER_CELL_SOURCE = "hover-cell";
+export const HOVER_CELL_LAYER = "hover-cell";
 // Ring around the gage found by the search box: a one-point GeoJSON source,
 // since the gage may sit off the hydrofabric (or outside loaded tiles).
 export const SEARCH_POINT_SOURCE = "search-point";

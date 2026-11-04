@@ -230,6 +230,8 @@ src/
     playback.js               play/pause/step transport
     panels.js                 data-info summary, legend, status lines
     panelsettings.js          show/hide + reorder the panels, saved in a cookie
+    panellayers.js            panel icons: glow while the panel's layer shows, click to toggle it
+    overlaytooltip.js         forcing / rainfall hover tooltip + catchment / cell outline
     colormap.js               colour-map picker shared by the run and forcing panels
     time.js                   setTimeIndex() + current-timestep readout
     overview.js               basin-total sparkline + click-to-seek

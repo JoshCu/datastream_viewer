@@ -22,6 +22,7 @@ import { valueAt, dataTimeRangeMs, hasVariable, variableInfo } from "../data/acc
 import { fetchGageMeta, peekGageMeta } from "../data/usgs.js";
 import { catalogMeta } from "../data/usgscatalog.js";
 import { siteFromGageFeature, runReachOfGage } from "./gages.js";
+import { gridVisible, setGridVisible } from "./grid.js";
 import { iconButton, labeledRow, fmtDay } from "../ui/dom.js";
 import { showFeatureInfo } from "../ui/infopanel.js";
 import { openHydrograph } from "../ui/hydrograph.js";
@@ -157,6 +158,31 @@ export function setCatchmentsVisible(visible) {
   setLayersVisible(CATCHMENT_LAYERS, visible);
   syncHydrofabricButtons();
   noteLayer("catchments", visible);
+}
+
+// Is the loaded run's own network on the map? A gridded run's cells have no
+// map button or saved state; the other two networks are the buttons here.
+export function runLayerVisible() {
+  const set = reachSetOf(state.data);
+  if (set === REACH_SETS.nwm) return nwmVisible;
+  return set === REACH_SETS.grid ? gridVisible() : flowpathsVisible;
+}
+
+// The Dataset Info panel's icon: a click on that network's button, in effect.
+export function toggleRunLayer() {
+  const on = !runLayerVisible();
+  const set = reachSetOf(state.data);
+  if (set === REACH_SETS.nwm) {
+    setNwmVisible(on);
+    saveLayer("nwm", on);
+  } else if (set === REACH_SETS.grid) {
+    setGridVisible(on);
+    if (on) invalidateResultsView();
+    else onFlowpathLeave(set);
+  } else {
+    setFlowpathsVisible(on);
+    saveLayer("flowpaths", on);
+  }
 }
 
 function syncHydrofabricButtons() {

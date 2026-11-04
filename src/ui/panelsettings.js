@@ -12,6 +12,7 @@
 // main.css. The checkbox keeps showing the preference.
 // ====================================================================
 import { drawResultsOverview } from "./overview.js";
+import { stopPanelLayer } from "./panellayers.js";
 
 const COOKIE = "panelLayout";
 const COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60;
@@ -81,6 +82,8 @@ function setPanelShown(panel, shown) {
   if (!shown && panel.dataset.urlKey && !panel.classList.contains("collapsed")) {
     panel.querySelector(".panel-title").click();
   }
+  // Started from its icon, it can be running with the panel collapsed.
+  if (!shown) stopPanelLayer(panel.id);
   panel.classList.toggle(HIDDEN, !shown);
   // The overview sparkline can't draw at zero width, so it may be out of date.
   if (shown) drawResultsOverview();

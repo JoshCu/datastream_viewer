@@ -28,9 +28,10 @@ import {
   vpuFromName,
 } from "../forcing/loader.js";
 import { onForcingChange } from "../forcing/store.js";
-import { applyForcingPaint, setForcingTimeIndex } from "../forcing/paint.js";
+import { applyForcingPaint, setForcingTimeIndex, setForcingVisible } from "../forcing/paint.js";
 import { MIN_CATCHMENT_ZOOM } from "../forcing/viewport.js";
 import { setStatus } from "./panels.js";
+import { registerPanelLayer, syncPanelLayers } from "./panellayers.js";
 import { fillColormapSelect } from "./colormap.js";
 import { colormapColors, colormapGradient } from "../color/colormaps.js";
 import { escapeHtml } from "./dom.js";
@@ -111,13 +112,22 @@ export function setupForcingPanel() {
   $("forcingStepFwdBtn").addEventListener("click", () => step(1));
   $("forcingPlayBtn").addEventListener("click", togglePlay);
 
+  registerPanelLayer("forcingPanel", {
+    name: "forcings",
+    isShowing: () => forcingState.visible,
+    canToggle: () => !!forcingState.run,
+    toggle: () => setForcingVisible(!forcingState.visible),
+  });
+
   map.on("zoomend", syncButtons);
   onForcingChange(({ kind }) => {
     if (kind === "sources") {
       renderSource();
       syncButtons();
     } else if (kind === "run") {
+      if (!forcingState.run) setForcingVisible(true);
       syncRun();
+      syncPanelLayers();
     } else if (kind === "rows") {
       updateLegend();
       renderSource();
@@ -339,6 +349,9 @@ async function runLoad(makePlan, what, { ask = true } = {}) {
         ? `Loading ${what}: ${fmtBytes(plan.bytes)} in ${plan.requests.toLocaleString()} requests…`
         : `Loading ${what}…`,
     );
+    // Asking for more forcings is asking to see them.
+    setForcingVisible(true);
+    syncPanelLayers();
     const s = plan.plans.length ? await runLoadPlan(plan) : { ...NOTHING, unmatched: plan.unmatched };
     const parts = [
       s.rows ? `${s.rows.toLocaleString()} catchments` : "nothing new to load",

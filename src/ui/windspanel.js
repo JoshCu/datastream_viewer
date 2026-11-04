@@ -6,6 +6,7 @@
 // aloft here" was picked in the right-click menu (ui/contextmenu.js).
 // ====================================================================
 import { map } from "../state.js";
+import { registerPanelLayer, syncPanelLayers } from "./panellayers.js";
 import { setStatus } from "./panels.js";
 import { fetchWinds, EARLIEST_DATE } from "../winds/openmeteo.js";
 import { compass } from "../nexrad/birds.js";
@@ -43,6 +44,7 @@ let profile = null; // fetchWinds() result for the picked day
 let hour = 0; // the selected column
 let seq = 0;
 let marker = null;
+let markerOn = false;
 
 const meanKm = (level) => {
   const zs = level.height.filter((z) => z != null);
@@ -173,8 +175,8 @@ function drawTable() {
 }
 
 function showMarker() {
-  const open = !$("windsPanel").classList.contains("collapsed");
-  if (!point || !open) {
+  syncPanelLayers();
+  if (!point || !markerOn) {
     marker?.remove();
     return;
   }
@@ -213,6 +215,7 @@ export function showWindsAt(lat, lon, time) {
   }
   const panel = $("windsPanel");
   if (panel.classList.contains("collapsed")) panel.querySelector(".panel-title").click();
+  markerOn = true;
   load();
 }
 
@@ -226,7 +229,24 @@ export function setupWindsPanel() {
     const c = map.getCenter();
     showWindsAt(c.lat, c.lng);
   });
-  $("windsPanel").querySelector(".panel-title").addEventListener("click", showMarker);
+  // Up while the panel is open, or by the icon.
+  const panel = $("windsPanel");
+  markerOn = !panel.classList.contains("collapsed");
+  panel.querySelector(".panel-title").addEventListener("click", () => {
+    markerOn = !panel.classList.contains("collapsed");
+    showMarker();
+  });
+  const setMarker = (on) => {
+    markerOn = on;
+    showMarker();
+  };
+  registerPanelLayer("windsPanel", {
+    name: "the winds marker",
+    isShowing: () => markerOn,
+    canToggle: () => !!point,
+    toggle: () => setMarker(!markerOn),
+    stop: () => setMarker(false),
+  });
   new ResizeObserver(() => profile && drawChart()).observe($("windsChart"));
   $("windsLegendGradient").style.background =
     `linear-gradient(to right, ${RAMP.map(([v, c]) => `rgb(${c.join(",")}) ${(v / MAX_SPEED) * 100}%`).join(", ")})`;

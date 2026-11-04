@@ -19,6 +19,9 @@ import {
   onSiteFilterChange,
 } from "../map/usgssites.js";
 import { MAX_BELOW_MI, damBelowMi, hasNoDams } from "../data/usgsdams.js";
+import { setGagesVisible } from "../map/gages.js";
+import { layerOn, saveLayer } from "../map/layerprefs.js";
+import { registerPanelLayer } from "./panellayers.js";
 import { setStatus } from "./panels.js";
 
 const $ = (id) => document.getElementById(id);
@@ -26,6 +29,15 @@ const $ = (id) => document.getElementById(id);
 const rows = []; // per type: { checkbox, count }
 
 export function setupUsgsPanel() {
+  registerPanelLayer("usgsPanel", {
+    name: "gages",
+    isShowing: () => layerOn("gages"),
+    toggle: () => {
+      setGagesVisible(!layerOn("gages"));
+      saveLayer("gages", layerOn("gages"));
+    },
+  });
+
   const days = Math.round(USGS_ACTIVE_WINDOW_MS / 86400000);
   $("usgsRecentOption").textContent = `Reporting in the last ${days} days`;
 

@@ -51,11 +51,23 @@ export function initialLayer(key) {
   return initial[key] === true;
 }
 
+export function layerOn(key) {
+  return current[key] === true;
+}
+
+const listeners = new Set();
+
+// fn(): a layer's state changed, from a click or from code.
+export function onLayerChange(fn) {
+  listeners.add(fn);
+}
+
 // Record a layer's state in the URL.
 export function noteLayer(key, on) {
   if (current[key] === on) return;
   current[key] = on;
   writeUrl();
+  listeners.forEach((fn) => fn());
 }
 
 // A click on the layer's button: record it and remember it as last used.

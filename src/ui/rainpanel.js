@@ -17,10 +17,12 @@ import {
   setRainColormap,
   setRainDisplay,
   setRainTimeIndex,
+  setRainVisible,
   showRainGrid,
 } from "../rain/rain.js";
 import { fillColormapSelect } from "./colormap.js";
 import { setStatus } from "./panels.js";
+import { registerPanelLayer, syncPanelLayers } from "./panellayers.js";
 import { onTimeChange } from "./time.js";
 
 const $ = (id) => document.getElementById(id);
@@ -191,11 +193,19 @@ export function setupRainPanel() {
   $("rainStepBackBtn").addEventListener("click", () => step(-1));
   $("rainStepFwdBtn").addEventListener("click", () => step(1));
 
+  registerPanelLayer("rainPanel", {
+    name: "rainfall",
+    isShowing: () => rainState.visible,
+    canToggle: () => !!rainState.grid,
+    toggle: () => setRainVisible(!rainState.visible),
+  });
+
   onRainChange(({ kind }) => {
     if (kind === "time") {
       syncTime();
       return;
     }
+    syncPanelLayers();
     const grid = rainState.grid;
     $("rainControls").style.display = grid ? "" : "none";
     $("rainClearBtn").disabled = !grid;

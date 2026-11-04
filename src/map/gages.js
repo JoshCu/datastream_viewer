@@ -106,6 +106,7 @@ function applyGageVisibility() {
 export function setGagesVisible(on) {
   gagesVisible = on;
   noteLayer("gages", on);
+  gageControl?._sync(); // the USGS panel's icon also lands here
   if (map.getLayer(GAGE_LAYER)) applyGageVisibility();
 }
 
@@ -248,8 +249,11 @@ export function gageSiteForReach(reachId) {
 
 // ---- Map control: show/hide gages, show/hide gage id labels -----------
 
+let gageControl = null;
+
 export class GageControl {
   onAdd(map) {
+    gageControl = this;
     this._container = document.createElement("div");
     this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
 
@@ -298,6 +302,7 @@ export class GageControl {
   }
 
   onRemove() {
+    gageControl = null;
     this._container.remove();
   }
 }
