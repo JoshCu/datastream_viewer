@@ -468,16 +468,21 @@ async function loadRetro() {
 // the plot. Nothing is fetched until Load: opening a reach stays free.
 
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+let rainDatesTouched = false; // the user's own dates survive a change of reach
 
 function setupRain() {
   els.rainProduct.replaceChildren(
     ...Object.entries(RAIN_PRODUCTS).map(([key, p]) => new Option(p.name, key)),
   );
   els.rainProduct.addEventListener("change", () => {
-    renderRainCredit(els.rainCredit, els.rainProduct.value);
-    els.rainNote.textContent = "";
+    rainDatesTouched = false;
+    syncRainSection();
   });
-  renderRainCredit(els.rainCredit, els.rainProduct.value);
+  for (const input of [els.rainFrom, els.rainTo]) {
+    input.addEventListener("change", () => {
+      rainDatesTouched = true;
+    });
+  }
   els.rainLoad.addEventListener("click", loadRain);
 }
 
@@ -485,11 +490,15 @@ function setupRain() {
 function syncRainSection() {
   const applies = view.target?.reaches !== "grid";
   els.rainSection.style.display = applies ? "" : "none";
+  if (!applies) return;
   els.rainNote.textContent = "";
-  if (!applies || els.rainFrom.value) return;
+  renderRainCredit(els.rainCredit, els.rainProduct.value);
+  if (rainDatesTouched) return;
+  const charted = extentOf(modelSeries(view.target.reachId, view.variable));
   const days = RAIN_PRODUCTS[els.rainProduct.value].defaultDays;
-  els.rainTo.value = isoDay(Date.now());
-  els.rainFrom.value = isoDay(Date.now() - days * DAY_MS);
+  const [from, to] = charted ?? [Date.now() - days * DAY_MS, Date.now()];
+  els.rainFrom.value = isoDay(from);
+  els.rainTo.value = isoDay(to);
 }
 
 // [lon, lat] for the reach: the middle of its geometry in the loaded tiles,

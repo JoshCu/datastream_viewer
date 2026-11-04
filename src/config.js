@@ -508,5 +508,23 @@ export const RAIN_PRODUCTS = {
       url: "https://dynamical.org/catalog/nasa-imerg-analysis-late/",
     },
   },
+  chirps: {
+    label: "CHIRPS final: gauges + satellite, 5 km, daily, land",
+    name: "UCSB CHIRPS",
+    stac: "ucsb-chc-chirps-analysis-final",
+    // Final is released monthly, a few weeks after the month ends.
+    defaultDays: 90,
+    variables: {
+      precipitation_surface: { label: "Precipitation", units: "mm/day", scale: 86400, min: 1, max: 100, log: true },
+    },
+    credit: {
+      short: "UCSB CHC CHIRPS from dynamical.org",
+      long:
+        "UCSB Climate Hazards Center CHIRPS version 3.0 data processed by dynamical.org from the Climate Hazards " +
+        "Center data archive. Funk, C., Peterson, P., Harrison, L. et al. The Climate Hazards Center Infrared " +
+        "Precipitation with Stations, Version 3. Sci Data 13, 718 (2026), data https://doi.org/10.15780/G2JQ0P.",
+      url: "https://dynamical.org/catalog/ucsb-chc-chirps-analysis-final/",
+    },
+  },
 };
 export const RAIN_LICENSE_URL = "https://creativecommons.org/licenses/by/4.0/";

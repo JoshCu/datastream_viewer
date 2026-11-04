@@ -39,13 +39,18 @@ export function rainMeta(product, variable) {
 }
 
 // The record's span [first, last] (epoch ms).
-export const rainRecord = (meta) => [meta.t0Ms, meta.t0Ms + (meta.nTimes - 1) * meta.stepMs];
+const rainRecord = (meta) => [meta.t0Ms, meta.t0Ms + (meta.nTimes - 1) * meta.stepMs];
 
-// Time indexes [t0, t1) inside [fromMs, toMs]; null if that misses the record.
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+// Time indexes [t0, t1) inside [fromMs, toMs]. Throws, naming the record's
+// span (not known until the store is open), if that misses it.
 function timeRange(meta, fromMs, toMs) {
   const t0 = Math.max(0, Math.ceil((fromMs - meta.t0Ms) / meta.stepMs));
   const t1 = Math.min(meta.nTimes, Math.floor((toMs - meta.t0Ms) / meta.stepMs) + 1);
-  return t1 > t0 ? { t0, t1 } : null;
+  if (t1 > t0) return { t0, t1 };
+  const [first, last] = rainRecord(meta);
+  throw new Error(`Those dates are outside the record (${isoDay(first)} to ${isoDay(last)})`);
 }
 
 // Index range [i0, i1) of the centres within [lo, hi], on either axis order.
@@ -68,7 +73,6 @@ function sizes(meta, range) {
 export async function planRainLoad({ product, variable, fromMs, toMs, bounds }) {
   const meta = await rainMeta(product, variable);
   const time = timeRange(meta, fromMs, toMs);
-  if (!time) throw new Error("Those dates are outside the record");
   const ys = axisRange(meta.lat0, meta.dLat, meta.shape[1], bounds.south, bounds.north);
   const xs = axisRange(meta.lon0, meta.dLon, meta.shape[2], bounds.west, bounds.east);
   if (!ys || !xs) throw new Error("The view is outside this product's area");
@@ -185,7 +189,6 @@ function cellRange(meta, lon, lat) {
 export async function planRainSeries({ product, variable, lon, lat, fromMs, toMs }) {
   const meta = await rainMeta(product, variable);
   const time = timeRange(meta, fromMs, toMs);
-  if (!time) throw new Error("Those dates are outside the record");
   const cell = cellRange(meta, lon, lat);
   if (!cell) throw new Error("This reach is outside the product's area");
   const range = { ...time, ...cell };
