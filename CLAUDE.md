@@ -157,6 +157,15 @@ a button click calls `saveLayer()`, so opening a link doesn't overwrite
 someone's saved settings. Code that toggles a layer itself (the context
 menu's catchments, the flood panel's terrain) must not save.
 
+### Panel settings (`ui/panelsettings.js`)
+
+The sidebar header's menu shows/hides and reorders the panels, saved in the
+`panelLayout` cookie (ids in order, hidden ones prefixed `-`). It moves the real
+DOM nodes, so panels stay direct children of `.sidebar-content` and each needs an
+`id` and a `.panel-title`. A new panel needs nothing else: one missing from the
+cookie takes its `index.html` place. `.panel-hidden` only applies to a collapsed
+panel, so code that opens a panel (`open=`, `showWindsAt`) still reveals it.
+
 ### Module dependency notes
 
 Keep `state.js` / `config.js` as leaves to avoid cycles. `ui/dom.js` is also a

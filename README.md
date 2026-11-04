@@ -219,6 +219,7 @@ src/
     dom.js                    shared row/button builders + escaping (leaf)
     playback.js               play/pause/step transport
     panels.js                 data-info summary, legend, status lines
+    panelsettings.js          show/hide + reorder the panels, saved in a cookie
     colormap.js               colour-map picker shared by the run and forcing panels
     time.js                   setTimeIndex() + current-timestep readout
     overview.js               basin-total sparkline + click-to-seek

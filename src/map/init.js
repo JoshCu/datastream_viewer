@@ -65,6 +65,7 @@ import { setupFlowPanel } from "../ui/flowpanel.js";
 import { setupErosionPanel } from "../ui/erosionpanel.js";
 import { setRunColormapId } from "../ui/colormap.js";
 import { initialMapView, syncMapView } from "../ui/url.js";
+import { setupPanelSettings } from "../ui/panelsettings.js";
 import { writeUrl as writeLayersUrl } from "./layerprefs.js";
 
 
@@ -76,6 +77,10 @@ import { writeUrl as writeLayersUrl } from "./layerprefs.js";
 let cameraMoved = false;
 
 export function init() {
+  // Before anything that can fail on a missing CDN library: it also uncovers
+  // the panels (panel-layout-pending).
+  setupPanelSettings();
+
   // Each module owns its own reaction to the active run changing; the loader
   // just announces it. Order matters only in that the overview's cached curve
   // must be dropped before anything redraws it, and a live sim must hand the

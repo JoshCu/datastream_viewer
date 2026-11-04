@@ -41,6 +41,11 @@
     function toggleSidebar() {
         document.querySelector('.sidebar').classList.toggle('hide');
     }
+    // Keep the panels out of sight until a saved layout is applied, which waits
+    // on the CDN module above (src/ui/panelsettings.js).
+    if (document.cookie.includes('panelLayout=')) {
+        document.documentElement.classList.add('panel-layout-pending');
+    }
     </script>
   </head>
   <body>
@@ -55,10 +60,29 @@
               <path d="M2 12l10 5 10-5" />
             </svg>
             <span>Datastream Viewer</span>
+            <button id="panelSettingsBtn" type="button" title="Panel settings" aria-label="Panel settings" aria-expanded="false" aria-controls="panelSettings">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="18" x2="20" y2="18" />
+                <circle cx="9" cy="6" r="2" fill="currentColor" />
+                <circle cx="16" cy="12" r="2" fill="currentColor" />
+                <circle cx="7" cy="18" r="2" fill="currentColor" />
+              </svg>
+            </button>
             <svg id="sidebar-toggle" onclick="toggleSidebar()" style="width:20px;height:20px" viewBox="0 0 20 20">
                 <path fill="currentColor" d="M1,4 H18 V6 H1 V4 M1,9 H18 V11 H1 V7 M3,14 H18 V16 H1 V14" />
             </svg>
           </div>
+        </div>
+
+        <!-- Show/hide and rearrange the panels (src/ui/panelsettings.js). -->
+        <div class="panel-settings" id="panelSettings" hidden>
+          <div class="panel-settings-header">
+            <span>Panels</span>
+            <button id="panelSettingsReset" type="button">Reset</button>
+          </div>
+          <ul id="panelSettingsList"></ul>
         </div>
 
           <div class="sidebar-content">

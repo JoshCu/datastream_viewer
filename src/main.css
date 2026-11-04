@@ -84,8 +84,23 @@ body {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
+#panelSettingsBtn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    padding: 0;
+    display: flex;
+    color: var(--accent-primary);
+    cursor: pointer;
+}
+
+#panelSettingsBtn svg {
+    width: 20px;
+    height: 20px;
+}
+
 #sidebar-toggle {
-    margin-left:auto;
+    flex: none;
 }
 
 @media (max-width: 768px) {
@@ -193,6 +208,136 @@ body {
 
 .panel.collapsed .panel-body {
     display: none;
+}
+
+/* Hidden in the panel settings menu (ui/panelsettings.js). !important: the data
+   panels' inline display is set when a run loads. A collapsible panel that's
+   been opened anyway shows until it's collapsed. */
+.panel.panel-hidden.collapsed,
+.panel.panel-hidden:not([data-url-key]) {
+    display: none !important;
+}
+
+/* Until a saved panel layout has been applied. */
+.panel-layout-pending .sidebar-content {
+    visibility: hidden;
+}
+
+/* Panel settings menu: drops down over the panels from the sidebar header. */
+.panel-settings {
+    position: absolute;
+    top: 72px;
+    left: var(--space-md);
+    right: var(--space-md);
+    max-height: calc(100% - 88px);
+    overflow-y: auto;
+    z-index: 10;
+    padding: var(--space-sm);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.panel-settings[hidden],
+.sidebar.hide .panel-settings,
+.sidebar.hide #panelSettingsBtn {
+    display: none;
+}
+
+.panel-settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-xs) var(--space-sm) var(--space-sm);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+.panel-settings-header button {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 2px var(--space-sm);
+    font: inherit;
+    font-weight: 500;
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.panel-settings-header button:hover {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+#panelSettingsList {
+    list-style: none;
+}
+
+.panel-settings-row {
+    display: flex;
+    align-items: center;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+}
+
+.panel-settings-row:hover {
+    background: var(--bg-tertiary);
+}
+
+.panel-settings-row.dragging {
+    background: var(--selected-fill);
+}
+
+.panel-settings-handle {
+    flex: none;
+    width: 28px;
+    height: 30px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: grab;
+    /* Touch: the drag moves the row rather than scrolling the menu. */
+    touch-action: none;
+}
+
+.panel-settings-handle:hover,
+.panel-settings-row.dragging .panel-settings-handle {
+    color: var(--accent-primary);
+}
+
+.panel-settings-row.dragging .panel-settings-handle {
+    cursor: grabbing;
+}
+
+.panel-settings-row label {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding-right: var(--space-sm);
+    cursor: pointer;
+}
+
+.panel-settings-row label svg {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    color: var(--text-secondary);
+}
+
+.panel-settings-row input {
+    accent-color: var(--accent-primary);
+}
+
+.panel-settings-row input:not(:checked) ~ * {
+    opacity: 0.5;
 }
 
 /* Aura on panels opened by a shared link (?open=...). Removed on animationend
