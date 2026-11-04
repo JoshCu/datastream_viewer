@@ -11,7 +11,6 @@
 // while it's open, and goes away again when collapsed; see .panel-hidden in
 // main.css. The checkbox keeps showing the preference.
 // ====================================================================
-import { drawResultsOverview } from "./overview.js";
 import { stopPanelLayer } from "./panellayers.js";
 
 const COOKIE = "panelLayout";
@@ -85,8 +84,6 @@ function setPanelShown(panel, shown) {
   // Started from its icon, it can be running with the panel collapsed.
   if (!shown) stopPanelLayer(panel.id);
   panel.classList.toggle(HIDDEN, !shown);
-  // The overview sparkline can't draw at zero width, so it may be out of date.
-  if (shown) drawResultsOverview();
 }
 
 // ---- The menu --------------------------------------------------------

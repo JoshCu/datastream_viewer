@@ -46,6 +46,9 @@
     --transition-slow: 400ms ease;
     /* Sidebar width: also read by the map when centering on loaded data. */
     --sidebar-w: 360px;
+    /* The timeline dock's height and gap, 0 while it's hidden. Everything else
+       anchored to the map's bottom edge stands on it. Set by ui/timelinedock.js. */
+    --tl-h: 0px;
 }
 
 * {
@@ -1134,7 +1137,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 #info-panel {
     position: absolute;
-    bottom: var(--space-md);
+    bottom: calc(var(--space-md) + var(--tl-h));
     right: var(--space-md);
     width: 340px;
     display: none;
@@ -1380,17 +1383,6 @@ input[type="range"]::-webkit-slider-thumb {
 .folder-list::-webkit-scrollbar-thumb:hover,
 .sidebar-content::-webkit-scrollbar-thumb:hover {
     background: var(--text-secondary);
-}
-
-/* Results overview sparkline under the time slider */
-.results-overview {
-    width: 100%;
-    height: 44px;
-    margin-top: var(--space-sm);
-    display: block;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: var(--radius-md);
-    cursor: pointer;
 }
 
 /* Load-latest quick-jump buttons */
@@ -1664,7 +1656,7 @@ input[type="range"]::-webkit-slider-thumb {
     position: absolute;
     left: calc(var(--sidebar-w) + var(--space-md));
     right: var(--space-md);
-    bottom: var(--space-md);
+    bottom: calc(var(--space-md) + var(--tl-h));
     height: var(--hydro-h);
     min-height: 220px;
     display: none;
@@ -1695,8 +1687,8 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* Keep the reach/gage info card clear of the dock. */
 body.hydro-open #info-panel {
-    bottom: calc(var(--hydro-h) + 2 * var(--space-md));
-    max-height: calc(100vh - var(--hydro-h) - 4 * var(--space-md));
+    bottom: calc(var(--hydro-h) + 2 * var(--space-md) + var(--tl-h));
+    max-height: calc(100vh - var(--hydro-h) - 4 * var(--space-md) - var(--tl-h));
     overflow-y: auto;
 }
 
@@ -2270,7 +2262,7 @@ body.hydro-open #info-panel {
 .sim-map-controls {
     position: absolute;
     left: 50%;
-    bottom: var(--space-md);
+    bottom: calc(var(--space-md) + var(--tl-h));
     transform: translateX(-50%);
     display: none;
     gap: var(--space-sm);
@@ -2284,7 +2276,7 @@ body.hydro-open #info-panel {
 }
 
 body.hydro-open .sim-map-controls {
-    bottom: calc(var(--hydro-h) + 2 * var(--space-md));
+    bottom: calc(var(--hydro-h) + 2 * var(--space-md) + var(--tl-h));
 }
 
 .sim-map-btn {
@@ -2679,4 +2671,296 @@ body.hydro-open .sim-map-controls {
 .hydro-rain-area {
     stroke: none;
     opacity: 0.85;
+}
+
+/* Timeline dock along the bottom of the map (ui/timelinedock.js). */
+.timeline {
+    --tl-label-w: 132px;
+    position: absolute;
+    left: calc(var(--sidebar-w) + var(--space-md));
+    right: var(--space-md);
+    bottom: var(--space-sm);
+    display: none;
+    flex-direction: column;
+    background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(20px);
+    z-index: 89;
+    user-select: none;
+}
+
+.timeline.visible {
+    display: flex;
+}
+
+.sidebar.hide ~ .main-content .timeline {
+    left: var(--space-md);
+}
+
+/* MapLibre's corner controls (the attribution) stand on the dock too. */
+.maplibregl-ctrl-bottom-left,
+.maplibregl-ctrl-bottom-right {
+    bottom: var(--tl-h);
+}
+
+.tl-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs, 4px);
+    padding: 4px 6px;
+    min-width: 0;
+}
+
+.tl-btn {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.tl-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.tl-btn:hover:not(:disabled) {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.tl-btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: var(--bg-primary);
+}
+
+.tl-btn:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+#tlCollapse svg {
+    transition: transform var(--transition-fast);
+}
+
+.timeline.collapsed #tlCollapse svg {
+    transform: rotate(180deg);
+}
+
+.tl-now {
+    flex: none;
+    margin: 0 8px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.tl-speed {
+    flex: none;
+    height: 26px;
+    padding: 0 4px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+}
+
+.tl-hint {
+    flex: 1;
+    min-width: 0;
+    margin: 0 8px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+.tl-body {
+    display: flex;
+    border-top: 1px solid var(--border-color);
+}
+
+.timeline.collapsed .tl-body {
+    display: none;
+}
+
+.tl-labels {
+    flex: none;
+    width: var(--tl-label-w);
+    border-right: 1px solid var(--border-color);
+}
+
+.tl-ruler-spacer {
+    height: 22px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tl-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px 0 8px;
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+.tl-swatch {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+}
+
+.tl-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.tl-row.is-held .tl-name {
+    color: var(--text-muted);
+}
+
+.tl-held {
+    display: none;
+    flex: none;
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.tl-row.is-held .tl-held {
+    display: inline;
+}
+
+.tl-eye {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    padding: 2px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.tl-eye:hover {
+    color: var(--accent-primary);
+}
+
+.tl-eye.off {
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.tl-eye svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.tl-tracks {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+}
+
+#tlCanvas {
+    display: block;
+    width: 100%;
+    cursor: ew-resize;
+    /* A drag on it is a seek, not a page gesture. */
+    touch-action: none;
+}
+
+.tl-tip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    display: none;
+    padding: 4px 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre;
+    color: var(--text-primary);
+    pointer-events: none;
+    z-index: 2;
+}
+
+.tl-tip.visible {
+    display: block;
+}
+
+.tl-scroll {
+    display: none;
+    position: relative;
+    height: 8px;
+    margin: 1px 0 2px;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.tl-scroll.zoomed {
+    display: block;
+}
+
+.tl-thumb {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 12px;
+    background: var(--text-muted);
+    border-radius: 4px;
+    cursor: grab;
+    touch-action: none;
+}
+
+.tl-thumb:hover {
+    background: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+    .timeline {
+        --tl-label-w: 96px;
+        left: var(--space-sm);
+        right: var(--space-sm);
+    }
+
+    .tl-hint {
+        visibility: hidden;
+    }
+
+    .tl-now {
+        margin: 0 4px;
+        font-size: 11px;
+    }
+
+    .tl-speed {
+        width: 80px;
+        font-size: 10px;
+    }
+
+    /* The row's dimmed name says it; the label column has no room for both. */
+    .tl-row.is-held .tl-held {
+        display: none;
+    }
 }

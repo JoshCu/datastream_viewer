@@ -43,14 +43,9 @@ import {
   initCollapsiblePanels,
   syncPanelsToDataset,
 } from "../ui/panels.js";
-import {
-  setTimeIndex,
-  updateTimeDisplay,
-  syncTimeToDataset,
-} from "../ui/time.js";
-import { seekFromOverview, invalidateOverview } from "../ui/overview.js";
+import { setupRunTimeline, syncTimeToDataset } from "../ui/time.js";
+import { setupTimeline, redrawTimeline } from "../ui/timelinedock.js";
 import { setupHydrograph, closeHydrograph } from "../ui/hydrograph.js";
-import { togglePlay, stepForward, stepBackward } from "../ui/playback.js";
 import { setupSimPanel, scheduleSimRebuild, stopSimForDataset } from "../sim/network.js";
 import { setupBrush } from "../sim/brush.js";
 import { setupSimRain } from "../sim/rain.js";
@@ -89,17 +84,16 @@ export function init() {
   setupPanelSettings();
 
   // Each module owns its own reaction to the active run changing; the loader
-  // just announces it. Order matters only in that the overview's cached curve
-  // must be dropped before anything redraws it, and a live sim must hand the
-  // flowpaths paint back before syncPaintToDataset saves it as the original.
+  // just announces it. Order matters only in that a live sim must hand the
+  // flowpaths paint back before syncPaintToDataset saves it as the original,
+  // and the timeline may seek the new run, so it goes after the paint.
   onActiveDatasetChange(stopSimForDataset);
-  onActiveDatasetChange(invalidateOverview);
   onActiveDatasetChange(syncPanelsToDataset);
-  onActiveDatasetChange(syncTimeToDataset);
   onActiveDatasetChange(syncGridToDataset); // before paint: it adds the layer painted
   onActiveDatasetChange(syncPaintToDataset);
   onActiveDatasetChange(updateGageFilter);
   onActiveDatasetChange(syncPanelLayers);
+  onActiveDatasetChange(syncTimeToDataset);
 
   const protocol = new pmtiles.Protocol({ metadata: true });
   maplibregl.addProtocol("pmtiles", protocol.tile);
@@ -221,6 +215,8 @@ export function init() {
   map.once("idle", () => loadUsgsCatalog());
 
   setupEventListeners();
+  setupTimeline();
+  setupRunTimeline();
   // Before the S3 browser: a deep link's first URL sync must see its panel open.
   initCollapsiblePanels();
   setupS3Browser();
@@ -250,10 +246,6 @@ export function init() {
 }
 
 function setupEventListeners() {
-  document.getElementById("timeSlider").addEventListener("input", (e) => {
-    setTimeIndex(parseInt(e.target.value, 10));
-  });
-
   // Scoped to the variable picker: other panels (erosion tools) reuse the
   // .var-btn look for their own buttons.
   document.querySelectorAll("#varSelector .var-btn").forEach((btn) => {
@@ -269,7 +261,7 @@ function setupEventListeners() {
       // scheduleFeatureStateUpdate() ends in refreshTooltip(), so the tooltip
       // picks up the new variable without a second call here.
       scheduleFeatureStateUpdate();
-      updateTimeDisplay();
+      redrawTimeline(); // the run's clip draws this variable's total
     });
   });
 
@@ -290,25 +282,6 @@ function setupEventListeners() {
     document.getElementById("info-panel").classList.remove("visible");
     closeHydrograph();
   });
-
-  document.getElementById("speed-slider").addEventListener("input", (e) => {
-    state.playSpeed = parseInt(e.target.value, 10);
-    document.getElementById("speed-value").textContent = state.playSpeed + "x";
-    // The playback loop reads playSpeed each frame, so a speed change takes
-    // effect without stopping and restarting.
-  });
-
-  // Playback transport (previously inline onclick handlers in index.html).
-  document.getElementById("playBtn").addEventListener("click", togglePlay);
-  document
-    .getElementById("stepBackBtn")
-    .addEventListener("click", stepBackward);
-  document.getElementById("stepFwdBtn").addEventListener("click", stepForward);
-
-  // Overview sparkline: click to seek.
-  document
-    .getElementById("results-overview")
-    .addEventListener("click", seekFromOverview);
 
   // CONUS: recursively load every VPU under the current cycle folder.
   document.getElementById("conusBtn").addEventListener("click", loadConus);

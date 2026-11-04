@@ -9,7 +9,8 @@
 //     painted through feature-state like forcings (key `rain`, so it doesn't
 //     collide with theirs on the same source). Rebuilt as divide tiles land.
 //
-// It has its own clock. setRainTimeIndex() is the only way to seek it.
+// It has its own clock. setRainTimeIndex() is the only way to seek it, and the
+// timeline (ui/timeline.js) is what keeps it with the other layers.
 // ====================================================================
 import { map, rainState } from "../state.js";
 import {
@@ -427,15 +428,6 @@ export function setRainTimeIndex(i) {
   rainState.timeIndex = clamped;
   redraw();
   emit("time");
-}
-
-// Follow another clock: seek to the frame covering `ms`, if the load does.
-export function followRainClock(ms) {
-  const grid = rainState.grid;
-  if (!grid || !Number.isFinite(ms)) return;
-  const step = grid.nT > 1 ? grid.time[1] - grid.time[0] : 0;
-  if (ms < grid.time[0] - step / 2 || ms > grid.time[grid.nT - 1] + step / 2) return;
-  setRainTimeIndex(step ? Math.round((ms - grid.time[0]) / step) : 0);
 }
 
 // The value under a point at the current time; undefined off the grid.

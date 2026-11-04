@@ -9,7 +9,7 @@
 //   color/                scales, class breaks, MapLibre paint expressions
 //   s3/                   listing client (client.js) + browser UI (browser.js)
 //   data/                 load orchestration + parse/merge worker
-//   ui/                   playback, panels, time readout, overview, info panel
+//   ui/                   timeline, playback, panels, info panel
 // ====================================================================
 import { init } from "./map/init.js";
 

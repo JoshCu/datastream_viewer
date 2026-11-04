@@ -186,6 +186,9 @@ export const SERIES_COLORS = [
 export const SERIES_OVERFLOW_COLOR = "#8899aa";
 export const OBS_COLOR = "#e6edf5";
 export const CURRENT_TIME_COLOR = "#ffba08";
+// The timeline's clips, one hue per kind of layer (checked for colour-vision
+// separation against the dock's surface).
+export const TIMELINE_COLORS = { run: "#1f9fd0", forcing: "#c4861a", rain: "#2fa873", radar: "#bf68b8" };
 // The NWM retrospective's line in the hydrograph: outside SERIES_COLORS so
 // it never matches a loaded run's colour.
 export const RETRO_COLOR = "#b39b00";

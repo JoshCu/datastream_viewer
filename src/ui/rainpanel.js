@@ -1,17 +1,15 @@
 // ====================================================================
-// Rainfall panel: pick a product, variable and dates, load the view, and step
-// through it. The reads are in data/rain.js and the map side in rain/rain.js;
+// Rainfall panel: pick a product, variable and dates, and load the view; the
+// timeline steps through it. The reads are in data/rain.js and the map side in rain/rain.js;
 // this owns the DOM. Nothing touches the network until the Load button.
 // ====================================================================
-import { forcingState, map, rainState, state } from "../state.js";
-import { RAIN_CONFIRM_BYTES, RAIN_PRODUCTS } from "../config.js";
+import { map, rainState } from "../state.js";
+import { RAIN_CONFIRM_BYTES, RAIN_PRODUCTS, TIMELINE_COLORS } from "../config.js";
 import { colormapColors, colormapGradient } from "../color/colormaps.js";
 import { loadRainGrid, planRainLoad } from "../data/rain.js";
-import { onForcingChange } from "../forcing/store.js";
 import { renderRainCredit } from "../rain/credit.js";
 import {
   clearRain,
-  followRainClock,
   onRainChange,
   rainValueAt,
   setRainColormap,
@@ -23,7 +21,7 @@ import {
 import { fillColormapSelect } from "./colormap.js";
 import { setStatus } from "./panels.js";
 import { registerPanelLayer, syncPanelLayers } from "./panellayers.js";
-import { onTimeChange } from "./time.js";
+import { registerTimelineTracks, syncTimeline, trackMoved } from "./timeline.js";
 
 const $ = (id) => document.getElementById(id);
 const status = (kind, text) => setStatus(kind, text, "rain");
@@ -120,43 +118,6 @@ function syncLegend() {
   $("rainLegendMax").textContent = String(max);
 }
 
-function syncTime() {
-  const grid = rainState.grid;
-  if (!grid) return;
-  const t = grid.time[rainState.timeIndex];
-  $("rainTimeSlider").value = rainState.timeIndex;
-  $("rainTime").textContent = `${new Date(t).toISOString().slice(0, 16).replace("T", " ")}Z`;
-}
-
-// ---- Playback ---------------------------------------------------------------
-
-const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-const PAUSE_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-const PLAY_INTERVAL_MS = 300;
-let playing = false;
-let lastStep = 0;
-
-function step(delta) {
-  const grid = rainState.grid;
-  if (grid) setRainTimeIndex((rainState.timeIndex + delta + grid.nT) % grid.nT);
-}
-
-function tick(now) {
-  if (!playing) return;
-  if (now - lastStep >= PLAY_INTERVAL_MS) {
-    lastStep = now;
-    step(1);
-  }
-  requestAnimationFrame(tick);
-}
-
-function setPlaying(on) {
-  playing = on && !!rainState.grid;
-  $("rainPlayBtn").innerHTML = playing ? PAUSE_ICON : PLAY_ICON;
-  $("rainPlayBtn").classList.toggle("active", playing);
-  if (playing) requestAnimationFrame(tick);
-}
-
 // ---- Setup ------------------------------------------------------------------
 
 export function setupRainPanel() {
@@ -188,10 +149,6 @@ export function setupRainPanel() {
     setRainColormap(e.target.value);
     syncLegend();
   });
-  $("rainTimeSlider").addEventListener("input", (e) => setRainTimeIndex(Number(e.target.value)));
-  $("rainPlayBtn").addEventListener("click", () => setPlaying(!playing));
-  $("rainStepBackBtn").addEventListener("click", () => step(-1));
-  $("rainStepFwdBtn").addEventListener("click", () => step(1));
 
   registerPanelLayer("rainPanel", {
     name: "rainfall",
@@ -200,32 +157,38 @@ export function setupRainPanel() {
     toggle: () => setRainVisible(!rainState.visible),
   });
 
+  registerTimelineTracks(() => {
+    const grid = rainState.grid;
+    if (!grid) return [];
+    const product = RAIN_PRODUCTS[grid.product];
+    return [
+      {
+        key: "rain",
+        label: grid.product.toUpperCase(),
+        detail: `${product.name} ${grid.info.label}`,
+        color: TIMELINE_COLORS.rain,
+        times: grid.time,
+        index: () => rainState.timeIndex,
+        seek: setRainTimeIndex,
+        panel: "rainPanel",
+      },
+    ];
+  });
+
   onRainChange(({ kind }) => {
     if (kind === "time") {
-      syncTime();
+      trackMoved("rain", rainState.timeIndex);
       return;
     }
     syncPanelLayers();
+    syncTimeline();
     const grid = rainState.grid;
     $("rainControls").style.display = grid ? "" : "none";
     $("rainClearBtn").disabled = !grid;
-    if (!grid) {
-      setPlaying(false);
-      return;
-    }
-    $("rainTimeSlider").max = grid.nT - 1;
+    if (!grid) return;
     syncLegend();
-    syncTime();
     // The credit on show is the loaded product's until the picker moves on.
     renderRainCredit($("rainCredit"), grid.product);
-  });
-
-  // Rain follows the clock of whatever it's being compared with.
-  onTimeChange(() => {
-    if (state.data?.timeAbsolute) followRainClock(state.data.time[state.timeIndex]);
-  });
-  onForcingChange(({ kind }) => {
-    if (kind === "time" && forcingState.run) followRainClock(forcingState.run.time[forcingState.timeIndex]);
   });
 
   map.on("mousemove", (e) => {

@@ -9,7 +9,6 @@
 import { state, s3State } from "../state.js";
 import { VARIABLE_KEYS } from "../config.js";
 import { listTrouteFileUrls } from "../s3/client.js";
-import { stopPlayback } from "../ui/playback.js";
 import { setStatus } from "../ui/panels.js";
 import { registerSource, emitActiveDatasetChange } from "./sources.js";
 
@@ -188,7 +187,6 @@ export function showDiff(diffData, options) {
 // the upload list.
 export function clearData() {
   if (!state.data) return;
-  stopPlayback();
   state.data = null;
   state.timeIndex = 0;
   emitActiveDatasetChange({ data: null, fitView: false });

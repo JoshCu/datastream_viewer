@@ -1,8 +1,9 @@
 // ====================================================================
-// Timestep playback controls
+// The timeline's transport: play/pause. A step is the next step of any layer
+// (ui/timeline.js), and state.playSpeed is steps per second.
 // ====================================================================
 import { state } from "../state.js";
-import { stepTime } from "./time.js";
+import { canStepTimeline, onTimelineChange, stepTimeline } from "./timeline.js";
 
 const PLAY_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
                             <polygon points="5 3 19 12 5 21 5 3"/>
@@ -23,42 +24,41 @@ let lastStepAt = 0;
 
 function tick(now) {
   if (!state.isPlaying) return;
-  if (now - lastStepAt >= 2500 / state.playSpeed) {
+  if (now - lastStepAt >= 1000 / state.playSpeed) {
     lastStepAt = now;
-    stepTime(1);
+    stepTimeline(1);
   }
   rafId = requestAnimationFrame(tick);
 }
 
+function syncButton() {
+  const btn = document.getElementById("tlPlay");
+  btn.classList.toggle("active", state.isPlaying);
+  btn.innerHTML = state.isPlaying ? PAUSE_ICON : PLAY_ICON;
+  btn.title = state.isPlaying ? "Pause" : "Play";
+}
+
 export function startPlayback() {
-  if (state.isPlaying) return;
+  if (state.isPlaying || !canStepTimeline()) return;
   state.isPlaying = true;
-  const btn = document.getElementById("playBtn");
-  btn.classList.add("active");
-  btn.innerHTML = PAUSE_ICON;
+  syncButton();
   lastStepAt = performance.now();
   rafId = requestAnimationFrame(tick);
 }
 
 export function stopPlayback() {
   state.isPlaying = false;
-  const btn = document.getElementById("playBtn");
-  btn.classList.remove("active");
-  btn.innerHTML = PLAY_ICON;
+  syncButton();
   if (rafId !== null) cancelAnimationFrame(rafId);
   rafId = null;
 }
 
 export function togglePlay() {
-  if (!state.data) return;
   if (state.isPlaying) stopPlayback();
   else startPlayback();
 }
 
-export function stepForward() {
-  stepTime(1);
-}
-
-export function stepBackward() {
-  stepTime(-1);
-}
+// The last layer that could play was cleared.
+onTimelineChange((kind) => {
+  if (kind === "tracks" && state.isPlaying && !canStepTimeline()) stopPlayback();
+});

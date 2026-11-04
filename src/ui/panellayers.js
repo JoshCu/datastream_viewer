@@ -40,13 +40,32 @@ export function registerPanelLayer(panelId, { name, offVerb = "Hide", isShowing,
     toggle();
     syncPanelLayers();
   });
-  const entry = { panelId, button, name, offVerb, isShowing, canToggle, stop };
+  const entry = { panelId, button, name, offVerb, isShowing, canToggle, toggle, stop };
   entries.push(entry);
   syncEntry(entry);
 }
 
 export function syncPanelLayers() {
   entries.forEach(syncEntry);
+  for (const fn of syncListeners) fn();
+}
+
+// For the timeline's eye buttons, which are the same switch as the panel icon.
+const syncListeners = new Set();
+export function onPanelLayersSync(fn) {
+  syncListeners.add(fn);
+}
+
+export function isPanelLayerShowing(panelId) {
+  const entry = entries.find((e) => e.panelId === panelId);
+  return !entry || (entry.canToggle() && entry.isShowing());
+}
+
+export function togglePanelLayer(panelId) {
+  const entry = entries.find((e) => e.panelId === panelId);
+  if (!entry?.canToggle()) return;
+  entry.toggle();
+  syncPanelLayers();
 }
 
 export function stopPanelLayer(panelId) {

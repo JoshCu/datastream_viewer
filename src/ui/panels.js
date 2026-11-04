@@ -73,7 +73,7 @@ export function setStatus(kind, text, prefix = "") {
 
 // ---- Panel visibility ------------------------------------------------
 
-const DATA_PANEL_IDS = ["dataPanel", "varPanel", "timePanel"];
+const DATA_PANEL_IDS = ["dataPanel", "varPanel"];
 
 export function setDataPanels(on) {
   for (const id of DATA_PANEL_IDS) {

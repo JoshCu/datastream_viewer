@@ -1,7 +1,7 @@
 // ====================================================================
 // Forcings sidebar panel: pick a source (an S3 forcing cycle, or dropped
-// files), load rows on demand, and drive the variable / scale / timestep of
-// the catchment colouring.
+// files), load rows on demand, and drive the variable / scale of the catchment
+// colouring. The timeline seeks it.
 //
 // The panel owns only its DOM: it calls into forcing/loader.js and reacts to
 // onForcingChange, the same way the t-route panels react to the active run.
@@ -13,6 +13,7 @@ import {
   FORCING_CONFIRM_REQUESTS,
   FORCING_ROOT,
   SCALE_LABELS,
+  TIMELINE_COLORS,
   forcingMeta,
   isValid,
 } from "../config.js";
@@ -35,13 +36,11 @@ import { registerPanelLayer, syncPanelLayers } from "./panellayers.js";
 import { fillColormapSelect } from "./colormap.js";
 import { colormapColors, colormapGradient } from "../color/colormaps.js";
 import { escapeHtml } from "./dom.js";
-
-const PLAY_STEP_MS = 400;
+import { registerTimelineTracks, syncTimeline, trackMoved } from "./timeline.js";
 
 const $ = (id) => document.getElementById(id);
 let browsePath = FORCING_ROOT;
 let listed = false;
-let playTimer = null;
 
 const status = (kind, text) => setStatus(kind, text, "forcing");
 
@@ -105,18 +104,29 @@ export function setupForcingPanel() {
     applyForcingPaint();
     updateLegend();
   });
-  $("forcingTimeSlider").addEventListener("input", (e) =>
-    setForcingTimeIndex(parseInt(e.target.value, 10)),
-  );
-  $("forcingStepBackBtn").addEventListener("click", () => step(-1));
-  $("forcingStepFwdBtn").addEventListener("click", () => step(1));
-  $("forcingPlayBtn").addEventListener("click", togglePlay);
 
   registerPanelLayer("forcingPanel", {
     name: "forcings",
     isShowing: () => forcingState.visible,
     canToggle: () => !!forcingState.run,
     toggle: () => setForcingVisible(!forcingState.visible),
+  });
+
+  registerTimelineTracks(() => {
+    const run = forcingState.run;
+    if (!run) return [];
+    return [
+      {
+        key: "forcing",
+        label: "Forcings",
+        detail: run.label ? `Forcings: ${run.label}` : "Forcings",
+        color: TIMELINE_COLORS.forcing,
+        times: run.time,
+        index: () => forcingState.timeIndex,
+        seek: setForcingTimeIndex,
+        panel: "forcingPanel",
+      },
+    ];
   });
 
   map.on("zoomend", syncButtons);
@@ -128,12 +138,13 @@ export function setupForcingPanel() {
       if (!forcingState.run) setForcingVisible(true);
       syncRun();
       syncPanelLayers();
+      syncTimeline();
     } else if (kind === "rows") {
       updateLegend();
       renderSource();
       updateHover();
     } else if (kind === "time") {
-      syncTime();
+      trackMoved("forcing", forcingState.timeIndex);
       updateHover();
     }
   });
@@ -376,10 +387,7 @@ function syncRun() {
   const run = forcingState.run;
   $("forcingControls").style.display = run ? "block" : "none";
   renderSource();
-  if (!run) {
-    stopPlay();
-    return;
-  }
+  if (!run) return;
   const select = $("forcingVarSelect");
   select.replaceChildren(
     ...run.variables.map((v) => {
@@ -392,38 +400,7 @@ function syncRun() {
   );
   select.value = forcingState.variable;
   $("forcingScaleSelect").value = forcingState.scale;
-  $("forcingTimeSlider").max = Math.max(0, run.nTimes - 1);
-  syncTime();
   updateLegend();
-}
-
-function syncTime() {
-  const run = forcingState.run;
-  if (!run) return;
-  $("forcingTimeSlider").value = forcingState.timeIndex;
-  const d = new Date(run.time[forcingState.timeIndex]);
-  $("forcingTime").textContent = d.toISOString().slice(0, 16).replace("T", " ") + "Z";
-}
-
-function step(delta) {
-  const run = forcingState.run;
-  if (!run) return;
-  const n = run.nTimes;
-  setForcingTimeIndex((forcingState.timeIndex + delta + n) % n);
-}
-
-function togglePlay() {
-  if (playTimer) stopPlay();
-  else {
-    playTimer = setInterval(() => step(1), PLAY_STEP_MS);
-    $("forcingPlayBtn").classList.add("active");
-  }
-}
-
-function stopPlay() {
-  clearInterval(playTimer);
-  playTimer = null;
-  $("forcingPlayBtn").classList.remove("active");
 }
 
 // Legend bounds are shown in display units (the map works in file units).

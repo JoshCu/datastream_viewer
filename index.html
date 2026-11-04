@@ -154,50 +154,6 @@
             </div>
           </div>
   
-          <!-- Time Control -->
-          <div class="panel" id="timePanel" style="display: none">
-            <h3 class="panel-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-              Time Control
-            </h3>
-            <div class="time-control">
-              <div class="time-display">
-                <span class="time-label">Current Time</span>
-                <span class="time-value" id="currentTime">T+0h</span>
-              </div>
-              <input type="range" id="timeSlider" min="0" max="23" value="0" />
-              <canvas id="results-overview" class="results-overview" title="Click to seek"></canvas>
-            </div>
-            <div class="play-controls">
-              <button class="play-btn" id="playBtn">
-                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-              </button>
-              <button class="play-btn" id="stepBackBtn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="19 20 9 12 19 4 19 20" fill="currentColor" />
-                  <line x1="5" y1="19" x2="5" y2="5" />
-                </svg>
-              </button>
-              <button class="play-btn" id="stepFwdBtn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="5 4 15 12 5 20 5 4" fill="currentColor" />
-                  <line x1="19" y1="5" x2="19" y2="19" />
-                </svg>
-              </button>
-            </div>
-            <div class="speed-control">
-              <label>Speed</label>
-              <input type="range" id="speed-slider" min="1" max="50" value="10" />
-              <span class="speed-value" id="speed-value">5x</span>
-            </div>
-          </div>
-
-          
           <!-- S3 Browser Panel -->
           <div class="panel collapsed" id="s3Panel" data-url-key="s3">
             <h3 class="panel-title">
@@ -499,32 +455,6 @@
                     <span id="rainLegendMax">1</span>
                   </div>
                 </div>
-                <div class="time-control">
-                  <div class="time-display">
-                    <span class="time-label">Rain time</span>
-                    <span class="time-value" id="rainTime">-</span>
-                  </div>
-                  <input type="range" id="rainTimeSlider" min="0" max="0" value="0" />
-                </div>
-                <div class="play-controls">
-                  <button class="play-btn" id="rainPlayBtn" title="Play">
-                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
-                  </button>
-                  <button class="play-btn" id="rainStepBackBtn" title="Previous step">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polygon points="19 20 9 12 19 4 19 20" fill="currentColor" />
-                      <line x1="5" y1="19" x2="5" y2="5" />
-                    </svg>
-                  </button>
-                  <button class="play-btn" id="rainStepFwdBtn" title="Next step">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polygon points="5 4 15 12 5 20 5 4" fill="currentColor" />
-                      <line x1="19" y1="5" x2="19" y2="19" />
-                    </svg>
-                  </button>
-                </div>
                 <p class="info-text forcing-hover" id="rainHover">Hover the map to read a value.</p>
               </div>
 
@@ -627,32 +557,6 @@
                   </div>
                 </div>
 
-                <div class="time-control">
-                  <div class="time-display">
-                    <span class="time-label">Forcing time</span>
-                    <span class="time-value" id="forcingTime">-</span>
-                  </div>
-                  <input type="range" id="forcingTimeSlider" min="0" max="0" value="0" />
-                </div>
-                <div class="play-controls">
-                  <button class="play-btn" id="forcingPlayBtn" title="Play">
-                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
-                  </button>
-                  <button class="play-btn" id="forcingStepBackBtn" title="Previous step">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polygon points="19 20 9 12 19 4 19 20" fill="currentColor" />
-                      <line x1="5" y1="19" x2="5" y2="5" />
-                    </svg>
-                  </button>
-                  <button class="play-btn" id="forcingStepFwdBtn" title="Next step">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polygon points="5 4 15 12 5 20 5 4" fill="currentColor" />
-                      <line x1="19" y1="5" x2="19" y2="19" />
-                    </svg>
-                  </button>
-                </div>
                 <p class="info-text forcing-hover" id="forcingHover">Hover a catchment to read its value.</p>
               </div>
 
@@ -875,7 +779,7 @@
                   uses t-route's depth on the flowpath at the reach's outlet (via the NextGen ↔ NWM
                   crosswalk, 2.4 MB once), or that flowpath's flow ÷ velocity through the same NWM
                   channel if you pick it. Cells whose HAND is below the stage are flooded. Follows
-                  the time slider.
+                  the timeline.
                 </p>
               </div>
 
@@ -1406,6 +1310,58 @@
           <div class="tooltip-sub" id="gageTooltipName"></div>
           <div class="tooltip-meta" id="gageTooltipMeta"></div>
         </div>
+
+        <!-- Timeline: one playhead over every layer with a clock. Hidden until
+             one is loaded. Drawn by src/ui/timelinedock.js. -->
+        <section class="timeline" id="timeline" aria-label="Timeline">
+          <header class="tl-bar">
+            <button class="tl-btn" id="tlBack" title="Previous step" aria-label="Previous step">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="19 20 9 12 19 4 19 20" fill="currentColor" />
+                <line x1="5" y1="19" x2="5" y2="5" />
+              </svg>
+            </button>
+            <button class="tl-btn" id="tlPlay" title="Play" aria-label="Play or pause">
+              <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+            </button>
+            <button class="tl-btn" id="tlFwd" title="Next step" aria-label="Next step">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 4 15 12 5 20 5 4" fill="currentColor" />
+                <line x1="19" y1="5" x2="19" y2="19" />
+              </svg>
+            </button>
+            <span class="tl-now" id="tlNow">–</span>
+            <select class="tl-speed" id="tlSpeed" title="Playback speed" aria-label="Playback speed">
+              <option value="0.5">0.5 steps/s</option>
+              <option value="1">1 step/s</option>
+              <option value="2">2 steps/s</option>
+              <option value="4">4 steps/s</option>
+              <option value="8">8 steps/s</option>
+              <option value="16">16 steps/s</option>
+              <option value="30">30 steps/s</option>
+            </select>
+            <span class="tl-hint">Scroll to zoom · shift-drag to pan · double-click a clip to frame it</span>
+            <button class="hydro-chip" id="tlFit" title="Show every layer's whole range">Fit</button>
+            <button class="tl-btn" id="tlCollapse" title="Hide the tracks" aria-label="Hide the tracks" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          </header>
+          <div class="tl-body">
+            <div class="tl-labels">
+              <div class="tl-ruler-spacer"></div>
+              <div id="tlRows"></div>
+            </div>
+            <div class="tl-tracks">
+              <canvas id="tlCanvas"></canvas>
+              <div class="tl-tip" id="tlTip"></div>
+              <div class="tl-scroll" id="tlScroll"><div class="tl-thumb" id="tlThumb"></div></div>
+            </div>
+          </div>
+        </section>
 
         <!-- Hydrograph dock: every loaded run (+ USGS obs) for the clicked
              reach or gage. Filled in by src/ui/hydrograph.js. -->

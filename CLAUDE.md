@@ -190,7 +190,7 @@ Keep `state.js` / `config.js` as leaves to avoid cycles. `ui/dom.js` is also a
 leaf (shared `labeledRow`/`iconButton`/`escapeHtml` builders) — build panel rows
 through it rather than concatenating HTML, so escaping stays structural.
 
-There are a few benign runtime cycles around `ui/time.js` (with `ui/overview.js`,
+There are a few benign runtime cycles around `ui/time.js` (with
 `ui/hydrograph.js`, and `map/paint.js` ↔ `map/interactions.js`). Every one of
 them only calls across the cycle **inside functions**, never at module-eval time
 — safe, but don't add eval-time uses of those imports.
@@ -290,8 +290,8 @@ loaded in `parse.worker.js`), one 80 MB chunk at a time.
 
 MRMS, IMERG Late and CHIRPS final from dynamical.org, listed in
 `RAIN_PRODUCTS` (`config.js`): a mode of its own, in `rainState`, with its own
-clock (`setRainTimeIndex()` is the only way to seek it; it follows a run's or the
-forcings' clock while they overlap). Store URLs come from STAC, since their paths
+clock (`setRainTimeIndex()` is the only way to seek it; the timeline keeps it
+with the other layers). Store URLs come from STAC, since their paths
 carry a version. They're Icechunk, read by `icechunk-js` + `zarrita` (esm.sh,
 lazily in `parse.worker.js`, passed to the pure reader); each worker opens its own
 store.
@@ -353,7 +353,8 @@ once — their feature-state lives on different sources.
   `{ file }` (a dropped File, read with `Blob.slice`), so local files go
   through exactly the same path.
 - `setForcingTimeIndex()` (`forcing/paint.js`) is the only way to seek the
-  forcing clock, which is separate from `setTimeIndex()`'s. Changes are
+  forcing clock, which is separate from `setTimeIndex()`'s (the timeline keeps
+  them together). Changes are
   announced through `onForcingChange` (`forcing/store.js`) — panel, plot and
   paint subscribe; the loader doesn't drive the DOM.
 
@@ -629,19 +630,48 @@ the browser (forecast API for recent days, historical-forecast API back to
 height; bird mode subtracts it from the VAD for airspeed. The panel is opened
 at a point by `showWindsAt()` (right-click menu, bird profiles).
 
+### The timeline (`ui/timeline.js`, `ui/timelinedock.js`, `ui/playback.js`)
+
+The one transport, docked along the map's bottom and hidden until a layer with a
+clock is loaded. No panel has its own playback. A mode registers a function
+returning its tracks (`registerTimelineTracks`, like `registerPanelLayer`; the
+descriptor is documented at the top of `ui/timeline.js`), calls `syncTimeline()`
+when they change, and `trackMoved(key, i)` when its own clock moves, so a seek
+from the hydrograph or forcing plot brings the rest along. A new mode with a
+clock needs nothing else.
+
+- **One playhead, epoch ms; each layer keeps its own clock.** A following track
+  (`seek`) goes to its step nearest the playhead. `timeline.js` imports nothing,
+  so modules that own a clock can import it freely.
+- **Play and step go by steps, not time**: to the next step of *any* following
+  layer. So the finest layer sets the pace, a gap between layers takes no time,
+  and `state.playSpeed` is steps per second.
+- **A layer the playhead has left holds its nearest step**, its row marked
+  "held". It isn't hidden, so its eye / panel icon has one meaning.
+- **Loading a layer outside the playhead pulls the playhead to its start.**
+- **NEXRAD doesn't follow** (`pick` instead of `seek`): each scan is a download.
+  Its row shows ticks for the listed scans; a click loads one.
+- A run with no reference time (`relative`) starts where the dated layers do, or
+  the axis reads T+ hours if there are none.
+- The dock's height is `--tl-h` on the root, and everything anchored to the map's
+  bottom (hydrograph and forcing docks, info card, sim buttons, MapLibre's corner
+  controls) stands on it. The run's clip draws its basin total per timestep.
+
+The live sim isn't on it: its clock has no dates. It does move the forcing clock
+in rain mode, and the playhead follows that.
+
 ### Changing the timestep, and the active dataset
 
 Two rules that keep the wiring from sprawling:
 
-- **`setTimeIndex(i)` / `stepTime(delta)` in `ui/time.js` is the only way to
-  seek.** It owns the slider sync, the repaint and the readout. Don't re-inline
-  that sequence, and never drive it by dispatching an `input` event at the
-  slider. `updateFeatureStates()` already ends in `refreshTooltip()`, so callers
-  must not call it again.
+- **`setTimeIndex(i)` in `ui/time.js` is the only way to seek a run.** It owns
+  the repaint and tells the timeline. Don't re-inline that sequence.
+  `updateFeatureStates()` already ends in `refreshTooltip()`, so callers must
+  not call it again.
 - **`data/loader.js` announces the active run; it doesn't drive the DOM.**
   `promote()` sets `state.data` and calls `emitActiveDatasetChange({ data, fitView })`
-  (`data/sources.js`); `map/init.js` subscribes panels, time, paint, gages and the
-  overview. To react to a run loading or clearing, add a subscriber in the module
+  (`data/sources.js`); `map/init.js` subscribes panels, paint, gages and the
+  timeline. To react to a run loading or clearing, add a subscriber in the module
   that owns that DOM — don't add a line to `promote()`. Dataset-level rules (e.g.
   a diff using signed scales and its own colour-map choice) live as properties
   on the dataset and are read by the module that owns the control.

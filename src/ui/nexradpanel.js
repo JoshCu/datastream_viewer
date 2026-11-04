@@ -9,7 +9,9 @@
 // it's already on, since the radars don't scan in step.
 // ====================================================================
 import { map, nexradState } from "../state.js";
+import { TIMELINE_COLORS } from "../config.js";
 import { registerPanelLayer, syncPanelLayers } from "./panellayers.js";
+import { registerTimelineTracks, syncTimeline } from "./timeline.js";
 import { setStatus } from "./panels.js";
 import { PRODUCTS, legendCss } from "../nexrad/products.js";
 import { listStations, listScans, loadVolume, forgetStation, SAME_TILT_DEG } from "../nexrad/source.js";
@@ -188,6 +190,7 @@ function summary() {
 
 function renderStatus() {
   syncPanelLayers();
+  syncTimeline();
   renderProfiles();
   if (progress.size) status("loading", [...progress.values()].join("\n"));
   else if (errors.size) status("error", [...errors.values()].join("\n"));
@@ -584,6 +587,26 @@ function bindSlider(id, key, fmt, apply) {
 
 export function setupNexradPanel() {
   const panel = $("nexradPanel");
+  // A row per radar on the map. Each scan is a separate download, so these
+  // don't follow the playhead: a click picks one.
+  registerTimelineTracks(() =>
+    radars
+      .filter((r) => r.volume && r.scans.length)
+      .map((r) => ({
+        key: `radar:${r.key}`,
+        label: r.icao,
+        detail: `NEXRAD ${r.icao}`,
+        color: TIMELINE_COLORS.radar,
+        times: r.scans.map((s) => s.time),
+        index: () => r.index,
+        pick: (i) => {
+          setActive(r);
+          pickScan(r, i);
+          syncTo(r);
+        },
+      })),
+  );
+
   registerPanelLayer("nexradPanel", {
     name: "radar scans",
     isShowing: () => !nexradState.hidden,

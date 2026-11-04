@@ -2,14 +2,15 @@
 // The current timestep: the one place that changes it, and its readout.
 // ====================================================================
 import { state } from "../state.js";
+import { TIMELINE_COLORS, isValid } from "../config.js";
+import { derived } from "../data/access.js";
+import { listSources } from "../data/sources.js";
 import { scheduleFeatureStateUpdate } from "../map/paint.js";
-import { scheduleOverviewDraw } from "./overview.js";
 import { updateHydrographCursor } from "./hydrograph.js";
+import { registerTimelineTracks, syncTimeline, trackMoved } from "./timeline.js";
 
-// Every seek goes through here — the slider, the transport buttons, the
-// overview sparkline and the hydrograph. Before this existed each caller
-// repeated the same repaint sequence by hand, and the hydrograph reached it by
-// dispatching a synthetic "input" event at the slider.
+// Every seek goes through here — the timeline and the hydrograph. Before this
+// existed each caller repeated the same repaint sequence by hand.
 //
 // The tooltip is deliberately *not* refreshed here: updateFeatureStates() ends
 // with refreshTooltip(), so doing it again would run it twice per step.
@@ -18,10 +19,10 @@ export function setTimeIndex(i) {
   const clamped = Math.max(0, Math.min(state.data.nTimes - 1, i));
   if (clamped === state.timeIndex) return;
   state.timeIndex = clamped;
-  document.getElementById("timeSlider").value = clamped;
   scheduleFeatureStateUpdate();
-  updateTimeDisplay();
+  updateHydrographCursor();
   for (const fn of timeListeners) fn(clamped);
+  trackMoved("run", clamped);
 }
 
 // Other things drawn per timestep (the flood map, src/fim/) subscribe here
@@ -32,41 +33,56 @@ export function onTimeChange(fn) {
   timeListeners.add(fn);
 }
 
-// Step `delta` timesteps, wrapping at either end (playback transport).
-export function stepTime(delta) {
-  if (!state.data) return;
-  const n = state.data.nTimes;
-  setTimeIndex((state.timeIndex + (delta % n) + n) % n);
-}
-
-// `time` is epoch ms for any run with an absolute clock (parsers normalize it);
-// a run whose reference time was unparseable still carries raw seconds, and
-// shows elapsed time instead.
-function formatTime(t) {
-  if (!state.data.timeAbsolute) return `T+${Math.floor(t / 3600)}h`;
-  const d = new Date(t);
-  return (
-    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-` +
-    `${String(d.getUTCDate()).padStart(2, "0")} ${String(d.getUTCHours()).padStart(2, "0")}:00Z`
-  );
-}
-
-// Reaction to the active run changing: the slider spans the new run's steps.
-// Registered in map/init.js.
-export function syncTimeToDataset({ data }) {
-  if (!data) return;
-  const slider = document.getElementById("timeSlider");
-  slider.max = Math.max(0, data.nTimes - 1);
-  slider.value = 0;
-  updateTimeDisplay();
-}
-
-export function updateTimeDisplay() {
-  if (!state.data) return;
-  const t = state.data.time[state.timeIndex];
-  if (t !== undefined) {
-    document.getElementById("currentTime").textContent = formatTime(t);
+// The basin total per timestep, drawn in the run's clip on the timeline.
+function runWave() {
+  const dataset = state.data;
+  const cache = derived(dataset, state.variable);
+  if (cache.wave) return cache.wave;
+  const { featureIds, nTimes } = dataset;
+  const m = dataset.matrices[state.variable];
+  const values = new Float64Array(nTimes);
+  for (let f = 0; f < featureIds.length; f++) {
+    const base = f * nTimes;
+    for (let t = 0; t < nTimes; t++) {
+      const v = m[base + t];
+      if (isValid(v)) values[t] += v;
+    }
   }
-  scheduleOverviewDraw();
-  updateHydrographCursor();
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of values) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  cache.wave = { values, min, max };
+  return cache.wave;
+}
+
+export function setupRunTimeline() {
+  registerTimelineTracks(() => {
+    const data = state.data;
+    if (!data) return [];
+    const source = listSources().find((s) => s.dataset === data);
+    return [
+      {
+        key: "run",
+        label: data.isDiff ? "Diff" : "Run",
+        detail: (data.isDiff ? data.diffLabel : source?.label) ?? "Run",
+        color: TIMELINE_COLORS.run,
+        times: data.time,
+        relative: !data.timeAbsolute,
+        index: () => state.timeIndex,
+        seek: setTimeIndex,
+        panel: "dataPanel",
+        wave: runWave,
+      },
+    ];
+  });
+}
+
+// Reaction to the active run changing. Registered in map/init.js, after the
+// paint: a run the playhead is partway through seeks straight away.
+export function syncTimeToDataset({ data }) {
+  syncTimeline();
+  if (data) updateHydrographCursor();
 }

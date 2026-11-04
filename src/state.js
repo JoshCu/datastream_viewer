@@ -33,7 +33,7 @@ export const state = {
   variable: "flow",
   timeIndex: 0,
   isPlaying: false,
-  playSpeed: 5,
+  playSpeed: 2, // timeline steps per second (ui/playback.js)
   scale: "linear", // color scale: linear | log | sqrt | cbrt | symlog | ...
   // Colour map ids (color/colormaps.js), one for ordinary runs and one for
   // diffs, so switching between them keeps each choice.

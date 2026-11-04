@@ -35,12 +35,15 @@ velocity / depth on the hydrofabric flowpaths over time.
   and the hydrograph offers the NWM retrospective 3.0 (1979-02 to 2023-01)
   for a chosen date range, with its download size measured first, alongside
   the reach's USGS gage.
-- **Results playback** — scrub or auto-play through timesteps; the flowpaths
-  recolor via MapLibre feature-state as reaches stream into view.
+- **Timeline** — one playback control along the bottom of the map: a row per
+  layer (run, forcings, rainfall, radars) showing where each starts and ends, one
+  playhead driving them all. Drag to scrub, scroll to zoom, double-click a clip to
+  frame it. The flowpaths recolor via MapLibre feature-state as reaches stream
+  into view.
 - **Color scales** — linear, log, sqrt, cbrt, symlog, plus quantile / quantile-class
   / Jenks natural-breaks classifications.
 - **Inspection** — hover tooltip, per-reach click panel, a basin-total
-  sparkline, and a right-click menu (forcings, hydrograph, highlight upstream
+  curve in the run's timeline clip, and a right-click menu (forcings, hydrograph, highlight upstream
   catchments).
 - **USGS gages** — every USGS site with a continuous record (~27k) is always
   on the map, coloured by what it observes (discharge, stage, groundwater,
@@ -113,7 +116,7 @@ velocity / depth on the hydrofabric flowpaths over time.
   floodplain), or an ngen run's t-route depth on the flowpath at the reach's
   outlet, via the NextGen ↔ NWM crosswalk — and cells whose HAND is below the
   stage above bankfull (or the bed) are tinted by depth, on the GPU (WebGL2)
-  where available. Follows the time slider; hover for HAND, the reach and the
+  where available. Follows the timeline; hover for HAND, the reach and the
   depth.
 - **Winds aloft** — Open-Meteo's hourly pressure-level winds (1000–250 hPa)
   for the map centre or a right-clicked point, as a time–height grid of
@@ -227,14 +230,15 @@ src/
         parquet.js            Parquet parser (worker-side, pure)
   ui/
     dom.js                    shared row/button builders + escaping (leaf)
-    playback.js               play/pause/step transport
+    playback.js               the timeline's play/pause loop
+    timeline.js               every layer's clock on one axis: tracks, playhead, seek, step
+    timelinedock.js           the timeline dock: clips, ruler, zoom, scrubbing
     panels.js                 data-info summary, legend, status lines
     panelsettings.js          show/hide + reorder the panels, saved in a cookie
     panellayers.js            panel icons: glow while the panel's layer shows, click to toggle it
     overlaytooltip.js         forcing / rainfall hover tooltip + catchment / cell outline
     colormap.js               colour-map picker shared by the run and forcing panels
     time.js                   setTimeIndex() + current-timestep readout
-    overview.js               basin-total sparkline + click-to-seek
     infopanel.js              reach click info panel
     gagepanel.js              gage click info panel (USGS station details)
     usgspanel.js              USGS Gages panel: catalog status, per-type show/hide
@@ -245,7 +249,7 @@ src/
     contextmenu.js            map right-click menu
     nexradpanel.js            NEXRAD panel: date, per-station scan rows + lock, display controls
     windspanel.js             winds aloft panel: time–height arrow grid + hour table
-    rainpanel.js              rainfall panel: product, dates, load, playback, credit
+    rainpanel.js              rainfall panel: product, dates, load, credit
     flowpanel.js              flow particles panel: count, speed, trail, colour, detail, GPU/CPU
     floodpanel.js             flood mapping panel: flat level, or flooding from the NWM run
     erosionpanel.js           particle erosion panel: interaction, erosion, brushes, terrain reset
@@ -305,7 +309,7 @@ wasm/
    which owns them from then on — so recoloring per timestep reads them
    synchronously without touching the worker again.
 4. `loader.js` promotes the run to `state.data` and announces it
-   (`emitActiveDatasetChange`); map, panels, gages, time and the overview each
+   (`emitActiveDatasetChange`); map, panels, gages and the timeline each
    react to that event rather than being driven from the loader.
 5. `map/paint.js` sets a paint expression once per variable/scale
    (`color/expressions.js`) and updates only the on-screen reaches' feature-state

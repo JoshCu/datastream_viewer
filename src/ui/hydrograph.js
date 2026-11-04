@@ -933,7 +933,9 @@ function setupResizeHandle(handle) {
     const startY = e.clientY;
     const startH = els.dock.getBoundingClientRect().height;
     const move = (ev) => {
-      const max = window.innerHeight * 0.85;
+      // The timeline sits below the dock.
+      const below = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--tl-h")) || 0;
+      const max = window.innerHeight * 0.85 - below;
       const h = Math.max(MIN_DOCK_PX, Math.min(max, startH + startY - ev.clientY));
       document.body.style.setProperty("--hydro-h", `${h}px`);
     };

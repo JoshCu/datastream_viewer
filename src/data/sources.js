@@ -44,7 +44,7 @@ export function onSourcesChange(fn) {
 //
 // state.data is still where the active run lives, but changing it is announced
 // here rather than by the loader reaching into the DOM: map, panels, gages,
-// time and the overview each subscribe and own their own reaction. Detail is
+// and the timeline each subscribe and own their own reaction. Detail is
 // { data, fitView }, with data === null when the run was cleared.
 const activeListeners = new Set();
 
