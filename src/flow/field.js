@@ -53,9 +53,16 @@ function status(kind, text) {
   for (const fn of statusListeners) fn({ kind, text });
 }
 
+// A new flow worker. Everything that starts one comes through here: the
+// single-file build resolves import.meta.url to the html file, so the URL has
+// to be one that holds from both there and this folder (see build.sh).
+export function newFlowWorker() {
+  return new Worker(new URL("./flow.worker.js", import.meta.url), { type: "module" });
+}
+
 function getWorker() {
   if (worker) return worker;
-  worker = new Worker(new URL("./flow.worker.js", import.meta.url), { type: "module" });
+  worker = newFlowWorker();
   worker.onmessage = onMessage;
   worker.onerror = (e) => status("error", e.message || "Flow worker failed");
   return worker;

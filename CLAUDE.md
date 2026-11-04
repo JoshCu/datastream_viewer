@@ -28,6 +28,10 @@ Third-party libraries load from CDNs (MapLibre GL via a small module script in
   against rs_route's kernel), then `./build-wasm.sh`. Its output in
   `src/vendor/mc_route/` is committed — never hand-edit it.
 - **Deep link:** `?bucket=<name>&path=<prefix>` navigates the S3 browser on load.
+- **Single-file build (optional):** `./build.sh` writes `dist/datastream_viewer.html`
+  and its sidecar workers + wasm through a pinned `bunx bun@…`. A new
+  `new Worker(new URL(...))` needs a line there, and a URL that is valid relative to
+  the html file (`import.meta.url` is the page in that build).
 
 ## Architecture
 

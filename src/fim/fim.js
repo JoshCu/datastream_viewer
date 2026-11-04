@@ -46,7 +46,7 @@ import {
   isValid,
 } from "../config.js";
 import { valueAt, hasVariable } from "../data/access.js";
-import { demSource, visibleBox, boxAt } from "../flow/field.js";
+import { demSource, visibleBox, boxAt, newFlowWorker } from "../flow/field.js";
 import { deltasFor } from "../flow/terrain.js";
 import { onTimeChange } from "../ui/time.js";
 import { onActiveDatasetChange } from "../data/sources.js";
@@ -124,7 +124,7 @@ const LUT = (() => {
 
 function getWorker() {
   if (worker) return worker;
-  worker = new Worker(new URL("../flow/flow.worker.js", import.meta.url), { type: "module" });
+  worker = newFlowWorker();
   worker.onmessage = onMessage;
   worker.onerror = (e) => status("error", e.message || "Flood worker failed");
   return worker;
