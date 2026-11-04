@@ -61,14 +61,19 @@ function inverted(color) {
   ];
 }
 
-// A zoom curve must stay the outermost expression, so the hover case goes
-// inside each of its stop outputs instead of around it.
-function wider(width) {
+// A zoom curve must stay the outermost expression, so a case on feature-state
+// goes inside each of its stop outputs instead of around it: `fn` gets each
+// output (or `width` itself, if it isn't a zoom curve).
+export function mapWidthStops(width, fn) {
   if (isZoomCurve(width)) {
     const first = width[0] === "step" ? 2 : 4;
-    return width.map((v, i) => (i >= first && (i - first) % 2 === 0 ? wider(v) : v));
+    return width.map((v, i) => (i >= first && (i - first) % 2 === 0 ? mapWidthStops(v, fn) : v));
   }
-  return ["case", HOVER, ["+", width, GROW_PX], width];
+  return fn(width);
+}
+
+function wider(width) {
+  return mapWidthStops(width, (w) => ["case", HOVER, ["+", w, GROW_PX], w]);
 }
 
 export function withHover(prop, value) {

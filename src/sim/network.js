@@ -28,7 +28,7 @@ import {
 } from "../config.js";
 import { resultColorStops } from "../color/expressions.js";
 import { DEFAULT_COLORMAP, colormapColors, colormapGradient } from "../color/colormaps.js";
-import { flowpathPaint, setFlowpathPaint } from "../map/flowpathstyle.js";
+import { flowpathPaint, mapWidthStops, setFlowpathPaint } from "../map/flowpathstyle.js";
 import { clearData } from "../data/loader.js";
 import { setStatus } from "../ui/panels.js";
 
@@ -278,14 +278,12 @@ function applySimPaint() {
   const lo = Math.log10(SIM_Q_DOMAIN.min);
   const hi = Math.log10(SIM_Q_DOMAIN.max);
   setFlowpathPaint("line-color", ["case", SIM_IS_WET, stops, SIM_DRY_COLOR]);
-  // Dry reaches keep the basemap's order-based width (it has no zoom
-  // dependence, so it can nest inside a feature-state case).
-  setFlowpathPaint("line-width", [
-    "case",
-    SIM_IS_WET,
-    ["interpolate", ["linear"], ["log10", ["max", RESULT_VALUE, SIM_Q_DOMAIN.min]], lo, 2, hi, 8],
-    originalPaint["line-width"],
-  ]);
+  // Wet reaches get a width by flow; dry ones keep the basemap's.
+  const wetWidth = ["interpolate", ["linear"], ["log10", ["max", RESULT_VALUE, SIM_Q_DOMAIN.min]], lo, 2, hi, 8];
+  setFlowpathPaint(
+    "line-width",
+    mapWidthStops(originalPaint["line-width"], (dry) => ["case", SIM_IS_WET, wetWidth, dry]),
+  );
 }
 
 function restorePaint() {
