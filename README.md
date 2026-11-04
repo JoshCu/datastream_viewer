@@ -24,6 +24,13 @@ velocity / depth on the hydrofabric flowpaths over time.
   the reaches in view (or all of CONUS), and shows the download and memory
   cost before a big load. The run is painted on the NWM flowlines (COMID
   reaches, RouteLink attributes), a second river network with its own toggle.
+- **Rainfall** — the Rainfall panel loads MRMS (radar + gauges, 1 km, hourly, US,
+  from 2014), IMERG Late (satellite, 10 km, 30 min, global, from 1998) or CHIRPS
+  final (5 km, daily, land, from 1981) from [dynamical.org](https://dynamical.org/catalog/)
+  for the view and a date range, measuring the download first. It plays as grid
+  cells or catchment means, following a run's or the forcings' clock. The
+  hydrograph can add one cell's rain as a strip above any reach. Each product's
+  credit is in the panel and on the map while it's shown.
 - **NWM retrospective** — click any NWM reach (with or without a run loaded)
   and the hydrograph offers the NWM retrospective 3.0 (1979-02 to 2023-01)
   for a chosen date range, with its download size measured first, alongside
@@ -174,6 +181,7 @@ src/
     statepainter.js           on-screen feature-state painter (reaches + catchments)
     interactions.js           hover tooltip, click info, catchment click, upstream highlight
     deck.js                   deck.gl loader + one MapboxOverlay per mode (NEXRAD, flow particles)
+    credits.js                the map's attribution, plus a credit per overlay on show
     search.js                 search box + suggestions: gages, river groups, catchments
     usgssites.js              always-on USGS catalog gage layer, filtered/coloured by type
   color/
@@ -194,6 +202,7 @@ src/
     diff.js                   A − B diff of two loaded runs
     nwm.js                    NWM file names, newest cycle, COMID table + crosswalk cache, load plan + run
     retro.js                  NWM retrospective single-reach series + HEAD-measured estimate
+    rain.js                   rainfall stores: STAC lookup, load plans from shard indexes, grid + point reads
     loader.js                 load orchestration + the parse/merge worker pool
     workers/
       parse.worker.js         module worker hosting the parsers, merge + forcing fetches
@@ -201,6 +210,7 @@ src/
       hdf5layout.js           async HDF5 layout reader: forcing files + chunked NWM output (pure)
       nwm.js                  NWM channel_rt hour reads over range requests (pure)
       retro.js                retrospective zarr chunk reads + column extraction (pure)
+      rain.js                 Icechunk rainfall reads: metadata, shard indexes, sampled tiles (pure)
       forcing.js              forcing row fetch/decode over range requests (pure)
       hfindex.js              hydrofabric index lookups: catchment id → lon/lat (pure)
       usgscatalog.js          USGS site catalog fetch + station-name normalization (pure)
@@ -233,10 +243,14 @@ src/
     contextmenu.js            map right-click menu
     nexradpanel.js            NEXRAD panel: date, per-station scan rows + lock, display controls
     windspanel.js             winds aloft panel: time–height arrow grid + hour table
+    rainpanel.js              rainfall panel: product, dates, load, playback, credit
     flowpanel.js              flow particles panel: count, speed, trail, colour, detail, GPU/CPU
     floodpanel.js             flood mapping panel: flat level, or flooding from the NWM run
     erosionpanel.js           particle erosion panel: interaction, erosion, brushes, terrain reset
     sliders.js                range inputs bound to settings keys, kept in step across panels
+  rain/
+    rain.js                   rainfall on the map: canvas cells or catchment means, its clock
+    credit.js                 a product's credit as DOM (panel, hydrograph)
   forcing/
     store.js                  sparse, growable catchment store + change events
     layout.js                 per-file layout scan + IndexedDB cache

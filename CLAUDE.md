@@ -14,7 +14,8 @@ paints per-reach flow/velocity/depth on the hydrofabric flowpaths over time. See
 There is **no build step, no package.json, no test suite, and no linter**.
 Third-party libraries load from CDNs (MapLibre GL via a small module script in
 `index.html` that sets the `maplibregl` global, since v6 is ESM-only; PMTiles via
-`<script>`; jsfive + hyparquet via dynamic `import()` inside the parse worker).
+`<script>`; jsfive, hyparquet, icechunk-js + zarrita via dynamic `import()` inside
+the parse worker).
 
 - **Run:** `bun serve.js` (or `PORT=3000 bun serve.js`). It must be served over
   HTTP — the ES modules and the module Web Worker will not load from `file://`.
@@ -267,6 +268,44 @@ operational table (`nwmFeatureTable()`). A window costs one 672 h × 30,000
 reach chunk per 28 days, 1–8 MB each, so the estimate HEADs every chunk
 rather than guess. The worker decodes with zstddec (wasm, CDN, lazily
 loaded in `parse.worker.js`), one 80 MB chunk at a time.
+
+### Rainfall (`src/rain/`, `data/rain.js`, `data/workers/rain.js`, `ui/rainpanel.js`)
+
+MRMS, IMERG Late and CHIRPS final from dynamical.org, listed in
+`RAIN_PRODUCTS` (`config.js`): a mode of its own, in `rainState`, with its own
+clock (`setRainTimeIndex()` is the only way to seek it; it follows a run's or the
+forcings' clock while they overlap). Store URLs come from STAC, since their paths
+carry a version. They're Icechunk, read by `icechunk-js` + `zarrita` (esm.sh,
+lazily in `parse.worker.js`, passed to the pure reader); each worker opens its own
+store.
+
+- **Chunks are time-major**: one inner chunk holds a whole time block (MRMS 27
+  days × 1° × 1°; IMERG 30 days × 10°; CHIRPS 1 year × 3°). So one map frame costs
+  the same as the block, and one cell costs a chunk per block. Whole-CONUS MRMS is
+  ~490 MB; `planRainLoad` measures any load from the shard indexes (a few kB each)
+  first, and the panel confirms above `RAIN_CONFIRM_BYTES`. Nothing touches the
+  network until a Load button: opening a reach stays free.
+- A load is sampled (every Nth cell, not averaged) to fit `RAIN_MAX_CELLS` and
+  `RAIN_MAX_MEMORY_BYTES`, and held as `frames[t][row][col]`, float, in the
+  variable's display units. A chunk is one `rainTile` task on the pool.
+- **Cells** draw on a canvas source. Its corners are interpolated in Mercator and the
+  grid is regular in latitude, so canvas rows look up the grid row at their own
+  latitude (`rowLut`). **Catchment means** go through a second state painter on the
+  `divides` source, with the feature-state key `rain` so forcings can be painted on
+  the same features. A divide comes in one piece per tile, so its cell list is
+  gathered across pieces, and the table is rebuilt as divide tiles land.
+- The **hydrograph** shows one cell's series (the middle of the reach's geometry in the
+  loaded tiles, else its gage) as a strip above the plot. It's kept out of
+  `view.series`: other units, no place in the skill scores.
+- **Credits:** `credit.long` is shown in the panel and hydrograph section
+  (`rain/credit.js`), `credit.short` on the map while the layer is on.
+  `map/credits.js`'s `setMapCredit(owner, credit)` swaps MapLibre's
+  `AttributionControl`, which has no API to change its text. So the map is
+  created with `attributionControl: false`.
+
+HRRR and URMA are next: see `todo.md`. They need the virtual stores (GRIB byte
+ranges, one whole-domain chunk per step), so most of the above assumptions don't
+carry over.
 
 ### Forcings (`src/forcing/`)
 
