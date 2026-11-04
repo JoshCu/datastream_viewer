@@ -12,8 +12,9 @@ paints per-reach flow/velocity/depth on the hydrofabric flowpaths over time. See
 ## Commands
 
 There is **no build step, no package.json, no test suite, and no linter**.
-Third-party libraries load from CDNs (MapLibre GL + PMTiles via `<script>` in
-`index.html`; jsfive + hyparquet via dynamic `import()` inside the parse worker).
+Third-party libraries load from CDNs (MapLibre GL via a small module script in
+`index.html` that sets the `maplibregl` global, since v6 is ESM-only; PMTiles via
+`<script>`; jsfive + hyparquet via dynamic `import()` inside the parse worker).
 
 - **Run:** `bun serve.js` (or `PORT=3000 bun serve.js`). It must be served over
   HTTP — the ES modules and the module Web Worker will not load from `file://`.
@@ -108,7 +109,11 @@ z0–6 carry only id + `order` (attributes start at z7, so width expressions
 `coalesce`), `lake`/`gages` are omitted when empty, z12 has extent 65,536,
 reaches shorter than a tile unit are missing below z12, and the tiles'
 `upstream_id`/`num_upstreams` are numbered over the NWM `to` tree, so they
-can't be compared with the hydrofabric divides'.
+can't be compared with the hydrofabric divides'. The map sets
+`zoomLevelsToOverscale: undefined`: MapLibre 6's default clips tiles past a
+source's maxzoom, and at z14 `querySourceFeatures` then returns ~10 flowpaths
+rather than the tile's ~100, which would cut the sim's network and reach lengths,
+the flood map's lines and "Load viewport" down to the view.
 
 The painter tracks a `paintedAll` flag plus a small delta set rather than a
 per-id `Set`: on a bare timestep change every on-screen feature must be
@@ -473,6 +478,8 @@ redraws all of its layers when any one changes, and the particles change
 every frame. Its esm.sh imports pin `@deck.gl/core` through
 `?deps=`, because otherwise a new core patch release gets loaded next to the
 pinned one and deck refuses to run.
+It also gives the map a small `map.transform` with just `elevation`, which
+`@deck.gl/mapbox` reads while terrain is on and MapLibre 6 removed.
 
 ### Particle erosion and terrain edits (`flow/terrain.js`, `flow/brush.js`, `ui/erosionpanel.js`)
 

@@ -68,7 +68,7 @@ import { initialMapView, syncMapView } from "../ui/url.js";
 import { writeUrl as writeLayersUrl } from "./layerprefs.js";
 
 
-// maplibregl and pmtiles are globals provided by CDN <script>s in index.html.
+// maplibregl and pmtiles are globals provided by CDN scripts in index.html.
 
 // Persistent "a camera move is in progress" gate for the idle handler. It
 // stays set for the whole gesture, so idle reliably fires one settle-time
@@ -99,9 +99,14 @@ export function init() {
     // A link's `map=` camera, if it has one.
     ...initialMapView(),
     validateStyle: false,
+    // MapLibre 6 defaults to 4, which past a source's maxzoom splits tiles into
+    // clipped children. querySourceFeatures then returns only the view's pieces
+    // of a reach, but the sim (reach lengths), the flood map and "Load viewport"
+    // need the whole loaded tile.
+    zoomLevelsToOverscale: undefined,
   });
   setMap(map);
-  map.on("styleimagemissing", addGageIcon);
+  map.setMissingStyleImageResolver(addGageIcon);
   map.setStyle("https://tiles.openfreemap.org/styles/liberty", {
     transformStyle: updateIncomingStyle,
   });

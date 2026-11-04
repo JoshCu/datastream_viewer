@@ -18,9 +18,13 @@
       rel="stylesheet"
     />
 
-    <!-- MapLibre GL -->
-    <script src="https://unpkg.com/maplibre-gl@^5.24.0/dist/maplibre-gl.js"></script>
-    <link href="https://unpkg.com/maplibre-gl@^5.24.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <!-- MapLibre GL. v6 is ESM-only; the app reads it as the `maplibregl` global.
+         Module scripts run in document order, so this is set before src/main.js. -->
+    <script type="module">
+      import * as maplibregl from "https://unpkg.com/maplibre-gl@^6.16.0/dist/maplibre-gl.mjs";
+      globalThis.maplibregl = maplibregl;
+    </script>
+    <link href="https://unpkg.com/maplibre-gl@^6.16.0/dist/maplibre-gl.css" rel="stylesheet" />
 
     <!-- PMTiles -->
     <script src="https://unpkg.com/pmtiles@latest/dist/pmtiles.js"></script>

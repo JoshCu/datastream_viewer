@@ -159,7 +159,7 @@ Everything runs client-side. `src/main.js` is a thin entry point; the rest is
 split into focused ES modules.
 
 ```
-index.html                    markup + CDN <script>s; loads src/main.js as a module
+index.html                    markup + CDN scripts; loads src/main.js as a module
 scripts/
   usgs-dams.js                builds src/data/usgsdams.json (gages below dams / with none upstream)
 src/

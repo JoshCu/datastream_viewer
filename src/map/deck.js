@@ -77,6 +77,14 @@ function overlayFor(owner, props) {
   let resolveDevice;
   devices.set(owner, new Promise((resolve) => (resolveDevice = resolve)));
   const getTooltip = tooltips.get(owner);
+  // @deck.gl/mapbox (through 9.4.1) reads map.transform.elevation while terrain
+  // is on, and MapLibre 6 removed map.transform. Elevation is all an overlaid
+  // (non-interleaved) deck reads from it.
+  map.transform ??= {
+    get elevation() {
+      return map.getCameraTargetElevation();
+    },
+  };
   overlay = new deck.MapboxOverlay({
     interleaved: false,
     deviceProps: deck.deviceProps,

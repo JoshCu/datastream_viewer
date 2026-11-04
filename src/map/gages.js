@@ -69,9 +69,9 @@ function triangleSdf() {
   return { width: ICON_PX, height: ICON_PX, data };
 }
 
-// Bound to styleimagemissing, so it's added on first use with any style.
-export function addGageIcon(e) {
-  if (e.id !== GAGE_ICON || map.hasImage(GAGE_ICON)) return;
+// The map's missing-image resolver, so it's added on first use with any style.
+export function addGageIcon(id) {
+  if (id !== GAGE_ICON || map.hasImage(GAGE_ICON)) return;
   map.addImage(GAGE_ICON, triangleSdf(), { sdf: true, pixelRatio: 2 });
 }
 
