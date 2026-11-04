@@ -16,7 +16,7 @@
 // an event scores just that event. The y axis also auto-fits the window.
 // d3 is a global provided by the CDN <script> in index.html.
 // ====================================================================
-import { state } from "../state.js";
+import { map, state } from "../state.js";
 import {
   SERIES_COLORS,
   SERIES_OVERFLOW_COLOR,
@@ -24,10 +24,15 @@ import {
   CURRENT_TIME_COLOR,
   RETRO_COLOR,
   RETRO_VARIABLES,
+  RAIN_COLOR,
+  RAIN_CONFIRM_BYTES,
+  RAIN_PRODUCTS,
   REACH_SETS,
   reachSetOf,
 } from "../config.js";
 import { retroEstimate, retroSeries } from "../data/retro.js";
+import { loadRainSeries, planRainSeries } from "../data/rain.js";
+import { renderRainCredit } from "../rain/credit.js";
 import { seriesAt, variableInfo } from "../data/access.js";
 import { colormapColors } from "../color/colormaps.js";
 import { listSources, onSourcesChange } from "../data/sources.js";
@@ -42,6 +47,8 @@ import {
 
 const OBS_KEY = "obs";
 const RETRO_KEY = "retro";
+const RAIN_KEY = "rain";
+const RAIN_STRIP_SHARE = 0.24; // of the plot's height, when rain is shown
 const DAY_MS = 24 * 3600 * 1000;
 const MARGIN = { top: 10, right: 16, bottom: 24, left: 60 };
 const DIFF_GAP = 16; // vertical space between the main plot and the diff strip
@@ -58,6 +65,10 @@ const view = {
   // The NWM retrospective series last loaded: { reachId, variable, label,
   // times, values }, shown while it matches the target and variable.
   retro: null,
+  // The rain last loaded for a point: { reachId, reaches, label, units, times,
+  // values, step }. Its own strip, not a series: it has other units and no
+  // place in the skill scores.
+  rain: null,
   variable: "flow",
   series: [], // [{ key, label, kind: "model"|"obs", color, dashed, times, values, step }]
   obsStatus: "",
@@ -140,8 +151,16 @@ export function setupHydrograph() {
     retroTo: $("hydro-retro-to"),
     retroLoad: $("hydro-retro-load"),
     retroNote: $("hydro-retro-note"),
+    rainSection: $("hydro-rain-section"),
+    rainProduct: $("hydro-rain-product"),
+    rainFrom: $("hydro-rain-from"),
+    rainTo: $("hydro-rain-to"),
+    rainLoad: $("hydro-rain-load"),
+    rainNote: $("hydro-rain-note"),
+    rainCredit: $("hydro-rain-credit"),
   };
   setupRetro();
+  setupRain();
 
   buildSkeleton();
 
@@ -225,6 +244,18 @@ function buildSkeleton() {
   const diffLine = diffBody.append("path").attr("class", "hydro-diff-line");
   const diffNow = diff.append("line").attr("class", "hydro-now");
 
+  const rain = root.append("g").attr("class", "hydro-plot");
+  const rainGrid = rain.append("g").attr("class", "hydro-axis hydro-axis-y");
+  const rainLabel = rain.append("text").attr("class", "hydro-axis-title");
+  const rainClip = defs.append("clipPath").attr("id", "hydro-clip-rain").append("rect");
+  const rainArea = rain
+    .append("g")
+    .attr("clip-path", "url(#hydro-clip-rain)")
+    .append("path")
+    .attr("class", "hydro-rain-area")
+    .attr("fill", RAIN_COLOR);
+  const rainNow = rain.append("line").attr("class", "hydro-now");
+
   const xAxis = root.append("g").attr("class", "hydro-axis hydro-axis-x");
 
   const hover = root.append("g").attr("class", "hydro-hover").style("display", "none");
@@ -236,6 +267,7 @@ function buildSkeleton() {
   chart = {
     svg, root, clipMain, clipDiff, main, mainGrid, mainLabel, mainLines, mainNow,
     diff, diffGrid, diffLabel, diffPos, diffNeg, diffZero, diffLine, diffNow,
+    rain, rainGrid, rainLabel, rainClip, rainArea, rainNow,
     xAxis, hover, crosshair, dots, brush, hit,
   };
 
@@ -286,6 +318,7 @@ export function openHydrograph({ reachId, site = null, reaches }) {
   els.dock.classList.add("visible");
   document.body.classList.add("hydro-open");
   syncRetroSection();
+  syncRainSection();
   rebuild();
 }
 
@@ -429,6 +462,112 @@ async function loadRetro() {
   }
 }
 
+// ---- Rainfall here -----------------------------------------------------
+//
+// One grid cell's series from a dynamical.org product, drawn as a strip over
+// the plot. Nothing is fetched until Load: opening a reach stays free.
+
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+function setupRain() {
+  els.rainProduct.replaceChildren(
+    ...Object.entries(RAIN_PRODUCTS).map(([key, p]) => new Option(p.name, key)),
+  );
+  els.rainProduct.addEventListener("change", () => {
+    renderRainCredit(els.rainCredit, els.rainProduct.value);
+    els.rainNote.textContent = "";
+  });
+  renderRainCredit(els.rainCredit, els.rainProduct.value);
+  els.rainLoad.addEventListener("click", loadRain);
+}
+
+// Default the dates to what's charted, else the product's usual window.
+function syncRainSection() {
+  const applies = view.target?.reaches !== "grid";
+  els.rainSection.style.display = applies ? "" : "none";
+  els.rainNote.textContent = "";
+  if (!applies || els.rainFrom.value) return;
+  const days = RAIN_PRODUCTS[els.rainProduct.value].defaultDays;
+  els.rainTo.value = isoDay(Date.now());
+  els.rainFrom.value = isoDay(Date.now() - days * DAY_MS);
+}
+
+// [lon, lat] for the reach: the middle of its geometry in the loaded tiles,
+// else its gage's location. Null if neither is to hand.
+async function targetPoint() {
+  const { reachId, site, reaches } = view.target;
+  const { source, sourceLayer } = REACH_SETS[reaches].feature;
+  const [f] = map.querySourceFeatures(source, { sourceLayer, filter: ["==", ["id"], reachId] });
+  if (f) {
+    const lines = f.geometry.type === "LineString" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    const line = lines[Math.floor(lines.length / 2)];
+    return line[Math.floor(line.length / 2)];
+  }
+  return site ? ((await fetchGageMeta(site).catch(() => null))?.lonLat ?? null) : null;
+}
+
+async function loadRain() {
+  const from = dateMs(els.rainFrom);
+  const to = dateMs(els.rainTo);
+  if (!view.target) return;
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) {
+    els.rainNote.textContent = "Pick a date range";
+    return;
+  }
+  const { reachId, reaches } = view.target;
+  const product = els.rainProduct.value;
+  const [variable, info] = Object.entries(RAIN_PRODUCTS[product].variables)[0];
+  els.rainLoad.disabled = true;
+  try {
+    els.rainNote.textContent = "Measuring…";
+    const point = await targetPoint();
+    if (!point) throw new Error("This reach isn't in the loaded tiles; pan to it");
+    const plan = await planRainSeries({
+      product,
+      variable,
+      lon: point[0],
+      lat: point[1],
+      fromMs: from,
+      toMs: to + DAY_MS - 1,
+    });
+    if (
+      plan.bytes > RAIN_CONFIRM_BYTES &&
+      !confirm(`Rainfall here means ${fmtMB(plan.bytes)} to download. Continue?`)
+    ) {
+      els.rainNote.textContent = "Cancelled";
+      return;
+    }
+    els.rainNote.textContent = `Loading ${fmtMB(plan.bytes)}…`;
+    const r = await loadRainSeries(plan);
+    view.rain = {
+      reachId,
+      reaches,
+      label: `${RAIN_PRODUCTS[product].name} ${info.label.toLowerCase()}`,
+      units: info.units,
+      times: r.times,
+      values: r.values,
+      step: medianStep(r.times),
+    };
+    if (view.target?.reachId !== reachId) return;
+    els.rainNote.textContent = `Loaded ${fmtMB(r.bytes)}, cell at ${point[1].toFixed(2)}, ${point[0].toFixed(2)}`;
+    view.domain = null;
+    rebuild();
+  } catch (err) {
+    console.error("Rainfall load error:", err);
+    els.rainNote.textContent = err.message;
+  } finally {
+    els.rainLoad.disabled = false;
+  }
+}
+
+// The rain for the current target, if loaded (hidden or not).
+function targetRain() {
+  const rain = view.rain;
+  return rain && view.target && rain.reachId === view.target.reachId && rain.reaches === view.target.reaches
+    ? rain
+    : null;
+}
+
 // ---- Series assembly -------------------------------------------------
 
 // What the obs line should say before any fetch resolves. Four independent
@@ -462,7 +601,8 @@ async function rebuild() {
       step: medianStep(retro.times),
     });
   }
-  view.full = extentOf(view.series);
+  const rain = targetRain();
+  view.full = extentOf(rain ? [...view.series, rain] : view.series);
   clampDomain();
   view.obsStatus = obsStatusFor(site);
   refreshAll();
@@ -595,9 +735,24 @@ function renderLegend() {
     btn.addEventListener("click", (e) => toggleSeries(s.key, e.shiftKey || e.ctrlKey || e.metaKey));
     return btn;
   });
+  const rain = targetRain();
+  if (rain) {
+    const btn = document.createElement("button");
+    btn.className = "hydro-legend-item" + (view.hidden.has(RAIN_KEY) ? " off" : "");
+    btn.title = "Click to toggle";
+    const key = document.createElement("span");
+    key.className = "hydro-key";
+    key.style.setProperty("--key-color", RAIN_COLOR);
+    const label = document.createElement("span");
+    label.className = "hydro-legend-label";
+    label.textContent = rain.label;
+    btn.append(key, label);
+    btn.addEventListener("click", () => toggleSeries(RAIN_KEY, false));
+    items.push(btn);
+  }
   els.legend.replaceChildren(...items);
 
-  const empty = view.series.length === 0;
+  const empty = view.series.length === 0 && !rain;
   els.empty.style.display = empty ? "" : "none";
   if (empty) {
     els.empty.textContent = !view.target
@@ -861,20 +1016,25 @@ function render() {
   const innerW = Math.max(10, width - MARGIN.left - MARGIN.right);
   const plotH = Math.max(40, height - MARGIN.top - MARGIN.bottom);
   const diff = view.diff;
-  const diffH = diff ? Math.round((plotH - DIFF_GAP) * 0.32) : 0;
-  const mainH = diff ? plotH - DIFF_GAP - diffH : plotH;
-  const diffTop = mainH + DIFF_GAP;
+  // Top to bottom: the rain strip, the main plot, the diff strip.
+  const rain = view.hidden.has(RAIN_KEY) ? null : targetRain();
+  const rainH = rain ? Math.round(plotH * RAIN_STRIP_SHARE) : 0;
+  const mainTop = rain ? rainH + DIFF_GAP : 0;
+  const belowRain = plotH - mainTop;
+  const diffH = diff ? Math.round((belowRain - DIFF_GAP) * 0.32) : 0;
+  const mainH = diff ? belowRain - DIFF_GAP - diffH : belowRain;
+  const diffTop = mainTop + mainH + DIFF_GAP;
   const { units, label } = targetVariableInfo();
 
   const x = d3.scaleUtc().domain(view.domain).range([0, innerW]);
   const log = view.logY;
   const y = (log ? d3.scaleLog() : d3.scaleLinear())
     .domain(yExtent(visible, view.domain, log))
-    .range([mainH, 0]);
+    .range([mainTop + mainH, mainTop]);
   if (!log) y.nice();
-  geom = { x, y, yDiff: null, innerW, plotH, mainH, diffTop, diffH, visible };
+  geom = { x, y, yDiff: null, innerW, plotH, mainTop, mainH, diffTop, diffH, rainH, visible, rain };
 
-  chart.clipMain.attr("width", innerW).attr("height", mainH);
+  chart.clipMain.attr("y", mainTop).attr("width", innerW).attr("height", mainH);
   chart.hit.attr("width", innerW).attr("height", plotH);
 
   // Main plot: horizontal gridlines via full-width tick lines.
@@ -884,7 +1044,7 @@ function render() {
   else yAxis.ticks(yTickCount);
   chart.mainGrid.call(yAxis).call((g) => g.select(".domain").remove());
   chart.mainLabel
-    .attr("transform", `translate(${-MARGIN.left + 12},${mainH / 2}) rotate(-90)`)
+    .attr("transform", `translate(${-MARGIN.left + 12},${mainTop + mainH / 2}) rotate(-90)`)
     .text(`${label} (${units})${log ? " · log" : ""}`);
 
   const [d0, d1] = view.domain;
@@ -907,6 +1067,34 @@ function render() {
         .x((i) => x(s.times[i]))
         .y((i) => y(s.values[i]))(indexRange(i0, i1));
     });
+
+  // Rain strip, sharing the time axis. A step area, since a value covers its
+  // whole time step, and a long record has too many steps for separate bars.
+  chart.rain.style("display", rain ? null : "none");
+  if (rain) {
+    const [i0, i1] = windowRange(rain.times, d0, d1);
+    const idx = indexRange(i0, i1);
+    const hi = d3.max(idx, (i) => (Number.isNaN(rain.values[i]) ? undefined : rain.values[i])) || 1;
+    const yRain = d3.scaleLinear().domain([0, hi]).nice(3).range([rainH, 0]);
+    chart.rainClip.attr("width", innerW).attr("height", rainH);
+    chart.rainGrid
+      .call(d3.axisLeft(yRain).ticks(Math.max(2, Math.floor(rainH / 28))).tickSize(-innerW).tickPadding(6).tickFormat(fmtTick))
+      .call((g) => g.select(".domain").remove());
+    chart.rainLabel
+      .attr("transform", `translate(${-MARGIN.left + 12},${rainH / 2}) rotate(-90)`)
+      .text(rain.units);
+    chart.rainArea.attr(
+      "d",
+      d3
+        .area()
+        .curve(d3.curveStepAfter)
+        .defined((i) => !Number.isNaN(rain.values[i]))
+        .x((i) => x(rain.times[i]))
+        .y0(rainH)
+        .y1((i) => yRain(rain.values[i]))(idx),
+    );
+    geom.yRain = yRain;
+  }
 
   // Diff strip (A − B), sharing the time axis.
   chart.diff.style("display", diff ? null : "none").attr("transform", `translate(0,${diffTop})`);
@@ -968,7 +1156,11 @@ function drawNowMarker() {
   const show = px !== null && px >= 0 && px <= geom.innerW;
   chart.mainNow
     .style("display", show ? null : "none")
-    .attr("x1", px).attr("x2", px).attr("y1", 0).attr("y2", geom.mainH)
+    .attr("x1", px).attr("x2", px).attr("y1", geom.mainTop).attr("y2", geom.mainTop + geom.mainH)
+    .attr("stroke", CURRENT_TIME_COLOR);
+  chart.rainNow
+    .style("display", show && geom.rain ? null : "none")
+    .attr("x1", px).attr("x2", px).attr("y1", 0).attr("y2", geom.rainH)
     .attr("stroke", CURRENT_TIME_COLOR);
   chart.diffNow
     .style("display", show && view.diff ? null : "none")
@@ -1009,7 +1201,9 @@ function drawHover() {
   const t = x.invert(hoverPx).getTime();
   let snap = null;
   let snapDt = Infinity;
-  const candidates = view.diff ? [...visible, view.diff] : visible;
+  const candidates = [...visible];
+  if (view.diff) candidates.push(view.diff);
+  if (geom.rain) candidates.push(geom.rain);
   for (const s of candidates) {
     if (!s.times.length) continue;
     const i = nearestIndex(s.times, t);
@@ -1028,6 +1222,7 @@ function drawHover() {
   };
   const rows = visible.map((s) => ({ s, p: valueAtSnap(s, s.step) }));
   const diffPoint = view.diff ? valueAtSnap(view.diff, medianStep(view.diff.times)) : null;
+  const rainPoint = geom.rain ? valueAtSnap(geom.rain, geom.rain.step) : null;
 
   const sx = x(snap);
   chart.hover.style("display", null);
@@ -1043,6 +1238,9 @@ function drawHover() {
       cy: geom.diffTop + geom.yDiff(diffPoint.v),
     });
   }
+  if (rainPoint && Number.isFinite(rainPoint.v) && geom.yRain) {
+    dots.push({ key: RAIN_KEY, color: RAIN_COLOR, cx: x(rainPoint.t), cy: geom.yRain(rainPoint.v) });
+  }
   chart.dots
     .selectAll("circle")
     .data(dots, (d) => d.key)
@@ -1053,16 +1251,19 @@ function drawHover() {
     .attr("cx", (d) => d.cx)
     .attr("cy", (d) => d.cy);
 
-  renderTooltip(snap, rows, diffPoint, sx);
+  renderTooltip(snap, rows, diffPoint, rainPoint, sx);
 }
 
-function renderTooltip(snap, rows, diffPoint, sx) {
+function renderTooltip(snap, rows, diffPoint, rainPoint, sx) {
   const { units } = targetVariableInfo();
   const head = document.createElement("div");
   head.className = "hydro-tt-time";
   head.textContent = fmtTime(new Date(snap));
   const lines = rows.map(({ s, p }) => tooltipRow(s.color, p ? p.v : NaN, s.label, s.dashed));
   if (diffPoint) lines.push(tooltipRow(null, diffPoint.v, "A − B", false, true));
+  if (geom.rain) {
+    lines.push(tooltipRow(RAIN_COLOR, rainPoint ? rainPoint.v : NaN, `${geom.rain.label} (${geom.rain.units})`, false));
+  }
   const unitsEl = document.createElement("div");
   unitsEl.className = "hydro-tt-units";
   unitsEl.textContent = units;

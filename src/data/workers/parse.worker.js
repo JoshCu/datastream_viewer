@@ -30,6 +30,12 @@
 //        null for all; times in epoch ms; values unpacked, fill → FILL_VALUE)
 //   in  { id, type: "retroSeries", name, col, h0, h1 }
 //     -> result { times, values, bytes, chunks }        (data/workers/retro.js)
+//   in  { id, type: "rainMeta", href, variable }
+//     -> result { shape, shard, chunk, t0Ms, stepMs, nTimes, lat0, dLat, lon0, dLon }
+//   in  { id, type: "rainSizes", href, variable, shard, chunk, t0, t1, y0, y1, x0, x1 }
+//     -> result { chunks: [{ t, y, x, bytes }] }        (data/workers/rain.js)
+//   in  { id, type: "rainTile", href, variable, chunk, t, y, x, t0, t1, y0, y1, x0, x1, stride, scale }
+//     -> result { tStart, nt, r0, rows, c0, cols, values }
 //   in  { id, type: "crosswalk" }
 //     -> result { comids, wbs }   each COMID's outlet wb-N (data/workers/crosswalk.js)
 //   in  { id, type: "usgsCatalog" }
@@ -49,11 +55,13 @@ import { fetchUsgsCatalog } from "./usgscatalog.js";
 import { readNwmFeatureIds, readNwmSizes, readNwmHour } from "./nwm.js";
 import { readRetroSeries } from "./retro.js";
 import { readCrosswalk } from "./crosswalk.js";
+import { readRainMeta, readRainSizes, readRainTile } from "./rain.js";
 
 let hdf5Promise = null;
 let parquetWasmPromise = null;
 let hyparquetPromise = null;
 let zstdPromise = null;
+let icechunkPromise = null;
 
 // The main thread compiles the 6.5MB parquet-wasm binary once and ships the
 // resulting WebAssembly.Module to every worker (structured-clone shares the
@@ -130,6 +138,21 @@ function loadZstd() {
   return zstdPromise;
 }
 
+// icechunk-js reads the manifests (pure TS, Range reads through fetch);
+// zarrita decodes the arrays on top of it, blosc and sharding included.
+function loadIcechunk() {
+  if (!icechunkPromise) {
+    icechunkPromise = Promise.all([
+      import("https://esm.sh/icechunk-js@0.6.1"),
+      import("https://esm.sh/zarrita@0.7.5"),
+    ]).then(([ice, zarr]) => ({ IcechunkStore: ice.IcechunkStore, zarr }));
+    icechunkPromise.catch(() => {
+      icechunkPromise = null;
+    });
+  }
+  return icechunkPromise;
+}
+
 async function parse(url) {
   if (url.endsWith(".parquet")) {
     return parseParquet(url, await loadParquetWasm());
@@ -193,6 +216,19 @@ self.onmessage = async (e) => {
     if (type === "retroSeries") {
       const result = await readRetroSeries(e.data, await loadZstd());
       self.postMessage({ id, ok: true, result }, [result.times.buffer, result.values.buffer]);
+      return;
+    }
+    if (type === "rainMeta") {
+      self.postMessage({ id, ok: true, result: await readRainMeta(e.data, await loadIcechunk()) });
+      return;
+    }
+    if (type === "rainSizes") {
+      self.postMessage({ id, ok: true, result: await readRainSizes(e.data, await loadIcechunk()) });
+      return;
+    }
+    if (type === "rainTile") {
+      const result = await readRainTile(e.data, await loadIcechunk());
+      self.postMessage({ id, ok: true, result }, [result.values.buffer]);
       return;
     }
     if (type === "usgsCatalog") {

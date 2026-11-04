@@ -67,6 +67,9 @@ import { setRunColormapId } from "../ui/colormap.js";
 import { initialMapView, syncMapView } from "../ui/url.js";
 import { setupPanelSettings } from "../ui/panelsettings.js";
 import { writeUrl as writeLayersUrl } from "./layerprefs.js";
+import { syncCredits } from "./credits.js";
+import { invalidateRainView, rainDivideTileLoaded, restoreRainAfterStyle } from "../rain/rain.js";
+import { setupRainPanel } from "../ui/rainpanel.js";
 
 
 // maplibregl and pmtiles are globals provided by CDN scripts in index.html.
@@ -104,6 +107,8 @@ export function init() {
     // A link's `map=` camera, if it has one.
     ...initialMapView(),
     validateStyle: false,
+    // Added by map/credits.js, which swaps it when an overlay's credit changes.
+    attributionControl: false,
     // MapLibre 6 defaults to 4, which past a source's maxzoom splits tiles into
     // clipped children. querySourceFeatures then returns only the view's pieces
     // of a reach, but the sim (reach lengths), the flood map and "Load viewport"
@@ -111,6 +116,8 @@ export function init() {
     zoomLevelsToOverscale: undefined,
   });
   setMap(map);
+  syncCredits();
+  map.on("style.load", restoreRainAfterStyle);
   map.setMissingStyleImageResolver(addGageIcon);
   map.setStyle("https://tiles.openfreemap.org/styles/liberty", {
     transformStyle: updateIncomingStyle,
@@ -165,6 +172,7 @@ export function init() {
     cameraMoved = false;
     if (state.data) invalidateResultsView();
     if (forcingState.run) invalidateForcingView();
+    invalidateRainView();
   });
   // Paint each flowpaths tile the moment it finishes loading, so reaches light
   // up as they stream in mid-pan instead of only once the pan stops. Bounded
@@ -173,6 +181,7 @@ export function init() {
   map.on("resize", invalidateCanvasBox);
 
   map.on("sourcedata", (e) => {
+    if (e.sourceId === "divides" && e.tile) rainDivideTileLoaded();
     if (e.sourceId === "divides" && e.tile && forcingState.run) {
       forcingTileLoaded(e.tile.tileID);
       return;
@@ -212,6 +221,7 @@ export function init() {
   setupS3Browser();
   setupUploadPanel();
   setupNwmPanel();
+  setupRainPanel();
   setupHydrograph();
   setupForcingPanel();
   setupForcingPlot();

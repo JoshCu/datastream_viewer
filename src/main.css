@@ -2626,3 +2626,18 @@ body.hydro-open .sim-map-controls {
 #floodTooltip {
     transform: translateY(-100%);
 }
+
+/* Rainfall: the provider's credit under the panel and hydrograph section */
+.rain-credit {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.rain-credit a {
+    color: inherit;
+}
+
+.hydro-rain-area {
+    stroke: none;
+    opacity: 0.85;
+}

@@ -445,3 +445,54 @@ export function forcingMeta(name) {
     bars: !!m?.bars,
   };
 }
+
+// ---- Gridded rainfall (src/rain/, data/rain.js) ------------------------
+//
+// Icechunk stores from dynamical.org, found through STAC (their paths carry a
+// version, so they aren't hardcoded). Chunks are time-major, so a map frame
+// costs whole time blocks: the panel measures a load before it starts.
+export const RAIN_STAC_BASE = "https://stac.dynamical.org";
+export const RAIN_SOURCE = "rain-grid";
+export const RAIN_LAYER = "rain-grid";
+export const RAIN_CATCHMENT_LAYER = "rain-catchments";
+export const RAIN_FILL_OPACITY = 0.85;
+// A map load is sampled down (every Nth cell) to fit both of these.
+export const RAIN_MAX_CELLS = 1_500_000;
+export const RAIN_MAX_MEMORY_BYTES = 1536 * 1024 * 1024;
+// Loads estimated above this ask first.
+export const RAIN_CONFIRM_BYTES = 200 * 1024 * 1024;
+export const RAIN_FETCH_CONCURRENCY = 6;
+export const RAIN_COLOR = "#4f9fe0"; // the hydrograph's rain strip
+
+// A rate stored in kg m⁻² s⁻¹ (≡ mm/s), shown in mm/h.
+const rainRate = (label) => ({ label, units: "mm/h", scale: 3600, min: 0.1, max: 50, log: true });
+
+// `variables`: the store's arrays, first = the default. Values stay in `units`
+// once read (× `scale`); cells below `min` are transparent. `credit` is the
+// provider's wording: `short` for the map's attribution, `long` for the panels.
+export const RAIN_PRODUCTS = {
+  mrms: {
+    label: "MRMS: radar + gauges, 1 km, hourly, US",
+    name: "NOAA MRMS",
+    stac: "noaa-mrms-conus-analysis-hourly",
+    defaultDays: 7,
+    variables: {
+      precipitation_surface: rainRate("Precipitation"),
+      precipitation_radar_only_surface: rainRate("Radar only"),
+      flash_qpe_ffg_max_surface: {
+        label: "Rain ÷ flash flood guidance",
+        units: "%",
+        scale: 1,
+        min: 25,
+        max: 200,
+        log: false,
+      },
+    },
+    credit: {
+      short: "NOAA MRMS from dynamical.org",
+      long: "NOAA NWS NCEP MRMS data processed by dynamical.org from NOAA NCEP, NOAA Open Data Dissemination and Iowa Mesonet archives.",
+      url: "https://dynamical.org/catalog/noaa-mrms-conus-analysis-hourly/",
+    },
+  },
+};
+export const RAIN_LICENSE_URL = "https://creativecommons.org/licenses/by/4.0/";

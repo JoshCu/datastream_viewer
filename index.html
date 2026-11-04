@@ -440,6 +440,103 @@
             </div>
           </div>
 
+          <!-- Gridded rainfall from dynamical.org (src/rain/, src/ui/rainpanel.js). -->
+          <div class="panel collapsed" id="rainPanel" data-url-key="rain">
+            <h3 class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z" />
+              </svg>
+              Rainfall
+              <button class="panel-collapse-toggle" aria-label="Toggle panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </h3>
+
+            <div class="panel-body">
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="rainProduct">Product</label>
+                <select id="rainProduct" class="select scale-select"></select>
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="rainVariable">Variable</label>
+                <select id="rainVariable" class="select scale-select"></select>
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="rainFrom">From (UTC)</label>
+                <input type="date" id="rainFrom" class="select scale-select" />
+              </div>
+              <div class="scale-select-wrap">
+                <label class="scale-label" for="rainTo">To (UTC)</label>
+                <input type="date" id="rainTo" class="select scale-select" />
+              </div>
+              <div class="forcing-actions">
+                <button class="btn" id="rainLoadBtn" title="Measures the download first, and asks if it's big">Load view</button>
+                <button class="btn secondary" id="rainClearBtn" disabled>Clear</button>
+              </div>
+              <div class="status" id="rainStatus">
+                <span class="status-dot" id="rainStatusDot"></span>
+                <span id="rainStatusText">Idle</span>
+              </div>
+
+              <div id="rainControls" style="display: none">
+                <div class="scale-select-wrap">
+                  <label class="scale-label" for="rainDisplay">Show as</label>
+                  <select id="rainDisplay" class="select scale-select">
+                    <option value="cells">Grid cells</option>
+                    <option value="catchments">Catchment means</option>
+                  </select>
+                </div>
+                <div class="scale-select-wrap">
+                  <select id="rainColormap" class="select scale-select"></select>
+                </div>
+                <div class="legend">
+                  <div class="legend-title" id="rainLegendTitle">-</div>
+                  <div class="legend-gradient" id="rainLegendGradient"></div>
+                  <div class="legend-labels">
+                    <span id="rainLegendMin">0</span>
+                    <span id="rainLegendMax">1</span>
+                  </div>
+                </div>
+                <div class="time-control">
+                  <div class="time-display">
+                    <span class="time-label">Rain time</span>
+                    <span class="time-value" id="rainTime">-</span>
+                  </div>
+                  <input type="range" id="rainTimeSlider" min="0" max="0" value="0" />
+                </div>
+                <div class="play-controls">
+                  <button class="play-btn" id="rainPlayBtn" title="Play">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                  </button>
+                  <button class="play-btn" id="rainStepBackBtn" title="Previous step">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="19 20 9 12 19 4 19 20" fill="currentColor" />
+                      <line x1="5" y1="19" x2="5" y2="5" />
+                    </svg>
+                  </button>
+                  <button class="play-btn" id="rainStepFwdBtn" title="Next step">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="5 4 15 12 5 20 5 4" fill="currentColor" />
+                      <line x1="19" y1="5" x2="19" y2="19" />
+                    </svg>
+                  </button>
+                </div>
+                <p class="info-text forcing-hover" id="rainHover">Hover the map to read a value.</p>
+              </div>
+
+              <p class="info-text">
+                Chunks hold weeks of data per small box, so a load's cost depends on the area and how
+                many of those blocks the dates touch, not the number of days. Zoom in to save data.
+                It follows a run's or the forcings' clock while they overlap.
+              </p>
+              <p class="info-text rain-credit" id="rainCredit"></p>
+            </div>
+          </div>
+
           <!-- Forcings (src/forcing/, src/ui/forcingpanel.js): ngen forcing
                files painted on the catchments, fetched on demand with range
                requests from an S3 cycle or read from dropped files. -->
@@ -1375,6 +1472,23 @@
                   <button class="hydro-chip" id="hydro-retro-load">Load</button>
                   <span class="hydro-compare-hint" id="hydro-retro-note"></span>
                 </div>
+              </div>
+              <!-- Any reach but a grid cell (ui/hydrograph.js, data/rain.js). -->
+              <div class="hydro-section" id="hydro-rain-section" style="display: none">
+                <div class="hydro-section-title">Rainfall here</div>
+                <div class="hydro-compare-row">
+                  <select class="hydro-select" id="hydro-rain-product" title="Rainfall product"></select>
+                </div>
+                <div class="hydro-compare-row">
+                  <input type="date" class="hydro-select" id="hydro-rain-from" title="From (UTC)" />
+                  <span>–</span>
+                  <input type="date" class="hydro-select" id="hydro-rain-to" title="To (UTC)" />
+                </div>
+                <div class="hydro-compare-row">
+                  <button class="hydro-chip" id="hydro-rain-load">Load</button>
+                  <span class="hydro-compare-hint" id="hydro-rain-note"></span>
+                </div>
+                <p class="hydro-compare-hint rain-credit" id="hydro-rain-credit"></p>
               </div>
               <div class="hydro-window-note">
                 Scores over the visible window <span id="hydro-window"></span>

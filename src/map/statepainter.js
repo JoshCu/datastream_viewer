@@ -10,6 +10,8 @@
 //   { index: Map<featureId, row>, key: string, value(row) -> number }
 // `key` identifies the current (variable, timestep); a change of key forces a
 // full repaint of the on-screen set. `after()` runs at the end of each pass.
+// `stateKey` is the feature-state key written, for a second painter on the
+// same source (the rain on the catchments).
 // ====================================================================
 import { map } from "../state.js";
 
@@ -34,7 +36,7 @@ function tileGeoBBox(tileID) {
   };
 }
 
-export function createStatePainter({ layer, feature, lookup, after }) {
+export function createStatePainter({ layer, feature, lookup, after, stateKey = "value" }) {
   // What has already been painted for the current key. `paintedAll` means
   // every id in renderedIds is up to date; `pendingIds` holds the ids added
   // since then by a tile query. On a bare timestep change — the case that
@@ -115,7 +117,7 @@ export function createStatePainter({ layer, feature, lookup, after }) {
         const row = index.get(id);
         if (row === undefined) continue;
         target.id = id;
-        map.setFeatureState(target, { value: value(row) });
+        map.setFeatureState(target, { [stateKey]: value(row) });
       }
     };
 

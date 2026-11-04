@@ -129,3 +129,16 @@ export let map = null;
 export function setMap(instance) {
   map = instance;
 }
+
+// Gridded rainfall (src/rain/): a mode of its own, with its own clock.
+export const rainState = {
+  product: "mrms", // config.RAIN_PRODUCTS key
+  variable: "precipitation_surface",
+  colormap: "icefire",
+  display: "cells", // "cells" | "catchments"
+  // The load on the map: { product, variable, info, time (epoch ms), nT, ny,
+  // nx, frames: Float32Array [t][row][col], lat0, dLat, lon0, dLon (the grid's
+  // first row and column centres and steps) }, or null.
+  grid: null,
+  timeIndex: 0,
+};
