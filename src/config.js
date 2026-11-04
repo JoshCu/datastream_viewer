@@ -494,5 +494,19 @@ export const RAIN_PRODUCTS = {
       url: "https://dynamical.org/catalog/noaa-mrms-conus-analysis-hourly/",
     },
   },
+  imerg: {
+    label: "IMERG Late: satellite, 10 km, 30 min, global",
+    name: "NASA IMERG",
+    stac: "nasa-imerg-analysis-late",
+    defaultDays: 7,
+    variables: {
+      precipitation_surface: rainRate("Precipitation"),
+    },
+    credit: {
+      short: "NASA IMERG from dynamical.org",
+      long: "NASA GPM IMERG data processed by dynamical.org from NASA GES DISC and PPS archives.",
+      url: "https://dynamical.org/catalog/nasa-imerg-analysis-late/",
+    },
+  },
 };
 export const RAIN_LICENSE_URL = "https://creativecommons.org/licenses/by/4.0/";
